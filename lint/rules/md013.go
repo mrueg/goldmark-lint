@@ -13,6 +13,7 @@ type MD013 struct {
 }
 
 func (r MD013) ID() string          { return "MD013" }
+func (r MD013) Alias() string       { return "line-length" }
 func (r MD013) Description() string { return "Line length" }
 
 func (r MD013) Check(doc *lint.Document) []lint.Violation {

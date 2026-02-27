@@ -176,6 +176,15 @@ func TestMD047_Invalid(t *testing.T) {
 	}
 }
 
+func TestRuleAliases(t *testing.T) {
+	linter := newDefaultLinter()
+	for _, r := range linter.Rules {
+		if r.Alias() == "" {
+			t.Errorf("rule %s has empty alias", r.ID())
+		}
+	}
+}
+
 func integrationMarkdownlintAvailable() bool {
 	_, err := exec.LookPath("markdownlint")
 	return err == nil

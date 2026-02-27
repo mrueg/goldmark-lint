@@ -8,6 +8,7 @@ import (
 type MD047 struct{}
 
 func (r MD047) ID() string          { return "MD047" }
+func (r MD047) Alias() string       { return "single-trailing-newline" }
 func (r MD047) Description() string { return "Files should end with a single newline character" }
 
 func (r MD047) Check(doc *lint.Document) []lint.Violation {

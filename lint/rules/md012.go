@@ -14,6 +14,7 @@ type MD012 struct {
 }
 
 func (r MD012) ID() string          { return "MD012" }
+func (r MD012) Alias() string       { return "no-multiple-blanks" }
 func (r MD012) Description() string { return "Multiple consecutive blank lines" }
 
 func (r MD012) Check(doc *lint.Document) []lint.Violation {

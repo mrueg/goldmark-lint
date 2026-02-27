@@ -11,6 +11,7 @@ import (
 // Rule defines the interface for a lint rule.
 type Rule interface {
 	ID() string
+	Alias() string
 	Description() string
 	Check(doc *Document) []Violation
 }

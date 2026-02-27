@@ -14,6 +14,7 @@ type MD009 struct {
 }
 
 func (r MD009) ID() string          { return "MD009" }
+func (r MD009) Alias() string       { return "no-trailing-spaces" }
 func (r MD009) Description() string { return "Trailing spaces" }
 
 func (r MD009) Check(doc *lint.Document) []lint.Violation {
