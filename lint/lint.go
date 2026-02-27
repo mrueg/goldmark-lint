@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"encoding/json"
 	"regexp"
 	"sort"
 	"strings"
@@ -117,7 +118,13 @@ func splitLines(source []byte) []string {
 // markdownlintCommentRE matches markdownlint inline disable/enable comments.
 // It captures the command and optional rule IDs.
 var markdownlintCommentRE = regexp.MustCompile(
-	`<!--\s*markdownlint-(disable-next-line|disable-line|disable|enable|capture|restore)((?:\s+\w+)*)\s*-->`,
+	`<!--\s*markdownlint-(disable-next-line|disable-line|disable-file|enable-file|disable|enable|capture|restore)((?:\s+\w+)*)\s*-->`,
+)
+
+// markdownlintConfigureFileRE matches markdownlint-configure-file comments
+// and captures the JSON payload (which may span multiple lines).
+var markdownlintConfigureFileRE = regexp.MustCompile(
+	`(?s)<!--\s*markdownlint-configure-file\s*(\{.*?\})\s*-->`,
 )
 
 // parseMarkdownlintComment extracts the command and rule list from a markdownlint
@@ -130,6 +137,35 @@ func parseMarkdownlintComment(line string) (cmd string, ruleIDs []string) {
 	cmd = m[1]
 	ruleIDs = append(ruleIDs, strings.Fields(m[2])...)
 	return cmd, ruleIDs
+}
+
+// parseConfigureFileComment extracts the JSON payload from a markdownlint-configure-file
+// comment, searching across the full source (which may be multi-line).
+func parseConfigureFileComment(source string) string {
+	m := markdownlintConfigureFileRE.FindStringSubmatch(source)
+	if m == nil {
+		return ""
+	}
+	return strings.TrimSpace(m[1])
+}
+
+// applyConfigureFile parses a markdownlint-configure-file JSON payload and returns
+// file-level disable/enable overrides. Values of false disable a rule; true enables it.
+func applyConfigureFile(jsonPayload string, fileDis *disableSet) {
+	var cfg map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonPayload), &cfg); err != nil {
+		return
+	}
+	for key, val := range cfg {
+		switch v := val.(type) {
+		case bool:
+			if !v {
+				fileDis.rules[strings.ToUpper(key)] = true
+			} else {
+				delete(fileDis.rules, strings.ToUpper(key))
+			}
+		}
+	}
 }
 
 // disableSet tracks which rules are disabled for a single line.
@@ -159,6 +195,38 @@ func parseInlineDisables(lines []string) []disableSet {
 	result := make([]disableSet, n)
 	for i := range result {
 		result[i] = disableSet{rules: make(map[string]bool)}
+	}
+
+	// First pass: collect file-level disable/enable commands (disable-file,
+	// enable-file, configure-file), which apply to every line in the file.
+	// fileDisable tracks disable-file/enable-file; fileConfig tracks configure-file.
+	// They are kept separate so that enable-file does not undo configure-file settings.
+	fileDisable := disableSet{rules: make(map[string]bool)}
+	fileConfig := disableSet{rules: make(map[string]bool)}
+	fullSource := strings.Join(lines, "\n")
+	if payload := parseConfigureFileComment(fullSource); payload != "" {
+		applyConfigureFile(payload, &fileConfig)
+	}
+	for _, line := range lines {
+		cmd, ruleIDs := parseMarkdownlintComment(line)
+		switch cmd {
+		case "disable-file":
+			if len(ruleIDs) == 0 {
+				fileDisable.all = true
+			} else {
+				for _, r := range ruleIDs {
+					fileDisable.rules[r] = true
+				}
+			}
+		case "enable-file":
+			if len(ruleIDs) == 0 {
+				fileDisable = disableSet{rules: make(map[string]bool)}
+			} else {
+				for _, r := range ruleIDs {
+					delete(fileDisable.rules, r)
+				}
+			}
+		}
 	}
 
 	current := disableSet{rules: make(map[string]bool)}
@@ -195,8 +263,18 @@ func parseInlineDisables(lines []string) []disableSet {
 			}
 		}
 
-		// Base state for this line comes from running state.
+		// Base state for this line comes from running state merged with file-level.
 		result[i] = copyDisableSet(current)
+		if fileDisable.all {
+			result[i].all = true
+		} else {
+			for r := range fileDisable.rules {
+				result[i].rules[r] = true
+			}
+		}
+		for r := range fileConfig.rules {
+			result[i].rules[r] = true
+		}
 
 		// Apply disable-next-line extras carried over from previous line.
 		if nextLineExtra != nil {

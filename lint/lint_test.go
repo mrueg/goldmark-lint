@@ -1358,6 +1358,63 @@ func TestInlineDisable_DisableNextLineOnlyAffectsNextLine(t *testing.T) {
 	}
 }
 
+func TestInlineDisable_DisableFile_AllRules(t *testing.T) {
+	// disable-file at the bottom suppresses violations for the entire file.
+	src := "Trailing spaces   \nMore trailing spaces   \n<!-- markdownlint-disable-file -->\n"
+	l := lint.NewLinter(rules.MD009{})
+	v := l.Lint([]byte(src))
+	if len(v) != 0 {
+		t.Errorf("expected no violations (disable-file all), got %v", v)
+	}
+}
+
+func TestInlineDisable_DisableFile_SpecificRule(t *testing.T) {
+	// disable-file for MD001 suppresses MD001 for the entire file regardless of position.
+	src := "### Heading 3\n# Heading 1\n<!-- markdownlint-disable-file MD001 -->\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	if len(v) != 0 {
+		t.Errorf("expected no violations (disable-file MD001), got %v", v)
+	}
+}
+
+func TestInlineDisable_EnableFile_RestoresAfterDisableFile(t *testing.T) {
+	// enable-file cancels a file-level disable.
+	// With both disable-file and enable-file for the same rule, enable-file wins.
+	src := "<!-- markdownlint-disable-file MD001 -->\n<!-- markdownlint-enable-file MD001 -->\n# Heading 1\n### Heading 3\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	found := false
+	for _, violation := range v {
+		if violation.Rule == "MD001" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected MD001 violation after enable-file, got %v", v)
+	}
+}
+
+func TestInlineDisable_ConfigureFile_DisableRule(t *testing.T) {
+	// configure-file with false disables the rule for the entire file.
+	src := "<!-- markdownlint-configure-file { \"MD001\": false } -->\n### Heading 3\n# Heading 1\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	if len(v) != 0 {
+		t.Errorf("expected no violations (configure-file MD001:false), got %v", v)
+	}
+}
+
+func TestInlineDisable_ConfigureFile_DoesNotDisableOtherRules(t *testing.T) {
+	// configure-file disabling MD001 should not suppress MD009.
+	src := "<!-- markdownlint-configure-file { \"MD001\": false } -->\nTrailing spaces   \n"
+	l := lint.NewLinter(rules.MD009{})
+	v := l.Lint([]byte(src))
+	if len(v) == 0 {
+		t.Errorf("expected MD009 violation (not disabled by configure-file), got none")
+	}
+}
+
 func integrationMarkdownlintAvailable() bool {
 	_, err := exec.LookPath("markdownlint")
 	return err == nil
