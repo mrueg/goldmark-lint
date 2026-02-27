@@ -165,6 +165,48 @@ func TestIsRuleEnabled_DefaultFalse_ExplicitConfig(t *testing.T) {
 	}
 }
 
+func TestIsRuleEnabled_SeverityError(t *testing.T) {
+	cfg := map[string]interface{}{"MD013": "error"}
+	if !isRuleEnabled("MD013", cfg) {
+		t.Error("expected MD013 to be enabled when set to \"error\"")
+	}
+}
+
+func TestIsRuleEnabled_SeverityWarning(t *testing.T) {
+	cfg := map[string]interface{}{"MD013": "warning"}
+	if !isRuleEnabled("MD013", cfg) {
+		t.Error("expected MD013 to be enabled when set to \"warning\"")
+	}
+}
+
+func TestGetRuleSeverity_Default(t *testing.T) {
+	cfg := map[string]interface{}{}
+	if got := getRuleSeverity("MD013", cfg); got != "error" {
+		t.Errorf("expected \"error\", got %q", got)
+	}
+}
+
+func TestGetRuleSeverity_Error(t *testing.T) {
+	cfg := map[string]interface{}{"MD013": "error"}
+	if got := getRuleSeverity("MD013", cfg); got != "error" {
+		t.Errorf("expected \"error\", got %q", got)
+	}
+}
+
+func TestGetRuleSeverity_Warning(t *testing.T) {
+	cfg := map[string]interface{}{"MD013": "warning"}
+	if got := getRuleSeverity("MD013", cfg); got != "warning" {
+		t.Errorf("expected \"warning\", got %q", got)
+	}
+}
+
+func TestGetRuleSeverity_BoolTrue(t *testing.T) {
+	cfg := map[string]interface{}{"MD013": true}
+	if got := getRuleSeverity("MD013", cfg); got != "error" {
+		t.Errorf("expected \"error\" for bool true, got %q", got)
+	}
+}
+
 func TestBuildRules_AllEnabled(t *testing.T) {
 	got := buildRules(nil)
 	if len(got) != 53 {

@@ -93,8 +93,9 @@ func main() {
 			}
 			violations := linter.Lint(source)
 			for _, v := range violations {
+				v.Severity = getRuleSeverity(v.Rule, ruleCfg)
 				fmt.Fprintf(os.Stderr, "stdin:%d:%d %s %s\n", v.Line, v.Column, v.Rule, v.Message)
-				if exitCode < 1 {
+				if v.Severity != "warning" && exitCode < 1 {
 					exitCode = 1
 				}
 			}
@@ -126,8 +127,9 @@ func main() {
 			}
 			violations := linter.Lint(source)
 			for _, v := range violations {
+				v.Severity = getRuleSeverity(v.Rule, ruleCfg)
 				fmt.Fprintf(os.Stderr, "%s:%d:%d %s %s\n", file, v.Line, v.Column, v.Rule, v.Message)
-				if exitCode < 1 {
+				if v.Severity != "warning" && exitCode < 1 {
 					exitCode = 1
 				}
 			}

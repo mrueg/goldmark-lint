@@ -189,3 +189,52 @@ func TestCLI_Stdin_WithViolations(t *testing.T) {
 		t.Errorf("expected 'stdin:' prefix in output, got: %s", stderr.String())
 	}
 }
+
+func TestCLI_WarningSeverityExitZero(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// A file with an MD041 violation (no top-level heading).
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("Not a heading\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Config sets MD041 to warning severity.
+	cfgContent := "config:\n  MD041: \"warning\"\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 when all violations are warnings, got: %v", err)
+	}
+}
+
+func TestCLI_ErrorSeverityExitOne(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// A file with an MD041 violation (no top-level heading).
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("Not a heading\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Config sets MD041 to error severity (explicit).
+	cfgContent := "config:\n  MD041: \"error\"\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = dir
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected non-zero exit for error-severity violation, got nil error")
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Errorf("error severity exit code = %d, want 1", exitErr.ExitCode())
+	}
+}
