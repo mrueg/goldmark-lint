@@ -28,7 +28,6 @@ func tableColumnStyle(line string) string {
 	}
 	cells := strings.Split(trimmed, "|")
 
-	hasSpaces := false
 	allSingleSpace := true
 	allNoSpace := true
 	for _, cell := range cells {
@@ -39,18 +38,18 @@ func tableColumnStyle(line string) string {
 		hasLeadingSpace := cell[0] == ' '
 		hasTrailingSpace := cell[len(cell)-1] == ' '
 		if hasLeadingSpace || hasTrailingSpace {
-			hasSpaces = true
 			allNoSpace = false
 		}
-		// Check single space padding.
-		if !(strings.HasPrefix(cell, " ") && strings.HasSuffix(cell, " ") &&
-			!strings.HasPrefix(strings.TrimSpace(cell), "") ) {
-			if len(cell) < 2 || cell[0] != ' ' || cell[len(cell)-1] != ' ' {
+		// compact: exactly one space before and after content
+		if !(hasLeadingSpace && hasTrailingSpace) {
+			allSingleSpace = false
+		} else {
+			inner := cell[1 : len(cell)-1]
+			if strings.HasPrefix(inner, " ") || strings.HasSuffix(inner, " ") {
 				allSingleSpace = false
 			}
 		}
 	}
-	_ = hasSpaces
 	if allNoSpace {
 		return "tight"
 	}
