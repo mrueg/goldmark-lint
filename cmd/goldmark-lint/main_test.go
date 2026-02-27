@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -157,5 +158,34 @@ func TestCLI_Fix(t *testing.T) {
 	want := "# Heading\n\nContent\nNo newline at end\n"
 	if string(fixed) != want {
 		t.Errorf("fixed content = %q, want %q", string(fixed), want)
+	}
+}
+
+func TestCLI_Stdin_NoViolations(t *testing.T) {
+	bin := buildBinary(t)
+	cmd := exec.Command(bin, "-")
+	cmd.Stdin = strings.NewReader("# Heading\n\nValid content.\n")
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 for valid stdin input, got: %v", err)
+	}
+}
+
+func TestCLI_Stdin_WithViolations(t *testing.T) {
+	bin := buildBinary(t)
+	// MD001: heading levels should only increment by one
+	cmd := exec.Command(bin, "-")
+	cmd.Stdin = strings.NewReader("# Heading\n\n### Skipped level\n")
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected non-zero exit for stdin with violations, got nil error")
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Errorf("stdin violations exit code = %d, want 1", exitErr.ExitCode())
+	}
+	if !strings.Contains(stderr.String(), "stdin:") {
+		t.Errorf("expected 'stdin:' prefix in output, got: %s", stderr.String())
 	}
 }

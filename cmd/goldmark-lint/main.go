@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -14,6 +15,7 @@ const helpText = `goldmark-lint
 https://github.com/mrueg/goldmark-lint
 
 Syntax: goldmark-lint glob0 [glob1] [...] [globN] [--fix] [--help] [--version]
+        goldmark-lint - (read from stdin)
 
 Glob expressions:
 - * matches any number of characters, but not /
@@ -81,6 +83,24 @@ func main() {
 
 	exitCode := 0
 	for _, pattern := range flag.Args() {
+		// Special case: "-" means read from stdin
+		if pattern == "-" {
+			source, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
+				exitCode = 2
+				continue
+			}
+			violations := linter.Lint(source)
+			for _, v := range violations {
+				fmt.Fprintf(os.Stderr, "stdin:%d:%d %s %s\n", v.Line, v.Column, v.Rule, v.Message)
+				if exitCode < 1 {
+					exitCode = 1
+				}
+			}
+			continue
+		}
+
 		files, err := filepath.Glob(pattern)
 		if err != nil || len(files) == 0 {
 			files = []string{pattern}
