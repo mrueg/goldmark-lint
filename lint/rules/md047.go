@@ -10,6 +10,13 @@ type MD047 struct{}
 func (r MD047) ID() string          { return "MD047" }
 func (r MD047) Description() string { return "Files should end with a single newline character" }
 
+func (r MD047) Fix(source []byte) []byte {
+	if len(source) == 0 || source[len(source)-1] == '\n' {
+		return source
+	}
+	return append(source, '\n')
+}
+
 func (r MD047) Check(doc *lint.Document) []lint.Violation {
 	if len(doc.Source) == 0 {
 		return nil

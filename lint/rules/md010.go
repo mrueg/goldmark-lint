@@ -12,6 +12,10 @@ type MD010 struct{}
 func (r MD010) ID() string          { return "MD010" }
 func (r MD010) Description() string { return "Hard tabs" }
 
+func (r MD010) Fix(source []byte) []byte {
+	return []byte(strings.ReplaceAll(string(source), "\t", "    "))
+}
+
 func (r MD010) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	for i, line := range doc.Lines {

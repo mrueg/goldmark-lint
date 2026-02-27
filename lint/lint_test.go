@@ -176,6 +176,75 @@ func TestMD047_Invalid(t *testing.T) {
 	}
 }
 
+func fixString(t *testing.T, r lint.FixableRule, source string) string {
+	t.Helper()
+	return string(r.Fix([]byte(source)))
+}
+
+func TestMD009_Fix(t *testing.T) {
+	src := "Trailing spaces   \n"
+	got := fixString(t, rules.MD009{}, src)
+	want := "Trailing spaces\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD009_Fix_KeepBrSpaces(t *testing.T) {
+	src := "Hard line break  \n"
+	got := fixString(t, rules.MD009{}, src)
+	// exactly 2 trailing spaces are kept as a hard line break
+	if got != src {
+		t.Errorf("Fix() = %q, want %q (brSpaces preserved)", got, src)
+	}
+}
+
+func TestMD010_Fix(t *testing.T) {
+	src := "Hard\ttab\n"
+	got := fixString(t, rules.MD010{}, src)
+	want := "Hard    tab\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD012_Fix(t *testing.T) {
+	src := "Line 1\n\n\nLine 2\n"
+	got := fixString(t, rules.MD012{}, src)
+	want := "Line 1\n\nLine 2\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD047_Fix(t *testing.T) {
+	src := "Content"
+	got := fixString(t, rules.MD047{}, src)
+	want := "Content\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD047_Fix_AlreadyEndsWithNewline(t *testing.T) {
+	src := "Content\n"
+	got := fixString(t, rules.MD047{}, src)
+	if got != src {
+		t.Errorf("Fix() = %q, want unchanged %q", got, src)
+	}
+}
+
+func TestLinter_Fix(t *testing.T) {
+	// tab in middle, trailing spaces, no final newline
+	src := "Content\there   "
+	l := lint.NewLinter(rules.MD009{}, rules.MD010{}, rules.MD047{})
+	got := string(l.Fix([]byte(src)))
+	want := "Content    here\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
 func integrationMarkdownlintAvailable() bool {
 	_, err := exec.LookPath("markdownlint")
 	return err == nil
