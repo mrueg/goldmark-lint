@@ -30,8 +30,9 @@ Optional parameters:
 Config file:
 - Reads .markdownlint-cli2.yaml (or .yml, .jsonc, .json) from the current
   directory or any parent directory (same discovery as markdownlint-cli2).
-- Supports "config" (rule enable/disable and options), "ignores", and
-  "overrides" (per-glob rule config overrides) keys.
+- Supports "config" (rule enable/disable and options), "ignores",
+  "overrides" (per-glob rule config overrides), and "extends" (inherit
+  configuration from another config file) keys.
 
 Exit codes:
 - 0: Linting was successful and there were no errors
