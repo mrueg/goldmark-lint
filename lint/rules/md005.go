@@ -21,7 +21,7 @@ func (r MD005) Check(doc *lint.Document) []lint.Violation {
 	depth := 0
 
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-		switch n.(type) {
+		switch n := n.(type) {
 		case *ast.List:
 			if entering {
 				depth++
@@ -33,8 +33,7 @@ func (r MD005) Check(doc *lint.Document) []lint.Violation {
 				return ast.WalkContinue, nil
 			}
 			// ListItem.Lines() is empty in goldmark; content is in the first TextBlock child.
-			item := n.(*ast.ListItem)
-			seg, ok := listItemFirstSegment(item)
+			seg, ok := listItemFirstSegment(n)
 			if !ok {
 				return ast.WalkContinue, nil
 			}
