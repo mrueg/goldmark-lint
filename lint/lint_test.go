@@ -17,19 +17,25 @@ func newDefaultLinter() *lint.Linter {
 		rules.MD001{},
 		rules.MD003{},
 		rules.MD004{},
+		rules.MD005{},
 		rules.MD007{},
 		rules.MD009{},
 		rules.MD010{},
 		rules.MD011{},
 		rules.MD012{},
 		rules.MD013{},
+		rules.MD014{},
 		rules.MD018{},
 		rules.MD019{},
 		rules.MD020{},
 		rules.MD021{},
 		rules.MD022{},
+		rules.MD023{},
 		rules.MD024{},
 		rules.MD025{},
+		rules.MD026{},
+		rules.MD027{},
+		rules.MD028{},
 		rules.MD029{},
 		rules.MD031{},
 		rules.MD032{},
@@ -702,6 +708,138 @@ func TestMD045_Valid(t *testing.T) {
 func TestMD045_Invalid(t *testing.T) {
 	src := "![](image.png)\n"
 	v := lintString(t, rules.MD045{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD005_Valid(t *testing.T) {
+	src := "- item1\n- item2\n  - sub1\n  - sub2\n"
+	v := lintString(t, rules.MD005{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD005_Invalid(t *testing.T) {
+	src := "- item1\n  - sub1\n   - sub2\n"
+	v := lintString(t, rules.MD005{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD014_Valid(t *testing.T) {
+	src := "```bash\n$ ls\nfile1.txt\n```\n"
+	v := lintString(t, rules.MD014{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD014_Invalid(t *testing.T) {
+	src := "```bash\n$ ls\n$ pwd\n```\n"
+	v := lintString(t, rules.MD014{}, src)
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD014_Fix(t *testing.T) {
+	src := "```bash\n$ ls\n$ pwd\n```\n"
+	got := fixString(t, rules.MD014{}, src)
+	want := "```bash\nls\npwd\n```\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD023_Valid(t *testing.T) {
+	src := "# Heading\n\n## Sub heading\n"
+	v := lintString(t, rules.MD023{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD023_Invalid(t *testing.T) {
+	src := "# Heading\n\n  ## Indented heading\n"
+	v := lintString(t, rules.MD023{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD023_Fix(t *testing.T) {
+	src := "# Heading\n\n  ## Indented heading\n"
+	got := fixString(t, rules.MD023{}, src)
+	want := "# Heading\n\n## Indented heading\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD026_Valid(t *testing.T) {
+	src := "# Heading\n\n## Sub heading\n"
+	v := lintString(t, rules.MD026{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD026_Invalid(t *testing.T) {
+	src := "# Heading.\n\n## Sub heading!\n"
+	v := lintString(t, rules.MD026{}, src)
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD026_Fix(t *testing.T) {
+	src := "# Heading.\n"
+	got := fixString(t, rules.MD026{}, src)
+	want := "# Heading\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD027_Valid(t *testing.T) {
+	src := "> Single space\n"
+	v := lintString(t, rules.MD027{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD027_Invalid(t *testing.T) {
+	src := ">  Multiple spaces\n"
+	v := lintString(t, rules.MD027{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD027_Fix(t *testing.T) {
+	src := ">  Multiple spaces\n"
+	got := fixString(t, rules.MD027{}, src)
+	want := "> Multiple spaces\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD028_Valid(t *testing.T) {
+	src := "> Line 1\n> Line 2\n"
+	v := lintString(t, rules.MD028{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD028_Invalid(t *testing.T) {
+	src := "> Line 1\n\n> Line 2\n"
+	v := lintString(t, rules.MD028{}, src)
 	if len(v) != 1 {
 		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
 	}
