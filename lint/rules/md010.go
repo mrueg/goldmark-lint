@@ -7,13 +7,20 @@ import (
 )
 
 // MD010 checks for hard tabs.
-type MD010 struct{}
+type MD010 struct {
+	// SpacesPerTab is the number of spaces used to replace each tab when fixing (default 4).
+	SpacesPerTab int `json:"spaces_per_tab"`
+}
 
 func (r MD010) ID() string          { return "MD010" }
 func (r MD010) Description() string { return "Hard tabs" }
 
 func (r MD010) Fix(source []byte) []byte {
-	return []byte(strings.ReplaceAll(string(source), "\t", "    "))
+	spaces := r.SpacesPerTab
+	if spaces <= 0 {
+		spaces = 4
+	}
+	return []byte(strings.ReplaceAll(string(source), "\t", strings.Repeat(" ", spaces)))
 }
 
 func (r MD010) Check(doc *lint.Document) []lint.Violation {

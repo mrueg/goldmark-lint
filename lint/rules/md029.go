@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
 	"github.com/yuin/goldmark/ast"
@@ -22,6 +23,121 @@ func (r MD029) Description() string { return "Ordered list item prefix" }
 // the number, and the separator character (. or )).
 var orderedItemRE = regexp.MustCompile(`^( *)(\d+)([.)]) `)
 
+// Fix rewrites ordered list item numbers to match the configured style.
+func (r MD029) Fix(source []byte) []byte {
+	style := r.Style
+	if style == "" {
+		style = "one_or_ordered"
+	}
+
+	lines := strings.Split(string(source), "\n")
+
+	// listGroup tracks a contiguous sequence of ordered list items at the same indent level.
+	type listGroup struct {
+		indent  int
+		indices []int // line indices
+		numbers []int // original numbers
+	}
+
+	// applyGroup calculates expected numbers for a group and records fixes.
+	applyGroup := func(g *listGroup, expected map[int]int) {
+		if len(g.indices) == 0 {
+			return
+		}
+		allOne := true
+		sequential := true
+		for i, n := range g.numbers {
+			if n != 1 {
+				allOne = false
+			}
+			if n != i+1 {
+				sequential = false
+			}
+		}
+		for i, lineIdx := range g.indices {
+			var want int
+			switch style {
+			case "one":
+				want = 1
+			case "zero":
+				want = 0
+			case "ordered":
+				want = i + 1
+			case "one_or_ordered":
+				if allOne || sequential {
+					want = g.numbers[i] // already valid, no change
+				} else {
+					want = i + 1
+				}
+			}
+			if want != g.numbers[i] {
+				expected[lineIdx] = want
+			}
+		}
+	}
+
+	// Stack of active list groups at different indent levels.
+	var stack []*listGroup
+	expected := map[int]int{}
+
+	for i, line := range lines {
+		m := orderedItemRE.FindStringSubmatch(line)
+		if m == nil {
+			if strings.TrimSpace(line) == "" {
+				continue // blank lines don't interrupt a list
+			}
+			// Non-blank, non-list line: if not indented, flush all groups.
+			if strings.TrimLeft(line, " \t") == line {
+				for _, g := range stack {
+					applyGroup(g, expected)
+				}
+				stack = nil
+			}
+			continue
+		}
+
+		indent := len(m[1])
+		num, _ := strconv.Atoi(m[2])
+
+		// Pop groups with deeper indent (exiting sub-lists).
+		for len(stack) > 0 && stack[len(stack)-1].indent > indent {
+			g := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			applyGroup(g, expected)
+		}
+
+		// Reuse top group if same indent, else push a new one.
+		if len(stack) > 0 && stack[len(stack)-1].indent == indent {
+			g := stack[len(stack)-1]
+			g.indices = append(g.indices, i)
+			g.numbers = append(g.numbers, num)
+		} else {
+			stack = append(stack, &listGroup{
+				indent:  indent,
+				indices: []int{i},
+				numbers: []int{num},
+			})
+		}
+	}
+	// Flush remaining groups.
+	for _, g := range stack {
+		applyGroup(g, expected)
+	}
+
+	// Apply fixes.
+	for lineIdx, want := range expected {
+		m := orderedItemRE.FindStringSubmatch(lines[lineIdx])
+		if m == nil {
+			continue
+		}
+		rest := lines[lineIdx][len(m[0]):]
+		lines[lineIdx] = m[1] + strconv.Itoa(want) + m[3] + " " + rest
+	}
+
+	return []byte(strings.Join(lines, "\n"))
+}
+
+// Check validates ordered list item numbering style.
 func (r MD029) Check(doc *lint.Document) []lint.Violation {
 	style := r.Style
 	if style == "" {
