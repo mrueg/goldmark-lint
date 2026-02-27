@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"bytes"
 	"encoding/json"
 	"regexp"
 	"sort"
@@ -50,17 +51,22 @@ func NewLinter(rules ...Rule) *Linter {
 }
 
 // Fix applies all fixable rules to source and returns the corrected content.
+// Front matter is preserved unchanged.
 func (l *Linter) Fix(source []byte) []byte {
+	fmEnd := frontMatterEnd(source)
+	rest := source[fmEnd:]
 	for _, rule := range l.Rules {
 		if fixable, ok := rule.(FixableRule); ok {
-			source = fixable.Fix(source)
+			rest = fixable.Fix(rest)
 		}
 	}
-	return source
+	return append(source[:fmEnd:fmEnd], rest...)
 }
 
 // Lint parses source and runs all rules on it, returning violations sorted by line.
 func (l *Linter) Lint(source []byte) []Violation {
+	source = stripFrontMatter(source)
+
 	reader := text.NewReader(source)
 	md := goldmark.New()
 	node := md.Parser().Parse(reader)
@@ -93,6 +99,67 @@ func (l *Linter) Lint(source []byte) []Violation {
 	})
 
 	return violations
+}
+
+// frontMatterEnd returns the byte offset of the first byte after the YAML
+// front matter block, or 0 if the source does not begin with valid front matter.
+// Front matter starts with "---" on the very first line and ends with a line
+// containing only "---" or "...".
+func frontMatterEnd(source []byte) int {
+	if !bytes.HasPrefix(source, []byte("---\n")) && !bytes.HasPrefix(source, []byte("---\r\n")) {
+		return 0
+	}
+	// Advance past the opening delimiter line.
+	pos := bytes.IndexByte(source, '\n')
+	if pos < 0 {
+		return 0
+	}
+	pos++ // skip the newline
+
+	for pos < len(source) {
+		next := bytes.IndexByte(source[pos:], '\n')
+		var lineEnd int
+		if next < 0 {
+			lineEnd = len(source)
+		} else {
+			lineEnd = pos + next
+		}
+		line := source[pos:lineEnd]
+		if len(line) > 0 && line[len(line)-1] == '\r' {
+			line = line[:len(line)-1]
+		}
+		if bytes.Equal(line, []byte("---")) || bytes.Equal(line, []byte("...")) {
+			end := lineEnd
+			if end < len(source) && source[end] == '\n' {
+				end++
+			}
+			return end
+		}
+		if next < 0 {
+			break
+		}
+		pos = lineEnd + 1
+	}
+	return 0
+}
+
+// stripFrontMatter returns a copy of source with the YAML front matter block
+// replaced by blank lines, preserving line numbers so that violations reported
+// by rules refer to the correct lines in the original file.
+func stripFrontMatter(source []byte) []byte {
+	end := frontMatterEnd(source)
+	if end == 0 {
+		return source
+	}
+	// Build new source keeping only \r and \n from the front matter region.
+	result := make([]byte, 0, len(source))
+	for i := 0; i < end; i++ {
+		if source[i] == '\n' || source[i] == '\r' {
+			result = append(result, source[i])
+		}
+	}
+	result = append(result, source[end:]...)
+	return result
 }
 
 // splitLines splits source bytes into individual lines (without trailing newlines).
