@@ -1209,6 +1209,155 @@ func TestMD060_Invalid(t *testing.T) {
 	}
 }
 
+// --- Inline disable comment tests ---
+
+func TestInlineDisable_DisableAll(t *testing.T) {
+	// All violations suppressed for lines after disable, re-enabled after enable.
+	src := "# Heading 1\n\n<!-- markdownlint-disable -->\n### Heading 3\n<!-- markdownlint-enable -->\n\n## Heading 2\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	// Line 4 (### Heading 3) is inside disable block, should not be reported.
+	for _, violation := range v {
+		if violation.Line == 4 {
+			t.Errorf("expected no violation on line 4 (inside disable block), got %v", violation)
+		}
+	}
+}
+
+func TestInlineDisable_DisableSpecificRule(t *testing.T) {
+	// Only MD001 is suppressed; any other rule still fires.
+	src := "<!-- markdownlint-disable MD001 -->\n### Heading 3\n<!-- markdownlint-enable MD001 -->\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	if len(v) != 0 {
+		t.Errorf("expected no violations (MD001 disabled), got %v", v)
+	}
+}
+
+func TestInlineDisable_EnableRestores(t *testing.T) {
+	// After re-enabling, violations should fire again.
+	// H1 → H3 (suppressed) → H1 → H3 (should fire: jump from H1 to H3)
+	src := "# Heading 1\n\n<!-- markdownlint-disable MD001 -->\n### Heading 3\n<!-- markdownlint-enable MD001 -->\n\n# Heading 1 again\n\n### Heading 3 again\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	// Line 4 (inside disable) must not fire.
+	for _, violation := range v {
+		if violation.Line == 4 {
+			t.Errorf("expected no violation on line 4 (inside disable block), got %v", violation)
+		}
+	}
+	// Line 9 (after re-enable, H1→H3 jump) must fire.
+	found := false
+	for _, violation := range v {
+		if violation.Line == 9 {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected violation on line 9 (after re-enable), got %v", v)
+	}
+}
+
+func TestInlineDisable_DisableLine(t *testing.T) {
+	// disable-line suppresses violations only on the current line.
+	src := "# Heading 1\n\n### Heading 3 <!-- markdownlint-disable-line MD001 -->\n\n### Heading 3 again\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	for _, violation := range v {
+		if violation.Line == 3 {
+			t.Errorf("expected no violation on line 3 (disable-line), got %v", violation)
+		}
+	}
+}
+
+func TestInlineDisable_DisableLineAllRules(t *testing.T) {
+	// disable-line without rule IDs suppresses all rules on the current line.
+	src := "Trailing spaces   <!-- markdownlint-disable-line -->\n"
+	l := lint.NewLinter(rules.MD009{})
+	v := l.Lint([]byte(src))
+	if len(v) != 0 {
+		t.Errorf("expected no violations (disable-line all), got %v", v)
+	}
+}
+
+func TestInlineDisable_DisableNextLine(t *testing.T) {
+	// disable-next-line suppresses violations on the following line only.
+	// H1 → H3 (suppressed) → H1 → H3 (should fire: jump from H1 to H3)
+	src := "# Heading 1\n\n<!-- markdownlint-disable-next-line MD001 -->\n### Heading 3\n\n# Heading 1 again\n\n### Heading 3 again\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	// Line 4 suppressed via disable-next-line.
+	for _, violation := range v {
+		if violation.Line == 4 {
+			t.Errorf("expected no violation on line 4 (disable-next-line), got %v", violation)
+		}
+	}
+	// Line 8 (H1→H3 jump after disable-next-line scope) should fire.
+	found := false
+	for _, violation := range v {
+		if violation.Line == 8 {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected violation on line 8 (after disable-next-line), got %v", v)
+	}
+}
+
+func TestInlineDisable_DisableNextLineAllRules(t *testing.T) {
+	// disable-next-line without rule IDs suppresses all rules on the next line.
+	src := "<!-- markdownlint-disable-next-line -->\nTrailing spaces   \n"
+	l := lint.NewLinter(rules.MD009{})
+	v := l.Lint([]byte(src))
+	if len(v) != 0 {
+		t.Errorf("expected no violations (disable-next-line all), got %v", v)
+	}
+}
+
+func TestInlineDisable_CaptureRestore(t *testing.T) {
+	// capture saves state; restore brings it back.
+	// H1 → capture → disable → H3 (suppressed) → restore → H1 → H3 (should fire)
+	src := "# Heading 1\n\n<!-- markdownlint-capture -->\n<!-- markdownlint-disable MD001 -->\n### Heading 3\n<!-- markdownlint-restore -->\n\n# Heading 1 again\n\n### Heading 3 again\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	// Line 5 is in disabled block, should not fire.
+	for _, violation := range v {
+		if violation.Line == 5 {
+			t.Errorf("expected no violation on line 5 (inside disable block), got %v", violation)
+		}
+	}
+	// Line 10 (H1→H3 jump after restore) should fire.
+	found := false
+	for _, violation := range v {
+		if violation.Line == 10 {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected violation on line 10 (after restore), got %v", v)
+	}
+}
+
+func TestInlineDisable_DisableNextLineOnlyAffectsNextLine(t *testing.T) {
+	// disable-next-line should not affect lines beyond the immediately following line.
+	src := "<!-- markdownlint-disable-next-line MD009 -->\nTrailing spaces   \nMore trailing spaces   \n"
+	l := lint.NewLinter(rules.MD009{})
+	v := l.Lint([]byte(src))
+	// Line 2 suppressed; line 3 should still fire.
+	found3 := false
+	for _, violation := range v {
+		if violation.Line == 2 {
+			t.Errorf("expected no violation on line 2 (disable-next-line), got %v", violation)
+		}
+		if violation.Line == 3 {
+			found3 = true
+		}
+	}
+	if !found3 {
+		t.Errorf("expected violation on line 3, got %v", v)
+	}
+}
+
 func integrationMarkdownlintAvailable() bool {
 	_, err := exec.LookPath("markdownlint")
 	return err == nil
