@@ -41,6 +41,60 @@ goldmark-lint '**/*.md'
 goldmark-lint --fix '**/*.md'
 ```
 
+## Configuration
+
+goldmark-lint reads configuration from a `.markdownlint-cli2.yaml` (or `.yml`,
+`.jsonc`, `.json`) file, following the same discovery and format as
+[markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2).
+
+The config file is searched starting from the current working directory and
+walking up to the filesystem root. The first file found is used.
+
+### Config file format
+
+```yaml
+# .markdownlint-cli2.yaml
+config:
+  default: true          # enable all rules (this is the default when omitted)
+  MD013:
+    line_length: 100     # override line length for MD013
+  MD033:
+    allowed_elements:    # allow specific HTML elements
+      - br
+  MD001: false           # disable MD001
+
+ignores:
+  - "vendor/**"          # ignore files matching these glob patterns
+  - "node_modules/**"
+```
+
+The `config` section mirrors the
+[markdownlint configuration](https://github.com/DavidAnson/markdownlint#options)
+format:
+
+- Set a rule ID to `false` to disable it.
+- Set a rule ID to `true` to enable it with default options.
+- Set a rule ID to an object to enable it with specific options.
+- Set `default: false` to disable all rules not explicitly listed.
+
+### Supported rule options
+
+| Rule  | Option            | Default | Description                              |
+|-------|-------------------|---------|------------------------------------------|
+| MD003 | `style`           | `consistent` | Heading style                       |
+| MD004 | `style`           | `consistent` | Unordered list marker style         |
+| MD007 | `indent`          | `2`     | Spaces per indentation level             |
+| MD009 | `br_spaces`       | `2`     | Trailing spaces allowed for line breaks  |
+| MD012 | `maximum`         | `1`     | Max consecutive blank lines              |
+| MD013 | `line_length`     | `80`    | Maximum line length                      |
+| MD022 | `lines_above`     | `1`     | Blank lines required above headings      |
+| MD022 | `lines_below`     | `1`     | Blank lines required below headings      |
+| MD024 | `siblings_only`   | `false` | Only check sibling headings              |
+| MD025 | `level`           | `1`     | Top-level heading level                  |
+| MD029 | `style`           | `one_or_ordered` | Ordered list numbering style    |
+| MD033 | `allowed_elements`| `[]`    | HTML elements that are allowed           |
+| MD041 | `level`           | `1`     | Required first-line heading level        |
+
 ## Features
 
 - Parses Markdown with the goldmark library for accurate, spec-compliant analysis.

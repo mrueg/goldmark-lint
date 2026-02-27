@@ -10,7 +10,7 @@ import (
 // MD004 checks that unordered list markers are consistent.
 type MD004 struct {
 	// Style is the required marker style: "consistent" (default), "asterisk", "plus", or "dash".
-	Style string
+	Style string `json:"style"`
 }
 
 func (r MD004) ID() string          { return "MD004" }

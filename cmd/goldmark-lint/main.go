@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/mrueg/goldmark-lint/lint/rules"
 )
 
 const helpText = `goldmark-lint
@@ -23,6 +20,11 @@ Glob expressions:
 Optional parameters:
 - --fix   updates files to resolve fixable issues
 - --help  writes this message to the console and exits without doing anything else
+
+Config file:
+- Reads .markdownlint-cli2.yaml (or .yml, .jsonc, .json) from the current
+  directory or any parent directory (same discovery as markdownlint-cli2).
+- Supports "config" (rule enable/disable and options) and "ignores" keys.
 
 Exit codes:
 - 0: Linting was successful and there were no errors
@@ -45,24 +47,27 @@ func main() {
 		os.Exit(2)
 	}
 
-	linter := lint.NewLinter(
-		rules.MD001{},
-		rules.MD003{},
-		rules.MD004{},
-		rules.MD007{},
-		rules.MD009{},
-		rules.MD010{},
-		rules.MD012{},
-		rules.MD013{},
-		rules.MD022{},
-		rules.MD024{},
-		rules.MD025{},
-		rules.MD029{},
-		rules.MD033{},
-		rules.MD034{},
-		rules.MD041{},
-		rules.MD047{},
-	)
+	// Auto-discover config file starting from the current working directory.
+	var cfg *ConfigFile
+	if cwd, err := os.Getwd(); err == nil {
+		if cfgPath := findConfigFile(cwd); cfgPath != "" {
+			loaded, err := loadConfig(cfgPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error loading config %s: %v\n", cfgPath, err)
+				os.Exit(2)
+			}
+			cfg = loaded
+		}
+	}
+
+	var ruleCfg map[string]interface{}
+	var ignores []string
+	if cfg != nil {
+		ruleCfg = cfg.Config
+		ignores = cfg.Ignores
+	}
+
+	linter := newLinterFromConfig(ruleCfg)
 
 	exitCode := 0
 	for _, pattern := range flag.Args() {
@@ -71,6 +76,9 @@ func main() {
 			files = []string{pattern}
 		}
 		for _, file := range files {
+			if isIgnored(file, ignores) {
+				continue
+			}
 			source, err := os.ReadFile(file)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", file, err)

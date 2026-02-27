@@ -10,7 +10,7 @@ import (
 // MD009 checks for trailing spaces at the end of lines.
 type MD009 struct {
 	// BrSpaces is the number of spaces allowed at end of line for hard line breaks (default 2).
-	BrSpaces int
+	BrSpaces int `json:"br_spaces"`
 }
 
 func (r MD009) ID() string          { return "MD009" }

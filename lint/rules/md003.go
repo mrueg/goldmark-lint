@@ -11,7 +11,7 @@ import (
 type MD003 struct {
 	// Style is the required heading style: "consistent" (default), "atx", "setext",
 	// "atx_closed", "setext_with_atx", or "setext_with_atx_closed".
-	Style string
+	Style string `json:"style"`
 }
 
 func (r MD003) ID() string          { return "MD003" }

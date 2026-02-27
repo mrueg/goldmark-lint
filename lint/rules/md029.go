@@ -12,7 +12,7 @@ import (
 // MD029 checks that ordered list items use a consistent numbering style.
 type MD029 struct {
 	// Style is the required style: "one_or_ordered" (default), "one", "ordered", or "zero".
-	Style string
+	Style string `json:"style"`
 }
 
 func (r MD029) ID() string          { return "MD029" }
