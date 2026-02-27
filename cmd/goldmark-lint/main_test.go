@@ -124,7 +124,9 @@ func TestCLI_Fix(t *testing.T) {
 	if _, err := tmp.WriteString(content); err != nil {
 		t.Fatal(err)
 	}
-	tmp.Close()
+	if err := tmp.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	cmd := exec.Command(bin, "--fix", tmp.Name())
 	if err := cmd.Run(); err != nil {
