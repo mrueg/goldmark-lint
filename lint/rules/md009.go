@@ -24,16 +24,16 @@ func (r MD009) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	for i, line := range doc.Lines {
 		trimmed := strings.TrimRight(line, " \t")
-		trailing := line[len(trimmed):]
-		if len(trailing) > 0 {
-			if trailing == strings.Repeat(" ", brSpaces) {
+		trailingLen := len(line) - len(trimmed)
+		if trailingLen > 0 {
+			if trailingLen == brSpaces && strings.HasSuffix(line, strings.Repeat(" ", brSpaces)) {
 				continue
 			}
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
 				Line:    i + 1,
 				Column:  len(trimmed) + 1,
-				Message: fmt.Sprintf("Trailing spaces [Expected: 0 or %d; Actual: %d]", brSpaces, len(trailing)),
+				Message: fmt.Sprintf("Trailing spaces [Expected: 0 or %d; Actual: %d]", brSpaces, trailingLen),
 			})
 		}
 	}
