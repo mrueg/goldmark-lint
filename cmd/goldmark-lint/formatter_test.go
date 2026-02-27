@@ -379,7 +379,7 @@ func TestCLI_OutputFormatters_Config_JSON(t *testing.T) {
 
 	cmd := exec.Command(bin, mdFile)
 	cmd.Dir = dir
-	cmd.Run() // ignore exit code; we just want to check the outfile
+	_ = cmd.Run() // ignore exit code; we just want to check the outfile
 
 	data, err := os.ReadFile(outFile)
 	if err != nil {
