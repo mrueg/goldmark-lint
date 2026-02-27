@@ -30,7 +30,8 @@ Optional parameters:
 Config file:
 - Reads .markdownlint-cli2.yaml (or .yml, .jsonc, .json) from the current
   directory or any parent directory (same discovery as markdownlint-cli2).
-- Supports "config" (rule enable/disable and options) and "ignores" keys.
+- Supports "config" (rule enable/disable and options), "ignores", and
+  "overrides" (per-glob rule config overrides) keys.
 
 Exit codes:
 - 0: Linting was successful and there were no errors
@@ -74,11 +75,14 @@ func main() {
 
 	var ruleCfg map[string]interface{}
 	var ignores []string
+	var overrides []GlobOverride
 	if cfg != nil {
 		ruleCfg = cfg.Config
 		ignores = cfg.Ignores
+		overrides = cfg.Overrides
 	}
 
+	// Default linter (used when no overrides are defined or override doesn't match).
 	linter := newLinterFromConfig(ruleCfg)
 
 	exitCode := 0
@@ -115,8 +119,13 @@ func main() {
 				exitCode = 2
 				continue
 			}
+			fileLinter := linter
+			if len(overrides) > 0 {
+				fileCfg := effectiveConfigForFile(ruleCfg, overrides, file)
+				fileLinter = newLinterFromConfig(fileCfg)
+			}
 			if *fix {
-				fixed := linter.Fix(source)
+				fixed := fileLinter.Fix(source)
 				if err := os.WriteFile(file, fixed, 0644); err != nil {
 					fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", file, err)
 					exitCode = 2
@@ -124,7 +133,7 @@ func main() {
 				}
 				source = fixed
 			}
-			violations := linter.Lint(source)
+			violations := fileLinter.Lint(source)
 			for _, v := range violations {
 				fmt.Fprintf(os.Stderr, "%s:%d:%d %s %s\n", file, v.Line, v.Column, v.Rule, v.Message)
 				if exitCode < 1 {

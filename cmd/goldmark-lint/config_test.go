@@ -237,6 +237,203 @@ func TestStripJSONComments(t *testing.T) {
 	}
 }
 
+func TestMergeConfigs(t *testing.T) {
+	base := map[string]interface{}{"MD001": false, "MD013": map[string]interface{}{"line_length": 80, "code_blocks": false}}
+	overlay := map[string]interface{}{"MD013": map[string]interface{}{"line_length": 120}, "MD041": false}
+	merged := mergeConfigs(base, overlay)
+	if merged["MD001"] != false {
+		t.Errorf("MD001 should be false, got %v", merged["MD001"])
+	}
+	if merged["MD041"] != false {
+		t.Errorf("MD041 should be false, got %v", merged["MD041"])
+	}
+	lineLengthCfg, ok := merged["MD013"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("MD013 config not a map, got %T", merged["MD013"])
+	}
+	if lineLengthCfg["line_length"] != 120 {
+		t.Errorf("MD013.line_length should be 120, got %v", lineLengthCfg["line_length"])
+	}
+	// Deep merge: code_blocks should be preserved from base even though overlay only sets line_length.
+	if lineLengthCfg["code_blocks"] != false {
+		t.Errorf("MD013.code_blocks should be preserved as false from base, got %v", lineLengthCfg["code_blocks"])
+	}
+}
+
+func TestEffectiveConfigForFile_NoOverrides(t *testing.T) {
+	base := map[string]interface{}{"MD001": false}
+	got := effectiveConfigForFile(base, nil, "docs/foo.md")
+	if got["MD001"] != false {
+		t.Errorf("expected MD001=false, got %v", got["MD001"])
+	}
+}
+
+func TestEffectiveConfigForFile_OverrideMatches(t *testing.T) {
+	base := map[string]interface{}{"MD013": map[string]interface{}{"line_length": 80}}
+	overrides := []GlobOverride{
+		{
+			Files:  []string{"docs/**"},
+			Config: map[string]interface{}{"MD013": map[string]interface{}{"line_length": 120}},
+		},
+	}
+	got := effectiveConfigForFile(base, overrides, "docs/readme.md")
+	lineLengthCfg, ok := got["MD013"].(map[string]interface{})
+	if !ok || lineLengthCfg["line_length"] != 120 {
+		t.Errorf("expected MD013.line_length=120 for docs/ file, got %v", got["MD013"])
+	}
+}
+
+func TestEffectiveConfigForFile_OverrideDoesNotMatch(t *testing.T) {
+	base := map[string]interface{}{"MD013": map[string]interface{}{"line_length": 80}}
+	overrides := []GlobOverride{
+		{
+			Files:  []string{"docs/**"},
+			Config: map[string]interface{}{"MD013": map[string]interface{}{"line_length": 120}},
+		},
+	}
+	got := effectiveConfigForFile(base, overrides, "src/foo.md")
+	lineLengthCfg, ok := got["MD013"].(map[string]interface{})
+	if !ok || lineLengthCfg["line_length"] != 80 {
+		t.Errorf("expected MD013.line_length=80 for non-docs file, got %v", got["MD013"])
+	}
+}
+
+func TestEffectiveConfigForFile_MultipleOverridesLastWins(t *testing.T) {
+	base := map[string]interface{}{}
+	overrides := []GlobOverride{
+		{
+			Files:  []string{"**/*.md"},
+			Config: map[string]interface{}{"MD041": false},
+		},
+		{
+			Files:  []string{"docs/**"},
+			Config: map[string]interface{}{"MD041": true},
+		},
+	}
+	// docs/ matches both overrides; last one should win
+	got := effectiveConfigForFile(base, overrides, "docs/foo.md")
+	if got["MD041"] != true {
+		t.Errorf("expected MD041=true (last override wins), got %v", got["MD041"])
+	}
+	// non-docs matches only first override
+	got2 := effectiveConfigForFile(base, overrides, "readme.md")
+	if got2["MD041"] != false {
+		t.Errorf("expected MD041=false for non-docs file, got %v", got2["MD041"])
+	}
+}
+
+func TestLoadConfig_YAML_WithOverrides(t *testing.T) {
+	dir := t.TempDir()
+	content := `
+config:
+  MD013:
+    line_length: 80
+overrides:
+  - files:
+      - "docs/**"
+    config:
+      MD013:
+        line_length: 120
+`
+	cfgPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Overrides) != 1 {
+		t.Fatalf("expected 1 override, got %d", len(cfg.Overrides))
+	}
+	ov := cfg.Overrides[0]
+	if len(ov.Files) != 1 || ov.Files[0] != "docs/**" {
+		t.Errorf("override files = %v, want [docs/**]", ov.Files)
+	}
+	lineLengthCfg, ok := ov.Config["MD013"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("override MD013 config not a map, got %T", ov.Config["MD013"])
+	}
+	if lineLengthCfg["line_length"] != 120 {
+		t.Errorf("override MD013.line_length = %v, want 120", lineLengthCfg["line_length"])
+	}
+}
+
+func TestCLI_OverridesApplyToMatchingFile(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	docsDir := filepath.Join(dir, "docs")
+	if err := os.Mkdir(docsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// A line of exactly 100 characters
+	line := "# " + string(make([]byte, 98))
+	for i := range line[2:] {
+		line = line[:2+i] + "a" + line[2+i+1:]
+	}
+	// docs/file.md has a 100-char line; should pass with override line_length:100
+	docsFile := filepath.Join(docsDir, "file.md")
+	if err := os.WriteFile(docsFile, []byte(line+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfgContent := `config:
+  MD013:
+    line_length: 80
+overrides:
+  - files:
+      - "docs/**"
+    config:
+      MD013:
+        line_length: 100
+`
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, docsFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 with override line_length:100 for docs/ file, got: %v", err)
+	}
+}
+
+func TestCLI_OverridesDoNotApplyToNonMatchingFile(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// A line of exactly 100 characters
+	line := "# " + string(make([]byte, 98))
+	for i := range line[2:] {
+		line = line[:2+i] + "a" + line[2+i+1:]
+	}
+	// root file.md has a 100-char line; should fail with base line_length:80
+	rootFile := filepath.Join(dir, "file.md")
+	if err := os.WriteFile(rootFile, []byte(line+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfgContent := `config:
+  MD013:
+    line_length: 80
+overrides:
+  - files:
+      - "docs/**"
+    config:
+      MD013:
+        line_length: 100
+`
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, rootFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err == nil {
+		t.Error("expected non-zero exit for non-docs file with line_length:80, got exit 0")
+	}
+}
+
+
 func TestCLI_ConfigDisablesRule(t *testing.T) {
 	bin := buildBinary(t)
 
