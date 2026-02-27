@@ -1,0 +1,5 @@
+# Code blocks
+
+\`\`\`go
+code
+\`\`\`

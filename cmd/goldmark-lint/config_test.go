@@ -167,8 +167,8 @@ func TestIsRuleEnabled_DefaultFalse_ExplicitConfig(t *testing.T) {
 
 func TestBuildRules_AllEnabled(t *testing.T) {
 	got := buildRules(nil)
-	if len(got) != 35 {
-		t.Errorf("expected 35 rules, got %d", len(got))
+	if len(got) != 53 {
+		t.Errorf("expected 53 rules, got %d", len(got))
 	}
 }
 
