@@ -25,7 +25,7 @@ func ruleInfoURL(ruleID string) string {
 func formatDefault(violations []fileViolation, w io.Writer) {
 	for _, fv := range violations {
 		for _, v := range fv.Violations {
-			fmt.Fprintf(w, "%s:%d:%d %s %s\n", fv.File, v.Line, v.Column, v.Rule, v.Message)
+			_, _ = fmt.Fprintf(w, "%s:%d:%d %s %s\n", fv.File, v.Line, v.Column, v.Rule, v.Message)
 		}
 	}
 }
@@ -126,11 +126,11 @@ func formatJUnit(violations []fileViolation, w io.Writer) {
 			},
 		},
 	}
-	fmt.Fprint(w, xml.Header)
+	_, _ = fmt.Fprint(w, xml.Header)
 	enc := xml.NewEncoder(w)
 	enc.Indent("", "  ")
 	_ = enc.Encode(suites)
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 }
 
 // formatTAP writes violations in TAP (Test Anything Protocol) format to w.
@@ -145,9 +145,9 @@ func formatTAP(violations []fileViolation, w io.Writer) {
 			entries = append(entries, tapEntry{fv.File, v})
 		}
 	}
-	fmt.Fprintf(w, "TAP version 13\n1..%d\n", len(entries))
+	_, _ = fmt.Fprintf(w, "TAP version 13\n1..%d\n", len(entries))
 	for i, e := range entries {
-		fmt.Fprintf(w, "not ok %d - %s:%d:%d %s %s\n", i+1, e.file, e.v.Line, e.v.Column, e.v.Rule, e.v.Message)
+		_, _ = fmt.Fprintf(w, "not ok %d - %s:%d:%d %s %s\n", i+1, e.file, e.v.Line, e.v.Column, e.v.Rule, e.v.Message)
 	}
 }
 

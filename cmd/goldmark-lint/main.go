@@ -273,7 +273,11 @@ func main() {
 				continue
 			}
 			w = f
-			closeFile = func() { f.Close() }
+			closeFile = func() {
+				if err := f.Close(); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: could not close output file %s: %v\n", spec.outfile, err)
+				}
+			}
 		} else if spec.format == "default" {
 			w = os.Stderr
 			closeFile = func() {}
