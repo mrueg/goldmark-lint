@@ -9,8 +9,10 @@ import (
 // MD021 checks that closed ATX style headings have only one space inside the hashes.
 type MD021 struct{}
 
-func (r MD021) ID() string          { return "MD021" }
-func (r MD021) Description() string { return "Multiple spaces inside hashes on closed ATX style heading" }
+func (r MD021) ID() string { return "MD021" }
+func (r MD021) Description() string {
+	return "Multiple spaces inside hashes on closed ATX style heading"
+}
 
 func (r MD021) Fix(source []byte) []byte {
 	lines := strings.Split(string(source), "\n")

@@ -12,8 +12,10 @@ import (
 // MD005 checks that list items at the same nesting level use consistent indentation.
 type MD005 struct{}
 
-func (r MD005) ID() string          { return "MD005" }
-func (r MD005) Description() string { return "Inconsistent indentation for list items at the same level" }
+func (r MD005) ID() string { return "MD005" }
+func (r MD005) Description() string {
+	return "Inconsistent indentation for list items at the same level"
+}
 
 func (r MD005) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation

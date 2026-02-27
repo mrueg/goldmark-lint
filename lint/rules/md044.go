@@ -24,13 +24,6 @@ func (r MD044) Check(doc *lint.Document) []lint.Violation {
 	if len(r.Names) == 0 {
 		return nil
 	}
-	codeBlocks := r.CodeBlocks
-	// Default true
-	if !codeBlocks {
-		codeBlocks = false
-	} else {
-		codeBlocks = true
-	}
 
 	mask := fencedCodeBlockMask(doc.Lines)
 	var violations []lint.Violation
@@ -44,12 +37,12 @@ func (r MD044) Check(doc *lint.Document) []lint.Violation {
 		re := regexp.MustCompile(`(?i)\b` + pattern + `\b`)
 
 		for i, line := range doc.Lines {
-			if mask[i] && !codeBlocks {
+			if mask[i] && !r.CodeBlocks {
 				continue
 			}
 			// Skip code spans if CodeBlocks is false.
 			checkLine := line
-			if !codeBlocks {
+			if !r.CodeBlocks {
 				checkLine = blankCodeSpans(line)
 			}
 			matches := re.FindAllStringIndex(checkLine, -1)
@@ -78,10 +71,6 @@ func (r MD044) Fix(source []byte) []byte {
 	if len(r.Names) == 0 {
 		return source
 	}
-	codeBlocks := true
-	if !r.CodeBlocks {
-		codeBlocks = false
-	}
 
 	lines := strings.Split(string(source), "\n")
 	mask := fencedCodeBlockMask(lines)
@@ -94,7 +83,7 @@ func (r MD044) Fix(source []byte) []byte {
 		re := regexp.MustCompile(`(?i)\b` + pattern + `\b`)
 
 		for i, line := range lines {
-			if mask[i] && !codeBlocks {
+			if mask[i] && !r.CodeBlocks {
 				continue
 			}
 			lines[i] = re.ReplaceAllStringFunc(line, func(found string) string {

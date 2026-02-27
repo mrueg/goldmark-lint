@@ -17,9 +17,6 @@ type MD030 struct {
 func (r MD030) ID() string          { return "MD030" }
 func (r MD030) Description() string { return "Spaces after list markers" }
 
-// md030RE matches a list item line capturing: indent, marker, spaces after marker.
-var md030RE = regexp.MustCompile(`^( *)(?:([-*+])|(\d+)[.)]) +`)
-
 // md030FullRE captures marker type and the spaces following it.
 var md030FullRE = regexp.MustCompile(`^( *)([-*+]|\d+[.)])( +)`)
 

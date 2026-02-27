@@ -18,14 +18,8 @@ func (r MD060) ID() string          { return "MD060" }
 func (r MD060) Description() string { return "Table column style" }
 
 func tableColumnStyle(line string) string {
-	trimmed := strings.TrimSpace(line)
-	// Strip leading/trailing pipes.
-	if strings.HasPrefix(trimmed, "|") {
-		trimmed = trimmed[1:]
-	}
-	if strings.HasSuffix(trimmed, "|") {
-		trimmed = trimmed[:len(trimmed)-1]
-	}
+	trimmed := strings.TrimPrefix(strings.TrimSpace(line), "|")
+	trimmed = strings.TrimSuffix(trimmed, "|")
 	cells := strings.Split(trimmed, "|")
 
 	allSingleSpace := true
