@@ -23,6 +23,23 @@ func buildBinary(t *testing.T) string {
 	return bin
 }
 
+func TestCLI_Version(t *testing.T) {
+	bin := buildBinary(t)
+	cmd := exec.Command(bin, "--version")
+	out, err := cmd.CombinedOutput()
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if exitErr.ExitCode() != 0 {
+			t.Fatalf("--version exited with code %d, want 0", exitErr.ExitCode())
+		}
+	} else if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out) == 0 {
+		t.Error("expected version output, got nothing")
+	}
+}
+
 func TestCLI_Help(t *testing.T) {
 	bin := buildBinary(t)
 	cmd := exec.Command(bin, "--help")

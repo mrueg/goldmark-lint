@@ -10,10 +10,13 @@ import (
 	"github.com/mrueg/goldmark-lint/lint/rules"
 )
 
+// version is set at build time via -ldflags.
+var version = "dev"
+
 const helpText = `goldmark-lint
 https://github.com/mrueg/goldmark-lint
 
-Syntax: goldmark-lint glob0 [glob1] [...] [globN] [--fix] [--help]
+Syntax: goldmark-lint glob0 [glob1] [...] [globN] [--fix] [--help] [--version]
 
 Glob expressions:
 - * matches any number of characters, but not /
@@ -21,8 +24,9 @@ Glob expressions:
 - ** matches any number of characters, including /
 
 Optional parameters:
-- --fix   updates files to resolve fixable issues
-- --help  writes this message to the console and exits without doing anything else
+- --fix      updates files to resolve fixable issues
+- --help     writes this message to the console and exits without doing anything else
+- --version  prints the version and exits
 
 Exit codes:
 - 0: Linting was successful and there were no errors
@@ -33,10 +37,16 @@ Exit codes:
 func main() {
 	fix := flag.Bool("fix", false, "updates files to resolve fixable issues")
 	help := flag.Bool("help", false, "writes help message and exits")
+	ver := flag.Bool("version", false, "prints the version and exits")
 	flag.Parse()
 
 	if *help {
 		fmt.Print(helpText)
+		os.Exit(0)
+	}
+
+	if *ver {
+		fmt.Println(version)
 		os.Exit(0)
 	}
 
