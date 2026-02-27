@@ -14,7 +14,7 @@ var version = "dev"
 const helpText = `goldmark-lint
 https://github.com/mrueg/goldmark-lint
 
-Syntax: goldmark-lint glob0 [glob1] [...] [globN] [--fix] [--help] [--version]
+Syntax: goldmark-lint glob0 [glob1] [...] [globN] [--fix] [--format=text] [--help] [--version]
         goldmark-lint - (read from stdin)
 
 Glob expressions:
@@ -23,9 +23,10 @@ Glob expressions:
 - ** matches any number of characters, including /
 
 Optional parameters:
-- --fix      updates files to resolve fixable issues
-- --help     writes this message to the console and exits without doing anything else
-- --version  prints the version and exits
+- --fix           updates files to resolve fixable issues
+- --format=<fmt>  output format: text (default), json, junit, or sarif
+- --help          writes this message to the console and exits without doing anything else
+- --version       prints the version and exits
 
 Config file:
 - Reads .markdownlint-cli2.yaml (or .yml, .jsonc, .json) from the current
@@ -41,6 +42,7 @@ Exit codes:
 
 func main() {
 	fix := flag.Bool("fix", false, "updates files to resolve fixable issues")
+	format := flag.String("format", "text", "output format: text, json, junit, or sarif")
 	help := flag.Bool("help", false, "writes help message and exits")
 	ver := flag.Bool("version", false, "prints the version and exits")
 	flag.Parse()
@@ -53,6 +55,13 @@ func main() {
 	if *ver {
 		fmt.Println(version)
 		os.Exit(0)
+	}
+
+	switch *format {
+	case "text", "json", "junit", "sarif":
+	default:
+		fmt.Fprintf(os.Stderr, "unknown format %q; valid formats: text, json, junit, sarif\n", *format)
+		os.Exit(2)
 	}
 
 	if flag.NArg() < 1 {
@@ -86,6 +95,8 @@ func main() {
 	linter := newLinterFromConfig(ruleCfg)
 
 	exitCode := 0
+	var allViolations []fileViolation
+
 	for _, pattern := range flag.Args() {
 		// Special case: "-" means read from stdin
 		if pattern == "-" {
@@ -98,7 +109,11 @@ func main() {
 			violations := linter.Lint(source)
 			for _, v := range violations {
 				v.Severity = getRuleSeverity(v.Rule, ruleCfg)
-				fmt.Fprintf(os.Stderr, "stdin:%d:%d %s %s\n", v.Line, v.Column, v.Rule, v.Message)
+				if *format == "text" {
+					fmt.Fprintf(os.Stderr, "stdin:%d:%d %s %s\n", v.Line, v.Column, v.Rule, v.Message)
+				} else {
+					allViolations = append(allViolations, fileViolation{File: "stdin", Violation: v})
+				}
 				if v.Severity != "warning" && exitCode < 1 {
 					exitCode = 1
 				}
@@ -137,12 +152,34 @@ func main() {
 			violations := fileLinter.Lint(source)
 			for _, v := range violations {
 				v.Severity = getRuleSeverity(v.Rule, ruleCfg)
-				fmt.Fprintf(os.Stderr, "%s:%d:%d %s %s\n", file, v.Line, v.Column, v.Rule, v.Message)
+				if *format == "text" {
+					fmt.Fprintf(os.Stderr, "%s:%d:%d %s %s\n", file, v.Line, v.Column, v.Rule, v.Message)
+				} else {
+					allViolations = append(allViolations, fileViolation{File: file, Violation: v})
+				}
 				if v.Severity != "warning" && exitCode < 1 {
 					exitCode = 1
 				}
 			}
 		}
 	}
+
+	// For non-text formats, emit all collected violations to stdout.
+	if *format != "text" {
+		var err error
+		switch *format {
+		case "json":
+			err = writeJSON(os.Stdout, allViolations)
+		case "junit":
+			err = writeJUnit(os.Stdout, allViolations)
+		case "sarif":
+			err = writeSARIF(os.Stdout, allViolations, version)
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
+			os.Exit(2)
+		}
+	}
+
 	os.Exit(exitCode)
 }
