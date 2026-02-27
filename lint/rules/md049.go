@@ -125,10 +125,11 @@ func (r MD049) Fix(source []byte) []byte {
 		if mask[i] {
 			continue
 		}
-		if target == "asterisk" {
+		switch target {
+		case "asterisk":
 			// Replace _text_ with *text* (not __text__).
 			lines[i] = md049ReplaceUnderscore(line)
-		} else if target == "underscore" {
+		case "underscore":
 			// Replace *text* with _text_ (not **text**).
 			lines[i] = md049ReplaceAsterisk(line)
 		}

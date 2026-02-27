@@ -959,6 +959,14 @@ func TestMD046_Valid(t *testing.T) {
 	}
 }
 
+func TestMD046_Invalid(t *testing.T) {
+	src := "Text\n\n    indented code\n"
+	v := lintString(t, rules.MD046{Style: "fenced"}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
 func TestMD048_Valid(t *testing.T) {
 	src := "```go\ncode\n```\n"
 	v := lintString(t, rules.MD048{Style: "backtick"}, src)
@@ -1000,6 +1008,15 @@ func TestMD049_Invalid(t *testing.T) {
 	}
 }
 
+func TestMD049_Fix(t *testing.T) {
+	src := "Use _underscore_ emphasis.\n"
+	got := fixString(t, rules.MD049{Style: "asterisk"}, src)
+	want := "Use *underscore* emphasis.\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
 func TestMD050_Valid(t *testing.T) {
 	src := "Use **asterisk** strong.\n"
 	v := lintString(t, rules.MD050{Style: "asterisk"}, src)
@@ -1013,6 +1030,15 @@ func TestMD050_Invalid(t *testing.T) {
 	v := lintString(t, rules.MD050{Style: "asterisk"}, src)
 	if len(v) != 1 {
 		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD050_Fix(t *testing.T) {
+	src := "Use __underscore__ strong.\n"
+	got := fixString(t, rules.MD050{Style: "asterisk"}, src)
+	want := "Use **underscore** strong.\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
 	}
 }
 
@@ -1064,11 +1090,46 @@ func TestMD053_Invalid(t *testing.T) {
 	}
 }
 
+func TestMD053_Fix(t *testing.T) {
+	src := "Some text.\n\n[unused]: https://example.com\n"
+	got := fixString(t, rules.MD053{}, src)
+	want := "Some text.\n\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD054_Valid(t *testing.T) {
+	src := "[link](https://example.com)\n"
+	v := lintString(t, rules.MD054{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD054_Invalid(t *testing.T) {
+	// Only autolinks are allowed; inline links are disallowed.
+	src := "[link](https://example.com)\n"
+	v := lintString(t, rules.MD054{Autolink: true}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
 func TestMD055_Valid(t *testing.T) {
 	src := "| Col1 | Col2 |\n| ---- | ---- |\n| A    | B    |\n"
 	v := lintString(t, rules.MD055{}, src)
 	if len(v) != 0 {
 		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD055_Invalid(t *testing.T) {
+	// Header and delimiter have leading+trailing pipes; data row does not.
+	src := "| Col1 | Col2 |\n| ---- | ---- |\nA | B\n"
+	v := lintString(t, rules.MD055{Style: "leading_and_trailing"}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
 	}
 }
 
@@ -1106,6 +1167,15 @@ func TestMD058_Invalid(t *testing.T) {
 	}
 }
 
+func TestMD058_Fix(t *testing.T) {
+	src := "Text\n| Col1 | Col2 |\n| ---- | ---- |\n| A    | B    |\nMore text\n"
+	got := fixString(t, rules.MD058{}, src)
+	want := "Text\n\n| Col1 | Col2 |\n| ---- | ---- |\n| A    | B    |\n\nMore text\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
 func TestMD059_Valid(t *testing.T) {
 	src := "[Read the docs](https://example.com)\n"
 	v := lintString(t, rules.MD059{}, src)
@@ -1127,6 +1197,15 @@ func TestMD060_Valid(t *testing.T) {
 	v := lintString(t, rules.MD060{Style: "any"}, src)
 	if len(v) != 0 {
 		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD060_Invalid(t *testing.T) {
+	// Header row is compact-spaced; data row is tight (no spaces around content).
+	src := "| Col1 | Col2 |\n| ---- | ---- |\n|A|B|\n"
+	v := lintString(t, rules.MD060{Style: "compact"}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
 	}
 }
 

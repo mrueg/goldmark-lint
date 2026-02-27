@@ -122,12 +122,13 @@ func (r MD050) Fix(source []byte) []byte {
 		if mask[i] {
 			continue
 		}
-		if target == "asterisk" {
+		switch target {
+		case "asterisk":
 			lines[i] = md050UnderRE.ReplaceAllStringFunc(line, func(m string) string {
 				inner := m[2 : len(m)-2]
 				return "**" + inner + "**"
 			})
-		} else if target == "underscore" {
+		case "underscore":
 			lines[i] = md050StarRE.ReplaceAllStringFunc(line, func(m string) string {
 				inner := m[2 : len(m)-2]
 				return "__" + inner + "__"
