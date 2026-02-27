@@ -1,7 +1,7 @@
 # goldmark-lint
 
 A Markdown linter written in Go using the [goldmark](https://github.com/yuin/goldmark) parser.
-It implements a subset of the rules from [markdownlint](https://github.com/DavidAnson/markdownlint) /
+It implements all rules from [markdownlint](https://github.com/DavidAnson/markdownlint) /
 [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) and supports auto-fixing for
 select rules.
 
@@ -79,22 +79,50 @@ format:
 
 ### Supported rule options
 
-| Rule  | Option            | Default | Description                              |
-|-------|-------------------|---------|------------------------------------------|
-| MD003 | `style`           | `consistent` | Heading style                       |
-| MD004 | `style`           | `consistent` | Unordered list marker style         |
-| MD007 | `indent`          | `2`     | Spaces per indentation level             |
-| MD009 | `br_spaces`       | `2`     | Trailing spaces allowed for line breaks  |
-| MD012 | `maximum`         | `1`     | Max consecutive blank lines              |
-| MD013 | `line_length`     | `80`    | Maximum line length                      |
-| MD022 | `lines_above`     | `1`     | Blank lines required above headings      |
-| MD022 | `lines_below`     | `1`     | Blank lines required below headings      |
-| MD024 | `siblings_only`   | `false` | Only check sibling headings              |
-| MD025 | `level`           | `1`     | Top-level heading level                  |
-| MD026 | `punctuation`     | `.,;:!?` | Punctuation characters to check in headings |
-| MD029 | `style`           | `one_or_ordered` | Ordered list numbering style    |
-| MD033 | `allowed_elements`| `[]`    | HTML elements that are allowed           |
-| MD041 | `level`           | `1`     | Required first-line heading level        |
+| Rule  | Option                 | Default                              | Description                                          |
+|-------|------------------------|--------------------------------------|------------------------------------------------------|
+| MD003 | `style`                | `consistent`                         | Heading style (`atx`, `setext`, `consistent`)        |
+| MD004 | `style`                | `consistent`                         | Unordered list marker style (`asterisk`, `dash`, `plus`, `consistent`) |
+| MD007 | `indent`               | `2`                                  | Spaces per indentation level                         |
+| MD009 | `br_spaces`            | `2`                                  | Trailing spaces allowed for line breaks              |
+| MD012 | `maximum`              | `1`                                  | Max consecutive blank lines                          |
+| MD013 | `line_length`          | `80`                                 | Maximum line length                                  |
+| MD022 | `lines_above`          | `1`                                  | Blank lines required above headings                  |
+| MD022 | `lines_below`          | `1`                                  | Blank lines required below headings                  |
+| MD024 | `siblings_only`        | `false`                              | Only check sibling headings                          |
+| MD025 | `level`                | `1`                                  | Top-level heading level                              |
+| MD026 | `punctuation`          | `.,;:!?`                             | Punctuation characters to check in headings          |
+| MD029 | `style`                | `one_or_ordered`                     | Ordered list numbering style                         |
+| MD030 | `ul_single`            | `1`                                  | Spaces after unordered list marker (single-line item) |
+| MD030 | `ol_single`            | `1`                                  | Spaces after ordered list marker (single-line item)  |
+| MD033 | `allowed_elements`     | `[]`                                 | HTML elements that are allowed                       |
+| MD035 | `style`                | `consistent`                         | Horizontal rule style (e.g. `---`, `***`, `consistent`) |
+| MD036 | `punctuation`          | `.,;:!?。，；：！？`                 | Punctuation that exempts a line from the check       |
+| MD041 | `level`                | `1`                                  | Required first-line heading level                    |
+| MD043 | `headings`             | `[]`                                 | Required heading structure list                      |
+| MD043 | `match_case`           | `false`                              | Require exact case match for headings                |
+| MD044 | `names`                | `[]`                                 | Proper names to enforce correct capitalisation       |
+| MD044 | `code_blocks`          | `true`                               | Check inside code blocks                             |
+| MD044 | `html_elements`        | `true`                               | Check inside HTML elements                           |
+| MD046 | `style`                | `consistent`                         | Code block style (`fenced`, `indented`, `consistent`) |
+| MD048 | `style`                | `consistent`                         | Code fence style (`backtick`, `tilde`, `consistent`) |
+| MD049 | `style`                | `consistent`                         | Emphasis style (`asterisk`, `underscore`, `consistent`) |
+| MD050 | `style`                | `consistent`                         | Strong style (`asterisk`, `underscore`, `consistent`) |
+| MD051 | `ignore_case`          | `false`                              | Ignore case when comparing link fragments            |
+| MD051 | `ignored_pattern`      | `""`                                 | Regex pattern for fragments to ignore                |
+| MD052 | `shortcut_syntax`      | `false`                              | Also check shortcut reference syntax `[label]`       |
+| MD052 | `ignored_labels`       | `["x"]`                              | Reference labels to ignore                           |
+| MD053 | `ignored_definitions`  | `["//"]`                             | Reference definitions to ignore                      |
+| MD054 | `autolink`             | `true`                               | Allow autolinks `<url>`                              |
+| MD054 | `collapsed`            | `true`                               | Allow collapsed reference links `[label][]`          |
+| MD054 | `full`                 | `true`                               | Allow full reference links `[text][label]`           |
+| MD054 | `inline`               | `true`                               | Allow inline links `[text](url)`                     |
+| MD054 | `shortcut`             | `true`                               | Allow shortcut reference links `[label]`             |
+| MD054 | `url_inline`           | `true`                               | Allow inline links whose text equals their URL       |
+| MD055 | `style`                | `consistent`                         | Table pipe style (`leading_and_trailing`, `leading_only`, `trailing_only`, `no_leading_or_trailing`, `consistent`) |
+| MD059 | `prohibited_texts`     | `["click here","here","link","more"]`| Generic link text phrases to prohibit               |
+| MD060 | `style`                | `any`                                | Table column style (`aligned`, `compact`, `tight`, `any`) |
+| MD060 | `aligned_delimiter`    | `false`                              | Require delimiter row to align with header           |
 
 ## Features
 
@@ -106,61 +134,62 @@ format:
 
 The table below lists all [markdownlint rules](https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md).
 Rules that are implemented in goldmark-lint are marked ✅. Rules marked 🔧 also support auto-fixing.
-Rules that are not yet implemented are marked ❌.
 
-| Rule  | Description                                                              | Status |
-|-------|--------------------------------------------------------------------------|--------|
-| MD001 | Heading levels should only increment by one level at a time              | ✅     |
-| MD003 | Heading style                                                            | ✅     |
-| MD004 | Unordered list style                                                     | ✅     |
-| MD005 | Inconsistent indentation for list items at the same level                | ✅     |
-| MD007 | Unordered list indentation                                               | ✅     |
-| MD009 | Trailing spaces                                                          | ✅ 🔧  |
-| MD010 | Hard tabs                                                                | ✅ 🔧  |
-| MD011 | Reversed link syntax                                                     | ✅ 🔧  |
-| MD012 | Multiple consecutive blank lines                                         | ✅ 🔧  |
-| MD013 | Line length                                                              | ✅     |
-| MD014 | Dollar signs used before commands without showing output                 | ✅ 🔧  |
-| MD018 | No space after hash on ATX style heading                                 | ✅ 🔧  |
-| MD019 | Multiple spaces after hash on ATX style heading                          | ✅ 🔧  |
-| MD020 | No space inside hashes on closed ATX style heading                       | ✅ 🔧  |
-| MD021 | Multiple spaces inside hashes on closed ATX style heading                | ✅ 🔧  |
-| MD022 | Headings should be surrounded by blank lines                             | ✅     |
-| MD023 | Headings must start at the beginning of the line                         | ✅ 🔧  |
-| MD024 | Multiple headings with the same content                                  | ✅     |
-| MD025 | Multiple top-level headings in the same document                         | ✅     |
-| MD026 | Trailing punctuation in heading                                          | ✅ 🔧  |
-| MD027 | Multiple spaces after blockquote symbol                                  | ✅ 🔧  |
-| MD028 | Blank line inside blockquote                                             | ✅     |
-| MD029 | Ordered list item prefix                                                 | ✅     |
-| MD030 | Spaces after list markers                                                | ❌     |
-| MD031 | Fenced code blocks should be surrounded by blank lines                   | ✅ 🔧  |
-| MD032 | Lists should be surrounded by blank lines                                | ✅ 🔧  |
-| MD033 | Inline HTML                                                              | ✅     |
-| MD034 | Bare URL used                                                            | ✅     |
-| MD035 | Horizontal rule style                                                    | ❌     |
-| MD036 | Emphasis used instead of a heading                                       | ❌     |
-| MD037 | Spaces inside emphasis markers                                           | ✅ 🔧  |
-| MD038 | Spaces inside code span elements                                         | ✅ 🔧  |
-| MD039 | Spaces inside link text                                                  | ✅ 🔧  |
-| MD040 | Fenced code blocks should have a language specified                      | ✅     |
-| MD041 | First line in a file should be a top-level heading                       | ✅     |
-| MD042 | No empty links                                                           | ✅     |
-| MD043 | Required heading structure                                               | ❌     |
-| MD044 | Proper names should have the correct capitalization                      | ❌     |
-| MD045 | Images should have alternate text (alt text)                             | ✅     |
-| MD046 | Code block style                                                         | ❌     |
-| MD047 | Files should end with a single newline character                         | ✅ 🔧  |
-| MD048 | Code fence style                                                         | ❌     |
-| MD049 | Emphasis style                                                           | ❌     |
-| MD050 | Strong style                                                             | ❌     |
-| MD051 | Link fragments should be valid                                           | ❌     |
-| MD052 | Reference links and images should use a label that is defined            | ❌     |
-| MD053 | Link and image reference definitions should be needed                    | ❌     |
-| MD054 | Link and image style                                                     | ❌     |
-| MD055 | Table pipe style                                                         | ❌     |
-| MD056 | Table column count                                                       | ❌     |
-| MD058 | Tables should be surrounded by blank lines                               | ❌     |
+| Rule | Description | Status |
+|------|-------------|--------|
+| [MD001](https://github.com/DavidAnson/markdownlint/blob/main/doc/md001.md) | Heading levels should only increment by one level at a time | ✅ |
+| [MD003](https://github.com/DavidAnson/markdownlint/blob/main/doc/md003.md) | Heading style | ✅ |
+| [MD004](https://github.com/DavidAnson/markdownlint/blob/main/doc/md004.md) | Unordered list style | ✅ |
+| [MD005](https://github.com/DavidAnson/markdownlint/blob/main/doc/md005.md) | Inconsistent indentation for list items at the same level | ✅ |
+| [MD007](https://github.com/DavidAnson/markdownlint/blob/main/doc/md007.md) | Unordered list indentation | ✅ |
+| [MD009](https://github.com/DavidAnson/markdownlint/blob/main/doc/md009.md) | Trailing spaces | ✅ 🔧 |
+| [MD010](https://github.com/DavidAnson/markdownlint/blob/main/doc/md010.md) | Hard tabs | ✅ 🔧 |
+| [MD011](https://github.com/DavidAnson/markdownlint/blob/main/doc/md011.md) | Reversed link syntax | ✅ 🔧 |
+| [MD012](https://github.com/DavidAnson/markdownlint/blob/main/doc/md012.md) | Multiple consecutive blank lines | ✅ 🔧 |
+| [MD013](https://github.com/DavidAnson/markdownlint/blob/main/doc/md013.md) | Line length | ✅ |
+| [MD014](https://github.com/DavidAnson/markdownlint/blob/main/doc/md014.md) | Dollar signs used before commands without showing output | ✅ 🔧 |
+| [MD018](https://github.com/DavidAnson/markdownlint/blob/main/doc/md018.md) | No space after hash on ATX style heading | ✅ 🔧 |
+| [MD019](https://github.com/DavidAnson/markdownlint/blob/main/doc/md019.md) | Multiple spaces after hash on ATX style heading | ✅ 🔧 |
+| [MD020](https://github.com/DavidAnson/markdownlint/blob/main/doc/md020.md) | No space inside hashes on closed ATX style heading | ✅ 🔧 |
+| [MD021](https://github.com/DavidAnson/markdownlint/blob/main/doc/md021.md) | Multiple spaces inside hashes on closed ATX style heading | ✅ 🔧 |
+| [MD022](https://github.com/DavidAnson/markdownlint/blob/main/doc/md022.md) | Headings should be surrounded by blank lines | ✅ |
+| [MD023](https://github.com/DavidAnson/markdownlint/blob/main/doc/md023.md) | Headings must start at the beginning of the line | ✅ 🔧 |
+| [MD024](https://github.com/DavidAnson/markdownlint/blob/main/doc/md024.md) | Multiple headings with the same content | ✅ |
+| [MD025](https://github.com/DavidAnson/markdownlint/blob/main/doc/md025.md) | Multiple top-level headings in the same document | ✅ |
+| [MD026](https://github.com/DavidAnson/markdownlint/blob/main/doc/md026.md) | Trailing punctuation in heading | ✅ 🔧 |
+| [MD027](https://github.com/DavidAnson/markdownlint/blob/main/doc/md027.md) | Multiple spaces after blockquote symbol | ✅ 🔧 |
+| [MD028](https://github.com/DavidAnson/markdownlint/blob/main/doc/md028.md) | Blank line inside blockquote | ✅ |
+| [MD029](https://github.com/DavidAnson/markdownlint/blob/main/doc/md029.md) | Ordered list item prefix | ✅ |
+| [MD030](https://github.com/DavidAnson/markdownlint/blob/main/doc/md030.md) | Spaces after list markers | ✅ 🔧 |
+| [MD031](https://github.com/DavidAnson/markdownlint/blob/main/doc/md031.md) | Fenced code blocks should be surrounded by blank lines | ✅ 🔧 |
+| [MD032](https://github.com/DavidAnson/markdownlint/blob/main/doc/md032.md) | Lists should be surrounded by blank lines | ✅ 🔧 |
+| [MD033](https://github.com/DavidAnson/markdownlint/blob/main/doc/md033.md) | Inline HTML | ✅ |
+| [MD034](https://github.com/DavidAnson/markdownlint/blob/main/doc/md034.md) | Bare URL used | ✅ |
+| [MD035](https://github.com/DavidAnson/markdownlint/blob/main/doc/md035.md) | Horizontal rule style | ✅ |
+| [MD036](https://github.com/DavidAnson/markdownlint/blob/main/doc/md036.md) | Emphasis used instead of a heading | ✅ |
+| [MD037](https://github.com/DavidAnson/markdownlint/blob/main/doc/md037.md) | Spaces inside emphasis markers | ✅ 🔧 |
+| [MD038](https://github.com/DavidAnson/markdownlint/blob/main/doc/md038.md) | Spaces inside code span elements | ✅ 🔧 |
+| [MD039](https://github.com/DavidAnson/markdownlint/blob/main/doc/md039.md) | Spaces inside link text | ✅ 🔧 |
+| [MD040](https://github.com/DavidAnson/markdownlint/blob/main/doc/md040.md) | Fenced code blocks should have a language specified | ✅ |
+| [MD041](https://github.com/DavidAnson/markdownlint/blob/main/doc/md041.md) | First line in a file should be a top-level heading | ✅ |
+| [MD042](https://github.com/DavidAnson/markdownlint/blob/main/doc/md042.md) | No empty links | ✅ |
+| [MD043](https://github.com/DavidAnson/markdownlint/blob/main/doc/md043.md) | Required heading structure | ✅ |
+| [MD044](https://github.com/DavidAnson/markdownlint/blob/main/doc/md044.md) | Proper names should have the correct capitalization | ✅ 🔧 |
+| [MD045](https://github.com/DavidAnson/markdownlint/blob/main/doc/md045.md) | Images should have alternate text (alt text) | ✅ |
+| [MD046](https://github.com/DavidAnson/markdownlint/blob/main/doc/md046.md) | Code block style | ✅ |
+| [MD047](https://github.com/DavidAnson/markdownlint/blob/main/doc/md047.md) | Files should end with a single newline character | ✅ 🔧 |
+| [MD048](https://github.com/DavidAnson/markdownlint/blob/main/doc/md048.md) | Code fence style | ✅ 🔧 |
+| [MD049](https://github.com/DavidAnson/markdownlint/blob/main/doc/md049.md) | Emphasis style | ✅ 🔧 |
+| [MD050](https://github.com/DavidAnson/markdownlint/blob/main/doc/md050.md) | Strong style | ✅ 🔧 |
+| [MD051](https://github.com/DavidAnson/markdownlint/blob/main/doc/md051.md) | Link fragments should be valid | ✅ |
+| [MD052](https://github.com/DavidAnson/markdownlint/blob/main/doc/md052.md) | Reference links and images should use a label that is defined | ✅ |
+| [MD053](https://github.com/DavidAnson/markdownlint/blob/main/doc/md053.md) | Link and image reference definitions should be needed | ✅ 🔧 |
+| [MD054](https://github.com/DavidAnson/markdownlint/blob/main/doc/md054.md) | Link and image style | ✅ |
+| [MD055](https://github.com/DavidAnson/markdownlint/blob/main/doc/md055.md) | Table pipe style | ✅ |
+| [MD056](https://github.com/DavidAnson/markdownlint/blob/main/doc/md056.md) | Table column count | ✅ |
+| [MD058](https://github.com/DavidAnson/markdownlint/blob/main/doc/md058.md) | Tables should be surrounded by blank lines | ✅ 🔧 |
+| [MD059](https://github.com/DavidAnson/markdownlint/blob/main/doc/md059.md) | Link text should be descriptive | ✅ |
+| [MD060](https://github.com/DavidAnson/markdownlint/blob/main/doc/md060.md) | Table column style | ✅ |
 
 ## License
 
