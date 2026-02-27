@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
 )
@@ -83,7 +84,6 @@ type xmlFailure struct {
 // writeJUnit writes violations as JUnit XML to w.
 func writeJUnit(w io.Writer, violations []fileViolation) error {
 	cases := make([]xmlTestCase, len(violations))
-	failures := 0
 	for i, fv := range violations {
 		msg := fmt.Sprintf("%s: %s", fv.Violation.Rule, fv.Violation.Message)
 		text := fmt.Sprintf("%s:%d:%d %s %s", fv.File, fv.Violation.Line, fv.Violation.Column, fv.Violation.Rule, fv.Violation.Message)
@@ -95,20 +95,20 @@ func writeJUnit(w io.Writer, violations []fileViolation) error {
 				Text:    text,
 			},
 		}
-		failures++
 	}
 	suite := xmlTestSuites{
 		TestSuites: []xmlTestSuite{
 			{
 				Name:     "goldmark-lint",
 				Tests:    len(violations),
-				Failures: failures,
+				Failures: len(violations),
 				Errors:   0,
 				Cases:    cases,
 			},
 		},
 	}
-	if _, err := fmt.Fprintln(w, xml.Header[:len(xml.Header)-1]); err != nil {
+	// Write the XML declaration without trailing newline so the encoder output follows directly.
+	if _, err := fmt.Fprint(w, strings.TrimSuffix(xml.Header, "\n")); err != nil {
 		return err
 	}
 	enc := xml.NewEncoder(w)
