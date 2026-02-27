@@ -15,6 +15,12 @@ type Rule interface {
 	Check(doc *Document) []Violation
 }
 
+// FixableRule is an optional interface for rules that support auto-fixing.
+type FixableRule interface {
+	Rule
+	Fix(source []byte) []byte
+}
+
 // Violation represents a lint violation found in a document.
 type Violation struct {
 	Rule    string
@@ -38,6 +44,16 @@ type Linter struct {
 // NewLinter creates a new Linter with the given rules.
 func NewLinter(rules ...Rule) *Linter {
 	return &Linter{Rules: rules}
+}
+
+// Fix applies all fixable rules to source and returns the corrected content.
+func (l *Linter) Fix(source []byte) []byte {
+	for _, rule := range l.Rules {
+		if fixable, ok := rule.(FixableRule); ok {
+			source = fixable.Fix(source)
+		}
+	}
+	return source
 }
 
 // Lint parses source and runs all rules on it, returning violations sorted by line.

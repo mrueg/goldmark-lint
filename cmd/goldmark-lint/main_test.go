@@ -111,3 +111,32 @@ func TestCLI_ViolationsToStderr(t *testing.T) {
 		t.Errorf("expected no output on stdout, got: %s", stdout)
 	}
 }
+
+func TestCLI_Fix(t *testing.T) {
+	bin := buildBinary(t)
+
+	// Create a temp file with fixable violations (trailing spaces, no final newline)
+	tmp, err := os.CreateTemp(t.TempDir(), "test*.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := "# Heading\n\nContent   \nNo newline at end"
+	if _, err := tmp.WriteString(content); err != nil {
+		t.Fatal(err)
+	}
+	tmp.Close()
+
+	cmd := exec.Command(bin, "--fix", tmp.Name())
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 after fixing all issues, got: %v", err)
+	}
+
+	fixed, err := os.ReadFile(tmp.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "# Heading\n\nContent\nNo newline at end\n"
+	if string(fixed) != want {
+		t.Errorf("fixed content = %q, want %q", string(fixed), want)
+	}
+}

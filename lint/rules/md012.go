@@ -16,6 +16,28 @@ type MD012 struct {
 func (r MD012) ID() string          { return "MD012" }
 func (r MD012) Description() string { return "Multiple consecutive blank lines" }
 
+func (r MD012) Fix(source []byte) []byte {
+	maximum := r.Maximum
+	if maximum == 0 {
+		maximum = 1
+	}
+	lines := strings.Split(string(source), "\n")
+	var result []string
+	consecutive := 0
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			consecutive++
+			if consecutive <= maximum {
+				result = append(result, line)
+			}
+		} else {
+			consecutive = 0
+			result = append(result, line)
+		}
+	}
+	return []byte(strings.Join(result, "\n"))
+}
+
 func (r MD012) Check(doc *lint.Document) []lint.Violation {
 	maximum := r.Maximum
 	if maximum == 0 {
