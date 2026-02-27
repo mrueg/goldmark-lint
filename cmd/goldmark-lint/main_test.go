@@ -1,0 +1,113 @@
+package main
+
+import (
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"testing"
+)
+
+func buildBinary(t *testing.T) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "goldmark-lint")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
+	cmd := exec.Command("go", "build", "-o", bin, ".")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to build binary: %v\n%s", err, out)
+	}
+	return bin
+}
+
+func TestCLI_Help(t *testing.T) {
+	bin := buildBinary(t)
+	cmd := exec.Command(bin, "--help")
+	out, err := cmd.CombinedOutput()
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if exitErr.ExitCode() != 0 {
+			t.Fatalf("--help exited with code %d, want 0", exitErr.ExitCode())
+		}
+	} else if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out) == 0 {
+		t.Error("expected help output, got nothing")
+	}
+}
+
+func TestCLI_NoArgs(t *testing.T) {
+	bin := buildBinary(t)
+	cmd := exec.Command(bin)
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected non-zero exit, got nil error")
+	}
+	if exitErr.ExitCode() != 2 {
+		t.Errorf("no-args exit code = %d, want 2", exitErr.ExitCode())
+	}
+}
+
+func TestCLI_FileNotFound(t *testing.T) {
+	bin := buildBinary(t)
+	cmd := exec.Command(bin, "nonexistent_file.md")
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected non-zero exit, got nil error")
+	}
+	if exitErr.ExitCode() != 2 {
+		t.Errorf("file-not-found exit code = %d, want 2", exitErr.ExitCode())
+	}
+}
+
+func TestCLI_WithViolations(t *testing.T) {
+	bin := buildBinary(t)
+	testfile := filepath.Join("..", "..", "testdata", "md001_invalid.md")
+	if _, err := os.Stat(testfile); err != nil {
+		t.Skip("testdata not available")
+	}
+	cmd := exec.Command(bin, testfile)
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected non-zero exit for file with violations, got nil error")
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Errorf("violations exit code = %d, want 1", exitErr.ExitCode())
+	}
+}
+
+func TestCLI_NoViolations(t *testing.T) {
+	bin := buildBinary(t)
+	testfile := filepath.Join("..", "..", "testdata", "md001_valid.md")
+	if _, err := os.Stat(testfile); err != nil {
+		t.Skip("testdata not available")
+	}
+	cmd := exec.Command(bin, testfile)
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 for valid file, got: %v", err)
+	}
+}
+
+func TestCLI_ViolationsToStderr(t *testing.T) {
+	bin := buildBinary(t)
+	testfile := filepath.Join("..", "..", "testdata", "md001_invalid.md")
+	if _, err := os.Stat(testfile); err != nil {
+		t.Skip("testdata not available")
+	}
+	cmd := exec.Command(bin, testfile)
+	// Only capture stdout; violations should go to stderr
+	stdout, err := cmd.Output()
+	if err == nil {
+		t.Error("expected non-zero exit for file with violations")
+	}
+	if len(stdout) != 0 {
+		t.Errorf("expected no output on stdout, got: %s", stdout)
+	}
+}
