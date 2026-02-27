@@ -22,10 +22,11 @@ type GlobOverride struct {
 
 // ConfigFile represents the top-level markdownlint-cli2 config file structure.
 type ConfigFile struct {
-	Extends   string                 `yaml:"extends"    json:"extends"`
-	Config    map[string]interface{} `yaml:"config"     json:"config"`
-	Ignores   []string               `yaml:"ignores"    json:"ignores"`
-	Overrides []GlobOverride         `yaml:"overrides"  json:"overrides"`
+	Extends          string                 `yaml:"extends"          json:"extends"`
+	Config           map[string]interface{} `yaml:"config"           json:"config"`
+	Ignores          []string               `yaml:"ignores"          json:"ignores"`
+	Overrides        []GlobOverride         `yaml:"overrides"        json:"overrides"`
+	OutputFormatters []interface{}          `yaml:"outputFormatters" json:"outputFormatters"`
 }
 
 var configFileNames = []string{
@@ -109,10 +110,15 @@ func loadConfigResolved(path string, visited map[string]bool) (*ConfigFile, erro
 	}
 
 	// Merge: base config is the foundation; the current config overrides it.
+	outputFormatters := baseCfg.OutputFormatters
+	if len(cfg.OutputFormatters) > 0 {
+		outputFormatters = cfg.OutputFormatters
+	}
 	merged := &ConfigFile{
-		Config:    mergeConfigs(baseCfg.Config, cfg.Config),
-		Ignores:   append(baseCfg.Ignores, cfg.Ignores...),
-		Overrides: append(baseCfg.Overrides, cfg.Overrides...),
+		Config:           mergeConfigs(baseCfg.Config, cfg.Config),
+		Ignores:          append(baseCfg.Ignores, cfg.Ignores...),
+		Overrides:        append(baseCfg.Overrides, cfg.Overrides...),
+		OutputFormatters: outputFormatters,
 	}
 	return merged, nil
 }

@@ -22,8 +22,9 @@ Glob expressions:
   ** matches any number of characters, including /
 
 Optional parameters:
-  --fix   updates files to resolve fixable issues
-  --help  writes this message to the console and exits without doing anything else
+  --fix            updates files to resolve fixable issues
+  --output-format  output format: default, json, junit, tap (default: default)
+  --help           writes this message to the console and exits without doing anything else
 
 Exit codes:
   0: Linting was successful and there were no errors
@@ -66,7 +67,27 @@ config:
 ignores:
   - "vendor/**"          # ignore files matching these glob patterns
   - "node_modules/**"
+
+# Output formatters (same format as markdownlint-cli2)
+outputFormatters:
+  - - markdownlint-cli2-formatter-json
+    - outfile: results.json
 ```
+
+The `outputFormatters` key accepts a list of formatters. Each entry is a list
+whose first element is the formatter name and whose optional second element is
+an options object (supporting `outfile` to write output to a file instead of
+stdout). Supported formatter names:
+
+| Formatter name                           | Format           |
+|------------------------------------------|------------------|
+| `markdownlint-cli2-formatter-default`    | Default text     |
+| `markdownlint-cli2-formatter-json`       | JSON array       |
+| `markdownlint-cli2-formatter-junit`      | JUnit XML        |
+| `markdownlint-cli2-formatter-tap`        | TAP              |
+
+The `--output-format` CLI flag overrides `outputFormatters` from the config
+and accepts `default`, `json`, `junit`, or `tap`.
 
 The `config` section mirrors the
 [markdownlint configuration](https://github.com/DavidAnson/markdownlint#options)
