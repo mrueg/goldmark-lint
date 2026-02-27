@@ -3,7 +3,6 @@ package rules
 import (
 	"regexp"
 	"strings"
-	"unicode"
 
 	"github.com/mrueg/goldmark-lint/lint"
 )
@@ -147,9 +146,4 @@ func blankCodeSpans(line string) string {
 		}
 	}
 	return string(result)
-}
-
-// isWordBoundary checks if a rune is a word boundary character.
-func isWordBoundary(r rune) bool {
-	return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_'
 }
