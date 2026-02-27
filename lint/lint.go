@@ -128,9 +128,7 @@ func parseMarkdownlintComment(line string) (cmd string, ruleIDs []string) {
 		return "", nil
 	}
 	cmd = m[1]
-	for _, r := range strings.Fields(m[2]) {
-		ruleIDs = append(ruleIDs, r)
-	}
+	ruleIDs = append(ruleIDs, strings.Fields(m[2])...)
 	return cmd, ruleIDs
 }
 
