@@ -15,8 +15,10 @@ type MD052 struct {
 	IgnoredLabels []string `json:"ignored_labels"`
 }
 
-func (r MD052) ID() string          { return "MD052" }
-func (r MD052) Description() string { return "Reference links and images should use a label that is defined" }
+func (r MD052) ID() string { return "MD052" }
+func (r MD052) Description() string {
+	return "Reference links and images should use a label that is defined"
+}
 
 // md052DefRE matches reference link definitions: [label]: url.
 var md052DefRE = regexp.MustCompile(`(?i)^\s*\[([^\]]+)\]:\s+\S`)
@@ -100,10 +102,6 @@ func (r MD052) Check(doc *lint.Document) []lint.Violation {
 			for _, m := range md052ShortcutRE.FindAllStringSubmatch(line, -1) {
 				label := strings.ToLower(m[1])
 				if ignored[label] {
-					continue
-				}
-				// Skip if it's part of a full or collapsed ref (already handled).
-				if md052FullRE.MatchString("[" + m[1] + "]") {
 					continue
 				}
 				if !defined[label] {

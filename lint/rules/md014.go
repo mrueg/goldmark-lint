@@ -9,8 +9,10 @@ import (
 // MD014 checks that dollar signs are not used before commands without showing output.
 type MD014 struct{}
 
-func (r MD014) ID() string          { return "MD014" }
-func (r MD014) Description() string { return "Dollar signs used before commands without showing output" }
+func (r MD014) ID() string { return "MD014" }
+func (r MD014) Description() string {
+	return "Dollar signs used before commands without showing output"
+}
 
 // codeBlockContent returns the content lines (start, end) for each fenced code block.
 // start and end are 0-based indices; content is lines[start:end].
