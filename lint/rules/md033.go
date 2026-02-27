@@ -44,7 +44,7 @@ func (r MD033) Check(doc *lint.Document) []lint.Violation {
 				Rule:    r.ID(),
 				Line:    line,
 				Column:  1,
-				Message: fmt.Sprintf("Inline HTML [Element: block HTML]"),
+				Message: "Inline HTML [Element: block HTML]",
 			})
 
 		case *ast.RawHTML:
