@@ -22,6 +22,7 @@ type GlobOverride struct {
 
 // ConfigFile represents the top-level markdownlint-cli2 config file structure.
 type ConfigFile struct {
+	Extends   string                 `yaml:"extends"    json:"extends"`
 	Config    map[string]interface{} `yaml:"config"     json:"config"`
 	Ignores   []string               `yaml:"ignores"    json:"ignores"`
 	Overrides []GlobOverride         `yaml:"overrides"  json:"overrides"`
@@ -54,8 +55,25 @@ func findConfigFile(dir string) string {
 	return ""
 }
 
-// loadConfig loads and parses a markdownlint-cli2 config file.
+// loadConfig loads and parses a markdownlint-cli2 config file, resolving any
+// "extends" references recursively. Circular references are detected and
+// reported as errors.
 func loadConfig(path string) (*ConfigFile, error) {
+	return loadConfigResolved(path, make(map[string]bool))
+}
+
+// loadConfigResolved is the internal recursive implementation of loadConfig.
+// visited tracks absolute paths already being loaded to detect circular refs.
+func loadConfigResolved(path string, visited map[string]bool) (*ConfigFile, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	if visited[absPath] {
+		return nil, fmt.Errorf("circular extends reference detected: %s", absPath)
+	}
+	visited[absPath] = true
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -74,7 +92,29 @@ func loadConfig(path string) (*ConfigFile, error) {
 	default:
 		return nil, fmt.Errorf("unsupported config file format: %s", path)
 	}
-	return &cfg, nil
+
+	if cfg.Extends == "" {
+		return &cfg, nil
+	}
+
+	// Resolve the extends path relative to the directory of the current config file.
+	extendsPath := cfg.Extends
+	if !filepath.IsAbs(extendsPath) {
+		extendsPath = filepath.Join(filepath.Dir(absPath), extendsPath)
+	}
+
+	baseCfg, err := loadConfigResolved(extendsPath, visited)
+	if err != nil {
+		return nil, fmt.Errorf("loading extends %q: %w", extendsPath, err)
+	}
+
+	// Merge: base config is the foundation; the current config overrides it.
+	merged := &ConfigFile{
+		Config:    mergeConfigs(baseCfg.Config, cfg.Config),
+		Ignores:   append(baseCfg.Ignores, cfg.Ignores...),
+		Overrides: append(baseCfg.Overrides, cfg.Overrides...),
+	}
+	return merged, nil
 }
 
 // stripJSONComments removes // line comments and /* */ block comments from JSON

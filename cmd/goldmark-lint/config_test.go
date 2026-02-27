@@ -401,6 +401,214 @@ overrides:
 	}
 }
 
+func TestLoadConfig_Extends_YAML(t *testing.T) {
+	dir := t.TempDir()
+
+	// Base config file
+	baseContent := `
+config:
+  MD001: false
+  MD013:
+    line_length: 80
+ignores:
+  - "vendor/**"
+`
+	basePath := filepath.Join(dir, "base.yaml")
+	if err := os.WriteFile(basePath, []byte(baseContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Child config that extends the base
+	childContent := `extends: base.yaml
+config:
+  MD013:
+    line_length: 120
+ignores:
+  - "node_modules/**"
+`
+	childPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(childPath, []byte(childContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(childPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// MD001 should be inherited from base
+	if v, ok := cfg.Config["MD001"]; !ok || v != false {
+		t.Errorf("MD001 = %v, want false (inherited from base)", v)
+	}
+	// MD013.line_length should be overridden by child
+	md013, ok := cfg.Config["MD013"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("MD013 config not a map, got %T", cfg.Config["MD013"])
+	}
+	if md013["line_length"] != 120 {
+		t.Errorf("MD013.line_length = %v, want 120 (overridden by child)", md013["line_length"])
+	}
+	// Ignores should be merged (base first, then child)
+	if len(cfg.Ignores) != 2 {
+		t.Fatalf("ignores = %v, want 2 entries", cfg.Ignores)
+	}
+	if cfg.Ignores[0] != "vendor/**" || cfg.Ignores[1] != "node_modules/**" {
+		t.Errorf("ignores = %v, want [vendor/**, node_modules/**]", cfg.Ignores)
+	}
+}
+
+func TestLoadConfig_Extends_JSON(t *testing.T) {
+	dir := t.TempDir()
+
+	basePath := filepath.Join(dir, "base.json")
+	if err := os.WriteFile(basePath, []byte(`{"config":{"MD001":false},"ignores":["vendor/**"]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	childContent := `{"extends":"base.json","config":{"MD041":false}}`
+	childPath := filepath.Join(dir, ".markdownlint-cli2.json")
+	if err := os.WriteFile(childPath, []byte(childContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(childPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v, ok := cfg.Config["MD001"]; !ok || v != false {
+		t.Errorf("MD001 = %v, want false (inherited from base)", v)
+	}
+	if v, ok := cfg.Config["MD041"]; !ok || v != false {
+		t.Errorf("MD041 = %v, want false (from child)", v)
+	}
+	if len(cfg.Ignores) != 1 || cfg.Ignores[0] != "vendor/**" {
+		t.Errorf("ignores = %v, want [vendor/**]", cfg.Ignores)
+	}
+}
+
+func TestLoadConfig_Extends_CircularReference(t *testing.T) {
+	dir := t.TempDir()
+
+	aPath := filepath.Join(dir, "a.yaml")
+	bPath := filepath.Join(dir, "b.yaml")
+
+	if err := os.WriteFile(aPath, []byte("extends: b.yaml\nconfig: {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bPath, []byte("extends: a.yaml\nconfig: {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := loadConfig(aPath)
+	if err == nil {
+		t.Fatal("expected error for circular extends reference, got nil")
+	}
+}
+
+func TestLoadConfig_Extends_FileNotFound(t *testing.T) {
+	dir := t.TempDir()
+	childContent := "extends: nonexistent.yaml\nconfig: {}\n"
+	childPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(childPath, []byte(childContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := loadConfig(childPath)
+	if err == nil {
+		t.Fatal("expected error for missing extends file, got nil")
+	}
+}
+
+func TestLoadConfig_Extends_ChainInheritance(t *testing.T) {
+	dir := t.TempDir()
+
+	// grandparent -> parent -> child
+	grandparentContent := "config:\n  MD001: false\n"
+	if err := os.WriteFile(filepath.Join(dir, "grandparent.yaml"), []byte(grandparentContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	parentContent := "extends: grandparent.yaml\nconfig:\n  MD013:\n    line_length: 100\n"
+	if err := os.WriteFile(filepath.Join(dir, "parent.yaml"), []byte(parentContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	childContent := "extends: parent.yaml\nconfig:\n  MD041: false\n"
+	childPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(childPath, []byte(childContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(childPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v, ok := cfg.Config["MD001"]; !ok || v != false {
+		t.Errorf("MD001 = %v, want false (inherited from grandparent)", v)
+	}
+	md013, ok := cfg.Config["MD013"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("MD013 config not a map, got %T", cfg.Config["MD013"])
+	}
+	if md013["line_length"] != 100 {
+		t.Errorf("MD013.line_length = %v, want 100 (inherited from parent)", md013["line_length"])
+	}
+	if v, ok := cfg.Config["MD041"]; !ok || v != false {
+		t.Errorf("MD041 = %v, want false (from child)", v)
+	}
+}
+
+func TestCLI_ExtendsInheritConfig(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// base.yaml disables MD041
+	baseContent := "config:\n  MD041: false\n"
+	if err := os.WriteFile(filepath.Join(dir, "base.yaml"), []byte(baseContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// child config extends base
+	childContent := "extends: base.yaml\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(childContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// File that would violate MD041 (no top-level heading)
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("Not a heading\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 when MD041 is disabled via extends, got: %v", err)
+	}
+}
+
+func TestCLI_ExtendsOverridesInherited(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// base.yaml enables MD041
+	baseContent := "config:\n  MD041: true\n"
+	if err := os.WriteFile(filepath.Join(dir, "base.yaml"), []byte(baseContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// child config extends base and disables MD041
+	childContent := "extends: base.yaml\nconfig:\n  MD041: false\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(childContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// File that would violate MD041
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("Not a heading\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 when child config overrides MD041: false, got: %v", err)
+	}
+}
+
 func TestCLI_OverridesApplyToMatchingFile(t *testing.T) {
 	bin := buildBinary(t)
 
