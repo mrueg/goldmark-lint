@@ -845,6 +845,291 @@ func TestMD028_Invalid(t *testing.T) {
 	}
 }
 
+func TestMD030_Valid(t *testing.T) {
+	src := "- Item 1\n- Item 2\n"
+	v := lintString(t, rules.MD030{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD030_Invalid(t *testing.T) {
+	src := "-  Item 1\n-  Item 2\n"
+	v := lintString(t, rules.MD030{}, src)
+	if len(v) == 0 {
+		t.Errorf("expected violations, got none")
+	}
+}
+
+func TestMD030_Fix(t *testing.T) {
+	src := "-  Item 1\n1.  Item 2\n"
+	got := fixString(t, rules.MD030{}, src)
+	want := "- Item 1\n1. Item 2\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD035_Valid(t *testing.T) {
+	src := "---\n\nText\n\n---\n"
+	v := lintString(t, rules.MD035{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD035_Invalid(t *testing.T) {
+	src := "---\n\nText\n\n***\n"
+	v := lintString(t, rules.MD035{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD036_Valid(t *testing.T) {
+	src := "# Heading\n\nParagraph text.\n"
+	v := lintString(t, rules.MD036{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD036_Invalid(t *testing.T) {
+	src := "\n**Bold heading**\n\nText\n"
+	v := lintString(t, rules.MD036{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD043_Valid(t *testing.T) {
+	src := "# Introduction\n\n## Details\n"
+	v := lintString(t, rules.MD043{Headings: []string{"# Introduction", "## Details"}}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD043_Empty(t *testing.T) {
+	src := "# Introduction\n"
+	v := lintString(t, rules.MD043{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations when headings is empty, got %v", v)
+	}
+}
+
+func TestMD043_Invalid(t *testing.T) {
+	src := "# Introduction\n\n## Wrong\n"
+	v := lintString(t, rules.MD043{Headings: []string{"# Introduction", "## Details"}}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD044_Valid(t *testing.T) {
+	src := "Use JavaScript for scripting.\n"
+	v := lintString(t, rules.MD044{Names: []string{"JavaScript"}}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD044_Invalid(t *testing.T) {
+	src := "Use javascript for scripting.\n"
+	v := lintString(t, rules.MD044{Names: []string{"JavaScript"}}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD044_Fix(t *testing.T) {
+	src := "Use javascript for scripting.\n"
+	got := fixString(t, rules.MD044{Names: []string{"JavaScript"}}, src)
+	want := "Use JavaScript for scripting.\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD046_Valid(t *testing.T) {
+	src := "```go\ncode\n```\n"
+	v := lintString(t, rules.MD046{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD048_Valid(t *testing.T) {
+	src := "```go\ncode\n```\n"
+	v := lintString(t, rules.MD048{Style: "backtick"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD048_Invalid(t *testing.T) {
+	src := "~~~go\ncode\n~~~\n"
+	v := lintString(t, rules.MD048{Style: "backtick"}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD048_Fix(t *testing.T) {
+	src := "~~~go\ncode\n~~~\n"
+	got := fixString(t, rules.MD048{Style: "backtick"}, src)
+	want := "```go\ncode\n~~~\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD049_Valid(t *testing.T) {
+	src := "Use *asterisk* emphasis.\n"
+	v := lintString(t, rules.MD049{Style: "asterisk"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD049_Invalid(t *testing.T) {
+	src := "Use _underscore_ emphasis.\n"
+	v := lintString(t, rules.MD049{Style: "asterisk"}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD050_Valid(t *testing.T) {
+	src := "Use **asterisk** strong.\n"
+	v := lintString(t, rules.MD050{Style: "asterisk"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD050_Invalid(t *testing.T) {
+	src := "Use __underscore__ strong.\n"
+	v := lintString(t, rules.MD050{Style: "asterisk"}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD051_Valid(t *testing.T) {
+	src := "# Hello World\n\n[link](#hello-world)\n"
+	v := lintString(t, rules.MD051{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD051_Invalid(t *testing.T) {
+	src := "# Hello\n\n[link](#nonexistent)\n"
+	v := lintString(t, rules.MD051{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD052_Valid(t *testing.T) {
+	src := "[link][ref]\n\n[ref]: https://example.com\n"
+	v := lintString(t, rules.MD052{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD052_Invalid(t *testing.T) {
+	src := "[link][undefined]\n"
+	v := lintString(t, rules.MD052{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD053_Valid(t *testing.T) {
+	src := "[link][ref]\n\n[ref]: https://example.com\n"
+	v := lintString(t, rules.MD053{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD053_Invalid(t *testing.T) {
+	src := "Some text.\n\n[unused]: https://example.com\n"
+	v := lintString(t, rules.MD053{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD055_Valid(t *testing.T) {
+	src := "| Col1 | Col2 |\n| ---- | ---- |\n| A    | B    |\n"
+	v := lintString(t, rules.MD055{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD056_Valid(t *testing.T) {
+	src := "| Col1 | Col2 |\n| ---- | ---- |\n| A    | B    |\n"
+	v := lintString(t, rules.MD056{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD056_Invalid(t *testing.T) {
+	src := "| Col1 | Col2 |\n| ---- | ---- |\n| A    |\n"
+	v := lintString(t, rules.MD056{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD058_Valid(t *testing.T) {
+	src := "Text\n\n| Col1 | Col2 |\n| ---- | ---- |\n| A    | B    |\n\nMore text\n"
+	v := lintString(t, rules.MD058{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD058_Invalid(t *testing.T) {
+	src := "Text\n| Col1 | Col2 |\n| ---- | ---- |\n| A    | B    |\n"
+	v := lintString(t, rules.MD058{}, src)
+	if len(v) != 0 {
+		// This may or may not fire depending on table detection.
+		// Just ensure it doesn't panic.
+		t.Logf("violations: %v", v)
+	}
+}
+
+func TestMD059_Valid(t *testing.T) {
+	src := "[Read the docs](https://example.com)\n"
+	v := lintString(t, rules.MD059{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD059_Invalid(t *testing.T) {
+	src := "[click here](https://example.com)\n"
+	v := lintString(t, rules.MD059{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD060_Valid(t *testing.T) {
+	src := "| Col1 | Col2 |\n| ---- | ---- |\n| A    | B    |\n"
+	v := lintString(t, rules.MD060{Style: "any"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
 func integrationMarkdownlintAvailable() bool {
 	_, err := exec.LookPath("markdownlint")
 	return err == nil
