@@ -2,7 +2,6 @@ package rules
 
 import (
 	"regexp"
-	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
 )
@@ -132,6 +131,3 @@ func (r MD054) Check(doc *lint.Document) []lint.Violation {
 	}
 	return violations
 }
-
-// unused import guard
-var _ = strings.Contains
