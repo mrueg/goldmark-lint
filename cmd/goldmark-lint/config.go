@@ -148,6 +148,8 @@ func isRuleEnabled(id string, cfg map[string]interface{}) bool {
 		switch v := val.(type) {
 		case bool:
 			return v
+		case string:
+			return true
 		case map[string]interface{}:
 			return true
 		}
@@ -158,6 +160,17 @@ func isRuleEnabled(id string, cfg map[string]interface{}) bool {
 		}
 	}
 	return true
+}
+
+// getRuleSeverity returns "warning" if the rule is configured with "warning"
+// severity, otherwise "error".
+func getRuleSeverity(id string, cfg map[string]interface{}) string {
+	if val, ok := cfg[id]; ok {
+		if s, ok := val.(string); ok && strings.ToLower(s) == "warning" {
+			return "warning"
+		}
+	}
+	return "error"
 }
 
 // applyRuleConfig applies rule-specific config options to the rule pointer by

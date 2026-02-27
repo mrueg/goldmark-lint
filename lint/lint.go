@@ -27,10 +27,11 @@ type FixableRule interface {
 
 // Violation represents a lint violation found in a document.
 type Violation struct {
-	Rule    string
-	Line    int
-	Column  int
-	Message string
+	Rule     string
+	Line     int
+	Column   int
+	Message  string
+	Severity string // "error" or "warning"; defaults to "error" when empty
 }
 
 // Document holds the parsed markdown document along with source.
