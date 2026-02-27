@@ -24,7 +24,7 @@ func (r MD025) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	count := 0
 
-	ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
