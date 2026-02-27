@@ -70,7 +70,6 @@ func (r MD031) Fix(source []byte) []byte {
 					result = append(result, "")
 				}
 			} else {
-				_ = fc
 				result = append(result, line)
 			}
 		}
@@ -121,8 +120,6 @@ func (r MD031) Check(doc *lint.Document) []lint.Violation {
 					})
 				}
 			}
-			_ = fc
-			_ = fl
 		}
 	}
 	return violations

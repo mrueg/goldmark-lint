@@ -21,7 +21,7 @@ func (r MD011) Fix(source []byte) []byte {
 	mask := fencedCodeBlockMask(lines)
 	for i, line := range lines {
 		if !mask[i] {
-			lines[i] = reversedLinkRE.ReplaceAllString(line, "[$2]($1)")
+			lines[i] = reversedLinkRE.ReplaceAllString(line, "[$1]($2)")
 		}
 	}
 	return []byte(strings.Join(lines, "\n"))

@@ -428,7 +428,7 @@ func TestMD011_Invalid(t *testing.T) {
 func TestMD011_Fix(t *testing.T) {
 	src := "See (text)[url] for more.\n"
 	got := fixString(t, rules.MD011{}, src)
-	want := "See [url](text) for more.\n"
+	want := "See [text](url) for more.\n"
 	if got != want {
 		t.Errorf("Fix() = %q, want %q", got, want)
 	}
