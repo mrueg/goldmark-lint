@@ -10,7 +10,7 @@ import (
 // MD012 checks for multiple consecutive blank lines.
 type MD012 struct {
 	// Maximum is the maximum number of consecutive blank lines (default 1).
-	Maximum int
+	Maximum int `json:"maximum"`
 }
 
 func (r MD012) ID() string          { return "MD012" }

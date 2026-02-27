@@ -9,7 +9,7 @@ import (
 // MD013 checks for lines that are too long.
 type MD013 struct {
 	// LineLength is the maximum line length (default 80).
-	LineLength int
+	LineLength int `json:"line_length"`
 }
 
 func (r MD013) ID() string          { return "MD013" }

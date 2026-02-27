@@ -10,7 +10,7 @@ import (
 // MD007 checks that unordered list items are indented correctly.
 type MD007 struct {
 	// Indent is the number of spaces per indentation level (default 2).
-	Indent int
+	Indent int `json:"indent"`
 }
 
 func (r MD007) ID() string          { return "MD007" }

@@ -9,9 +9,9 @@ import (
 // MD022 checks that headings are surrounded by blank lines.
 type MD022 struct {
 	// LinesAbove is the number of blank lines required above (default 1).
-	LinesAbove int
+	LinesAbove int `json:"lines_above"`
 	// LinesBelow is the number of blank lines required below (default 1).
-	LinesBelow int
+	LinesBelow int `json:"lines_below"`
 }
 
 func (r MD022) ID() string          { return "MD022" }

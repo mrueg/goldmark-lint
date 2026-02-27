@@ -10,7 +10,7 @@ import (
 // MD025 checks for multiple top-level headings in a document.
 type MD025 struct {
 	// Level is the top-level heading level (default 1).
-	Level int
+	Level int `json:"level"`
 }
 
 func (r MD025) ID() string          { return "MD025" }

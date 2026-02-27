@@ -9,7 +9,7 @@ import (
 // MD041 checks that the first line in a file is a top-level heading.
 type MD041 struct {
 	// Level is the required top-level heading level (default 1).
-	Level int
+	Level int `json:"level"`
 }
 
 func (r MD041) ID() string          { return "MD041" }

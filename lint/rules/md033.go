@@ -10,7 +10,7 @@ import (
 // MD033 checks for inline HTML in Markdown documents.
 type MD033 struct {
 	// AllowedElements is a list of HTML element names that are permitted.
-	AllowedElements []string
+	AllowedElements []string `json:"allowed_elements"`
 }
 
 func (r MD033) ID() string          { return "MD033" }

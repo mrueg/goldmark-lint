@@ -11,7 +11,7 @@ import (
 // MD024 checks that no two headings have the same text content.
 type MD024 struct {
 	// SiblingsOnly, when true, only checks headings with the same parent node.
-	SiblingsOnly bool
+	SiblingsOnly bool `json:"siblings_only"`
 }
 
 func (r MD024) ID() string          { return "MD024" }
