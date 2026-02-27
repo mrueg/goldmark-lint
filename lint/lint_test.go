@@ -15,12 +15,19 @@ import (
 func newDefaultLinter() *lint.Linter {
 	return lint.NewLinter(
 		rules.MD001{},
+		rules.MD003{},
+		rules.MD004{},
+		rules.MD007{},
 		rules.MD009{},
 		rules.MD010{},
 		rules.MD012{},
 		rules.MD013{},
 		rules.MD022{},
+		rules.MD024{},
 		rules.MD025{},
+		rules.MD029{},
+		rules.MD033{},
+		rules.MD034{},
 		rules.MD041{},
 		rules.MD047{},
 	)
@@ -242,6 +249,150 @@ func TestLinter_Fix(t *testing.T) {
 	want := "Content    here\n"
 	if got != want {
 		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD003_Valid(t *testing.T) {
+	src := "# Heading 1\n\n## Heading 2\n"
+	v := lintString(t, rules.MD003{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD003_Invalid(t *testing.T) {
+	src := "# ATX Heading\n\nSetext Heading\n==============\n"
+	v := lintString(t, rules.MD003{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD003_StyleATX_Valid(t *testing.T) {
+	src := "# Heading 1\n\n## Heading 2\n"
+	v := lintString(t, rules.MD003{Style: "atx"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD003_StyleATX_Invalid(t *testing.T) {
+	src := "Setext Heading\n==============\n"
+	v := lintString(t, rules.MD003{Style: "atx"}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD004_Valid(t *testing.T) {
+	src := "- item1\n- item2\n- item3\n"
+	v := lintString(t, rules.MD004{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD004_Invalid(t *testing.T) {
+	src := "- item1\n\n* item2\n"
+	v := lintString(t, rules.MD004{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD007_Valid(t *testing.T) {
+	src := "- item1\n  - sub-item\n"
+	v := lintString(t, rules.MD007{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD007_Invalid(t *testing.T) {
+	src := "- item1\n   - bad indent\n"
+	v := lintString(t, rules.MD007{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD024_Valid(t *testing.T) {
+	src := "# Heading 1\n\n## Heading 2\n"
+	v := lintString(t, rules.MD024{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD024_Invalid(t *testing.T) {
+	src := "# Duplicate\n\n## Duplicate\n"
+	v := lintString(t, rules.MD024{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD029_Valid(t *testing.T) {
+	src := "1. item1\n2. item2\n3. item3\n"
+	v := lintString(t, rules.MD029{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD029_ValidAllOne(t *testing.T) {
+	src := "1. item1\n1. item2\n1. item3\n"
+	v := lintString(t, rules.MD029{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD029_Invalid(t *testing.T) {
+	src := "1. item1\n3. item2\n2. item3\n"
+	v := lintString(t, rules.MD029{}, src)
+	if len(v) == 0 {
+		t.Errorf("expected violations, got none")
+	}
+}
+
+func TestMD033_Valid(t *testing.T) {
+	src := "# Heading\n\nParagraph with **bold** text.\n"
+	v := lintString(t, rules.MD033{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD033_Invalid(t *testing.T) {
+	src := "# Heading\n\nParagraph with <b>bold</b> text.\n"
+	v := lintString(t, rules.MD033{}, src)
+	if len(v) == 0 {
+		t.Errorf("expected violations, got none")
+	}
+}
+
+func TestMD034_Valid(t *testing.T) {
+	src := "Visit <https://example.com> for more.\n"
+	v := lintString(t, rules.MD034{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD034_ValidLink(t *testing.T) {
+	src := "Visit [example](https://example.com) for more.\n"
+	v := lintString(t, rules.MD034{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD034_Invalid(t *testing.T) {
+	src := "Visit https://example.com for more.\n"
+	v := lintString(t, rules.MD034{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
 	}
 }
 

@@ -47,12 +47,19 @@ func main() {
 
 	linter := lint.NewLinter(
 		rules.MD001{},
+		rules.MD003{},
+		rules.MD004{},
+		rules.MD007{},
 		rules.MD009{},
 		rules.MD010{},
 		rules.MD012{},
 		rules.MD013{},
 		rules.MD022{},
+		rules.MD024{},
 		rules.MD025{},
+		rules.MD029{},
+		rules.MD033{},
+		rules.MD034{},
 		rules.MD041{},
 		rules.MD047{},
 	)
