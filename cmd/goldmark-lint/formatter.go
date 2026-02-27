@@ -16,15 +16,6 @@ type fileViolation struct {
 	Violation lint.Violation
 }
 
-// writeText writes violations in the default text format to w.
-func writeText(w io.Writer, violations []fileViolation) {
-	for _, fv := range violations {
-		fmt.Fprintf(w, "%s:%d:%d %s %s\n",
-			fv.File, fv.Violation.Line, fv.Violation.Column,
-			fv.Violation.Rule, fv.Violation.Message)
-	}
-}
-
 // jsonViolation is the JSON representation of a violation.
 type jsonViolation struct {
 	File     string `json:"file"`
