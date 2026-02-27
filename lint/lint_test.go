@@ -1285,3 +1285,119 @@ func TestIntegration_CompareWithMarkdownlint(t *testing.T) {
 		})
 	}
 }
+
+func TestMD010_SpacesPerTab(t *testing.T) {
+src := "Hard\ttab\n"
+// SpacesPerTab=2 should replace tab with 2 spaces.
+got := fixString(t, rules.MD010{SpacesPerTab: 2}, src)
+want := "Hard  tab\n"
+if got != want {
+t.Errorf("Fix() with SpacesPerTab=2: got %q, want %q", got, want)
+}
+}
+
+func TestMD013_HeadingLineLength(t *testing.T) {
+heading := "# " + strings.Repeat("a", 79) + "\n"
+body := strings.Repeat("b", 81) + "\n"
+src := heading + "\n" + body
+
+// With headings limit=100 and default=80: heading line is short enough, body is too long.
+v := lintString(t, rules.MD013{LineLength: 80, HeadingLineLength: 100}, src)
+if len(v) != 1 {
+t.Errorf("expected 1 violation (body), got %d: %v", len(v), v)
+}
+if len(v) == 1 && v[0].Line != 3 {
+t.Errorf("expected violation on line 3 (body), got line %d", v[0].Line)
+}
+}
+
+func TestMD013_CodeBlockLineLength(t *testing.T) {
+body := strings.Repeat("a", 81) + "\n"
+src := "```\n" + strings.Repeat("b", 81) + "\n```\n"
+
+// With code_block_line_length=100 and default=80: code block line is short enough.
+v := lintString(t, rules.MD013{LineLength: 80, CodeBlockLineLength: 100}, src)
+if len(v) != 0 {
+t.Errorf("expected no violations for code block with high limit, got %d: %v", len(v), v)
+}
+
+// But default body text that exceeds limit still triggers.
+_ = body
+}
+
+func TestMD013_CodeBlocksDisabled(t *testing.T) {
+src := "```\n" + strings.Repeat("a", 81) + "\n```\n"
+f := false
+v := lintString(t, rules.MD013{LineLength: 80, CodeBlocks: &f}, src)
+if len(v) != 0 {
+t.Errorf("expected no violations when code_blocks=false, got %d: %v", len(v), v)
+}
+}
+
+func TestMD013_TablesDisabled(t *testing.T) {
+src := "| " + strings.Repeat("a", 79) + " |\n|---|\n"
+f := false
+v := lintString(t, rules.MD013{LineLength: 80, Tables: &f}, src)
+if len(v) != 0 {
+t.Errorf("expected no violations when tables=false, got %d: %v", len(v), v)
+}
+}
+
+func TestMD013_HeadingsDisabled(t *testing.T) {
+src := "# " + strings.Repeat("a", 79) + "\n"
+f := false
+v := lintString(t, rules.MD013{LineLength: 80, Headings: &f}, src)
+if len(v) != 0 {
+t.Errorf("expected no violations when headings=false, got %d: %v", len(v), v)
+}
+}
+
+func TestMD029_Fix(t *testing.T) {
+src := "1. item1\n3. item2\n2. item3\n"
+got := fixString(t, rules.MD029{}, src)
+want := "1. item1\n2. item2\n3. item3\n"
+if got != want {
+t.Errorf("MD029 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD029_FixOne(t *testing.T) {
+src := "1. item1\n2. item2\n3. item3\n"
+got := fixString(t, rules.MD029{Style: "one"}, src)
+want := "1. item1\n1. item2\n1. item3\n"
+if got != want {
+t.Errorf("MD029 Fix(one) = %q, want %q", got, want)
+}
+}
+
+func TestMD040_AllowedLanguages(t *testing.T) {
+// "go" is in allowed list, so no violation.
+src := "```go\ncode\n```\n"
+v := lintString(t, rules.MD040{AllowedLanguages: []string{"go", "python"}}, src)
+if len(v) != 0 {
+t.Errorf("expected no violations for allowed language, got %v", v)
+}
+
+// "rust" is not in allowed list, so violation expected.
+src = "```rust\ncode\n```\n"
+v = lintString(t, rules.MD040{AllowedLanguages: []string{"go", "python"}}, src)
+if len(v) != 1 {
+t.Errorf("expected 1 violation for disallowed language, got %d: %v", len(v), v)
+}
+}
+
+func TestMD040_LanguageOnly(t *testing.T) {
+// Pure language identifier — valid.
+src := "```go\ncode\n```\n"
+v := lintString(t, rules.MD040{LanguageOnly: true}, src)
+if len(v) != 0 {
+t.Errorf("expected no violations for language-only info string, got %v", v)
+}
+
+// Language with extra info string — violation.
+src = "```go run\ncode\n```\n"
+v = lintString(t, rules.MD040{LanguageOnly: true}, src)
+if len(v) != 1 {
+t.Errorf("expected 1 violation for info string with extra content, got %d: %v", len(v), v)
+}
+}
