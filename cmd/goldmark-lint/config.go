@@ -13,10 +13,18 @@ import (
 	"github.com/mrueg/goldmark-lint/lint/rules"
 )
 
+// GlobOverride allows specifying different rule configurations for files
+// matching specific glob patterns, mirroring markdownlint-cli2's "overrides".
+type GlobOverride struct {
+	Files  []string               `yaml:"files"  json:"files"`
+	Config map[string]interface{} `yaml:"config" json:"config"`
+}
+
 // ConfigFile represents the top-level markdownlint-cli2 config file structure.
 type ConfigFile struct {
-	Config  map[string]interface{} `yaml:"config"  json:"config"`
-	Ignores []string               `yaml:"ignores" json:"ignores"`
+	Config    map[string]interface{} `yaml:"config"     json:"config"`
+	Ignores   []string               `yaml:"ignores"    json:"ignores"`
+	Overrides []GlobOverride         `yaml:"overrides"  json:"overrides"`
 }
 
 var configFileNames = []string{
@@ -253,8 +261,31 @@ func buildRules(cfg map[string]interface{}) []lint.Rule {
 	return result
 }
 
-// isIgnored reports whether path matches any of the ignore glob patterns.
-func isIgnored(path string, patterns []string) bool {
+// mergeConfigs returns a new config map with entries from overlay deep-merged
+// on top of base. When both base and overlay have the same key with map values,
+// the maps are recursively merged so that sub-keys not present in overlay are
+// preserved from base.
+func mergeConfigs(base, overlay map[string]interface{}) map[string]interface{} {
+	merged := make(map[string]interface{}, len(base)+len(overlay))
+	for k, v := range base {
+		merged[k] = v
+	}
+	for k, v := range overlay {
+		if baseVal, ok := merged[k]; ok {
+			if baseMap, ok := baseVal.(map[string]interface{}); ok {
+				if ovMap, ok := v.(map[string]interface{}); ok {
+					merged[k] = mergeConfigs(baseMap, ovMap)
+					continue
+				}
+			}
+		}
+		merged[k] = v
+	}
+	return merged
+}
+
+// matchesAnyPattern reports whether path matches any of the given glob patterns.
+func matchesAnyPattern(path string, patterns []string) bool {
 	normalized := filepath.ToSlash(filepath.Clean(path))
 	for _, pattern := range patterns {
 		pattern = filepath.ToSlash(pattern)
@@ -263,6 +294,24 @@ func isIgnored(path string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+// effectiveConfigForFile returns the rule-config map to use when linting the
+// given file.  It starts from base and applies every override whose Files
+// patterns match the file path (in declaration order, last override wins).
+func effectiveConfigForFile(base map[string]interface{}, overrides []GlobOverride, filePath string) map[string]interface{} {
+	cfg := base
+	for _, ov := range overrides {
+		if matchesAnyPattern(filePath, ov.Files) {
+			cfg = mergeConfigs(cfg, ov.Config)
+		}
+	}
+	return cfg
+}
+
+// isIgnored reports whether path matches any of the ignore glob patterns.
+func isIgnored(path string, patterns []string) bool {
+	return matchesAnyPattern(path, patterns)
 }
 
 // matchPath checks whether name matches the glob pattern, supporting ** for
