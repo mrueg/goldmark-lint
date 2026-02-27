@@ -35,7 +35,7 @@ func tableColumnStyle(line string) string {
 			allNoSpace = false
 		}
 		// compact: exactly one space before and after content
-		if !(hasLeadingSpace && hasTrailingSpace) {
+		if !hasLeadingSpace || !hasTrailingSpace {
 			allSingleSpace = false
 		} else {
 			inner := cell[1 : len(cell)-1]
