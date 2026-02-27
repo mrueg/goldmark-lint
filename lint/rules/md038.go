@@ -41,7 +41,6 @@ func findCodeSpanViolations(line string) bool {
 						return true
 					}
 					i = k
-					end = k
 					break
 				}
 				end = k
@@ -86,7 +85,6 @@ func fixCodeSpanSpaces(line string) string {
 					} else {
 						i = k
 					}
-					end = k
 					break
 				}
 				end = k

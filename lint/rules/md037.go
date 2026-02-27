@@ -40,7 +40,6 @@ func stripCodeSpans(line string) string {
 		tickLen := i - start
 		// Find matching closing backtick sequence
 		end := i
-		found := false
 		for end < len(result) {
 			if result[end] == '`' {
 				k := end
@@ -53,16 +52,12 @@ func stripCodeSpans(line string) string {
 						result[x] = ' '
 					}
 					i = k
-					found = true
 					break
 				}
 				end = k
 			} else {
 				end++
 			}
-		}
-		if !found {
-			// No matching close, leave as-is
 		}
 	}
 	return string(result)
