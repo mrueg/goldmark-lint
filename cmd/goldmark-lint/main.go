@@ -1,13 +1,16 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
+	"text/tabwriter"
 
 	"github.com/mrueg/goldmark-lint/lint"
 )
@@ -31,6 +34,7 @@ Optional parameters:
 - --config         path to config file (overrides auto-discovery)
 - --fix            updates files to resolve fixable issues
 - --format         read stdin, apply fixes, write stdout
+- --list-rules     print a table of all rules with their aliases, enabled/disabled state, and options
 - --no-cache       disable reading/writing the .markdownlint-cli2-cache file
 - --no-globs       ignore the globs config key at runtime
 - --output-format  output format: default, json, junit, tap (default: default)
@@ -61,6 +65,7 @@ func main() {
 	fix := flag.Bool("fix", false, "updates files to resolve fixable issues")
 	format := flag.Bool("format", false, "read stdin, apply fixes, write stdout")
 	help := flag.Bool("help", false, "writes help message and exits")
+	listRules := flag.Bool("list-rules", false, "print a table of all rules with their aliases, enabled/disabled state, and options")
 	ver := flag.Bool("version", false, "prints the version and exits")
 	noCache := flag.Bool("no-cache", false, "disable reading/writing the cache file")
 	noGlobs := flag.Bool("no-globs", false, "ignore the globs config key at runtime")
@@ -114,6 +119,14 @@ func main() {
 	inputGlobs := flag.Args()
 	if len(inputGlobs) == 0 && !*noGlobs && cfg != nil && len(cfg.Globs) > 0 {
 		inputGlobs = cfg.Globs
+	}
+	if *listRules {
+		var ruleCfgForList map[string]interface{}
+		if cfg != nil {
+			ruleCfgForList = cfg.Config
+		}
+		printRulesTable(os.Stdout, ruleCfgForList)
+		os.Exit(0)
 	}
 	if len(inputGlobs) == 0 && !*format {
 		fmt.Fprint(os.Stderr, helpText)
@@ -386,4 +399,36 @@ func main() {
 	}
 
 	os.Exit(exitCode)
+}
+
+// printRulesTable writes a human-readable table of all known rules to w.
+// Each row shows the rule ID, aliases, enabled/disabled state, and current
+// option values (as a JSON object, omitting empty values).
+func printRulesTable(w io.Writer, cfg map[string]interface{}) {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "RULE\tALIASES\tENABLED\tOPTIONS")
+	fmt.Fprintln(tw, "----\t-------\t-------\t-------")
+	for _, info := range buildAllRulesInfo(cfg) {
+		aliases := ""
+		if ar, ok := info.rule.(lint.AliasedRule); ok {
+			aliases = strings.Join(ar.Aliases(), ", ")
+		}
+		enabled := "true"
+		if !info.enabled {
+			enabled = "false"
+		}
+		options := ruleOptionsJSON(info.rule)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", info.rule.ID(), aliases, enabled, options)
+	}
+	tw.Flush()
+}
+
+// ruleOptionsJSON marshals rule to JSON and returns the result, omitting the
+// outer braces when there are no fields so that empty rules show "{}".
+func ruleOptionsJSON(rule lint.Rule) string {
+	data, err := json.Marshal(rule)
+	if err != nil || string(data) == "null" {
+		return "{}"
+	}
+	return string(data)
 }

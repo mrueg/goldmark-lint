@@ -294,19 +294,23 @@ func newLinterFromConfig(cfg map[string]interface{}) *lint.Linter {
 	return lint.NewLinter(buildRules(cfg)...)
 }
 
-// buildRules constructs the list of lint rules based on the provided config map.
-// If cfg is nil, all rules are enabled with their default options.
-func buildRules(cfg map[string]interface{}) []lint.Rule {
-	if cfg == nil {
-		cfg = map[string]interface{}{}
-	}
+// ruleInfo holds metadata about a rule for the --list-rules display.
+type ruleInfo struct {
+	rule    lint.Rule
+	enabled bool
+}
 
-	type ruleFactory struct {
-		id      string
-		factory func() lint.Rule
-	}
+// ruleFactory pairs a rule ID with a factory function that creates the rule
+// with config applied.
+type ruleFactory struct {
+	id      string
+	factory func() lint.Rule
+}
 
-	factories := []ruleFactory{
+// makeRuleFactories returns the ordered list of rule factories, each of which
+// creates a rule instance with options applied from cfg.
+func makeRuleFactories(cfg map[string]interface{}) []ruleFactory {
+	return []ruleFactory{
 		{"MD001", func() lint.Rule { r := &rules.MD001{}; applyRuleConfig(r, cfg, "MD001"); return r }},
 		{"MD003", func() lint.Rule { r := &rules.MD003{}; applyRuleConfig(r, cfg, "MD003"); return r }},
 		{"MD004", func() lint.Rule { r := &rules.MD004{}; applyRuleConfig(r, cfg, "MD004"); return r }},
@@ -361,7 +365,33 @@ func buildRules(cfg map[string]interface{}) []lint.Rule {
 		{"MD059", func() lint.Rule { r := &rules.MD059{}; applyRuleConfig(r, cfg, "MD059"); return r }},
 		{"MD060", func() lint.Rule { r := &rules.MD060{}; applyRuleConfig(r, cfg, "MD060"); return r }},
 	}
+}
 
+// buildAllRulesInfo returns metadata for every known rule, regardless of whether
+// it is enabled or disabled in cfg.  The enabled field reflects the effective
+// enabled/disabled state according to cfg.
+func buildAllRulesInfo(cfg map[string]interface{}) []ruleInfo {
+	if cfg == nil {
+		cfg = map[string]interface{}{}
+	}
+	factories := makeRuleFactories(cfg)
+	infos := make([]ruleInfo, 0, len(factories))
+	for _, f := range factories {
+		infos = append(infos, ruleInfo{
+			rule:    f.factory(),
+			enabled: isRuleEnabled(f.id, cfg),
+		})
+	}
+	return infos
+}
+
+// buildRules constructs the list of lint rules based on the provided config map.
+// If cfg is nil, all rules are enabled with their default options.
+func buildRules(cfg map[string]interface{}) []lint.Rule {
+	if cfg == nil {
+		cfg = map[string]interface{}{}
+	}
+	factories := makeRuleFactories(cfg)
 	var result []lint.Rule
 	for _, f := range factories {
 		if isRuleEnabled(f.id, cfg) {

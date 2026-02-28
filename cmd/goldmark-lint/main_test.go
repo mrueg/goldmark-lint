@@ -301,6 +301,53 @@ func TestCLI_Format_NoArgs(t *testing.T) {
 	}
 }
 
+func TestCLI_ListRules(t *testing.T) {
+	bin := buildBinary(t)
+
+	// Default: all rules enabled, no config.
+	cmd := exec.Command(bin, "--list-rules")
+	out, err := cmd.CombinedOutput()
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if exitErr.ExitCode() != 0 {
+			t.Fatalf("--list-rules exited with code %d, want 0: %s", exitErr.ExitCode(), out)
+		}
+	} else if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	outStr := string(out)
+	if !strings.Contains(outStr, "RULE") || !strings.Contains(outStr, "ALIASES") ||
+		!strings.Contains(outStr, "ENABLED") || !strings.Contains(outStr, "OPTIONS") {
+		t.Errorf("expected table header in --list-rules output, got:\n%s", outStr)
+	}
+	if !strings.Contains(outStr, "MD001") {
+		t.Errorf("expected MD001 in --list-rules output, got:\n%s", outStr)
+	}
+	if !strings.Contains(outStr, "heading-increment") {
+		t.Errorf("expected alias 'heading-increment' in --list-rules output, got:\n%s", outStr)
+	}
+
+	// With a config that disables MD001: should show enabled=false for MD001.
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("config:\n  MD001: false\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd2 := exec.Command(bin, "--list-rules", "--config", cfgPath)
+	out2, err2 := cmd2.CombinedOutput()
+	if errors.As(err2, &exitErr) {
+		if exitErr.ExitCode() != 0 {
+			t.Fatalf("--list-rules --config exited with code %d, want 0: %s", exitErr.ExitCode(), out2)
+		}
+	} else if err2 != nil {
+		t.Fatalf("unexpected error: %v", err2)
+	}
+	outStr2 := string(out2)
+	if !strings.Contains(outStr2, "false") {
+		t.Errorf("expected 'false' for disabled MD001 in --list-rules output, got:\n%s", outStr2)
+	}
+}
+
 func TestCLI_NoGlobs(t *testing.T) {
 	bin := buildBinary(t)
 
