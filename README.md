@@ -5,6 +5,22 @@ It implements all rules from [markdownlint](https://github.com/DavidAnson/markdo
 [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) and supports auto-fixing for
 select rules.
 
+## Table of Contents
+
+- [Installation](#installation)
+  - [Docker](#docker)
+- [Library usage](#library-usage)
+- [CLI usage](#cli-usage)
+  - [Example](#example)
+- [Configuration](#configuration)
+  - [Config file format](#config-file-format)
+  - [Simple config format (.markdownlint.yaml)](#simple-config-format-markdownlintyaml)
+  - [Inline disable comments](#inline-disable-comments)
+  - [Supported rule options](#supported-rule-options)
+- [Features](#features)
+- [Rules](#rules)
+- [License](#license)
+
 ## Installation
 
 ```sh
