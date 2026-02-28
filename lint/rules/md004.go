@@ -9,7 +9,8 @@ import (
 
 // MD004 checks that unordered list markers are consistent.
 type MD004 struct {
-	// Style is the required marker style: "consistent" (default), "asterisk", "plus", or "dash".
+	// Style is the required marker style: "consistent" (default), "asterisk",
+	// "plus", "dash", or "sublist" (different symbol per nesting level).
 	Style string `json:"style"`
 }
 
@@ -25,12 +26,48 @@ func (r MD004) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	firstMarker := byte(0)
 
+	// For "sublist" style, each nesting level uses a different marker.
+	// The cycle is: dash (level 1), asterisk (level 2), plus (level 3), repeat.
+	sublistMarkers := []byte{'-', '*', '+'}
+	depth := 0
+
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
-			return ast.WalkContinue, nil
-		}
 		list, ok := n.(*ast.List)
 		if !ok || list.IsOrdered() {
+			if _, isListItem := n.(*ast.ListItem); !isListItem {
+				return ast.WalkContinue, nil
+			}
+			return ast.WalkContinue, nil
+		}
+
+		if style == "sublist" {
+			if entering {
+				expectedMarker := sublistMarkers[depth%len(sublistMarkers)]
+				depth++
+				if list.Marker != expectedMarker {
+					line := 1
+					if item := list.FirstChild(); item != nil {
+						if li, ok2 := item.(*ast.ListItem); ok2 {
+							if li.Lines() != nil && li.Lines().Len() > 0 {
+								seg := li.Lines().At(0)
+								line = countLine(doc.Source, seg.Start)
+							}
+						}
+					}
+					violations = append(violations, lint.Violation{
+						Rule:    r.ID(),
+						Line:    line,
+						Column:  1,
+						Message: fmt.Sprintf("Unordered list style [Expected: %c; Actual: %c]", expectedMarker, list.Marker),
+					})
+				}
+			} else {
+				depth--
+			}
+			return ast.WalkContinue, nil
+		}
+
+		if !entering {
 			return ast.WalkContinue, nil
 		}
 

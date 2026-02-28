@@ -1,11 +1,50 @@
 package rules
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 
+	"github.com/mrueg/goldmark-lint/lint"
 	"github.com/yuin/goldmark/ast"
 )
+
+// IntOrArray is a JSON-compatible type that can be either a single integer or
+// an array of integers. When used for per-heading-level config (e.g. lines_above
+// in MD022), index 0 = h1, index 1 = h2, etc.
+type IntOrArray []int
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (x *IntOrArray) UnmarshalJSON(data []byte) error {
+	var n int
+	if err := json.Unmarshal(data, &n); err == nil {
+		*x = IntOrArray{n}
+		return nil
+	}
+	var arr []int
+	if err := json.Unmarshal(data, &arr); err != nil {
+		return err
+	}
+	*x = IntOrArray(arr)
+	return nil
+}
+
+// Get returns the configured value for the given 1-based heading level.
+// If the array is empty, 0 is returned (callers should use their default).
+// If the level exceeds the array length, the last element is returned.
+func (x IntOrArray) Get(level int) int {
+	if len(x) == 0 {
+		return 0
+	}
+	idx := level - 1
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(x) {
+		return x[len(x)-1]
+	}
+	return x[idx]
+}
 
 // countLine counts the 1-based line number of byte offset pos in source.
 func countLine(source []byte, pos int) int {
@@ -119,7 +158,83 @@ func countTableCells(line string) int {
 	return len(strings.Split(trimmed, "|"))
 }
 
-// findTables returns slices of [start, end] line indices (0-based, inclusive) for each GFM table.
+// frontMatterHasTitle reports whether the document's front matter contains a
+// title field. pattern is a field name or regex; if empty, the feature is
+// disabled and false is always returned.
+func frontMatterHasTitle(doc *lint.Document, pattern string) bool {
+	if pattern == "" {
+		return false
+	}
+	if len(doc.FrontMatterFields) == 0 {
+		return false
+	}
+	// First try exact key match (case-insensitive).
+	for k, v := range doc.FrontMatterFields {
+		if strings.EqualFold(k, pattern) && v != "" {
+			return true
+		}
+	}
+	// Try pattern as a regex matched against "key: value" lines.
+	re, err := regexp.Compile("(?i)" + pattern)
+	if err != nil {
+		return false
+	}
+	for k, v := range doc.FrontMatterFields {
+		if re.MatchString(k + ": " + v) {
+			return true
+		}
+	}
+	return false
+}
+
+// fencedCodeBlockLanguages returns a map from line index (0-based) to the
+// language of the fenced code block that line belongs to (empty string if
+// the block has no language specified). Lines outside code blocks are absent.
+func fencedCodeBlockLanguages(lines []string) map[int]string {
+	result := make(map[int]string)
+	inFence := false
+	fenceChar := byte(0)
+	fenceLen := 0
+	currentLang := ""
+	for i, line := range lines {
+		trimmed := strings.TrimLeft(line, " ")
+		if !inFence {
+			if len(trimmed) >= 3 && (trimmed[0] == '`' || trimmed[0] == '~') {
+				fc := trimmed[0]
+				j := 0
+				for j < len(trimmed) && trimmed[j] == fc {
+					j++
+				}
+				if j >= 3 {
+					inFence = true
+					fenceChar = fc
+					fenceLen = j
+					info := strings.TrimSpace(trimmed[j:])
+					if fields := strings.Fields(info); len(fields) > 0 {
+						currentLang = fields[0]
+					} else {
+						currentLang = ""
+					}
+				}
+			}
+		} else {
+			if len(trimmed) >= fenceLen && trimmed[0] == fenceChar {
+				j := 0
+				for j < len(trimmed) && trimmed[j] == fenceChar {
+					j++
+				}
+				if j >= fenceLen && strings.TrimSpace(trimmed[j:]) == "" {
+					inFence = false
+					currentLang = ""
+					continue
+				}
+			}
+			result[i] = currentLang
+		}
+	}
+	return result
+}
+
 func findTables(lines []string, mask []bool) [][2]int {
 	var tables [][2]int
 	n := len(lines)

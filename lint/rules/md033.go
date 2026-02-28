@@ -11,6 +11,9 @@ import (
 type MD033 struct {
 	// AllowedElements is a list of HTML element names that are permitted.
 	AllowedElements []string `json:"allowed_elements"`
+	// TableAllowedElements is a list of HTML element names that are permitted
+	// inside GFM table cells (in addition to AllowedElements).
+	TableAllowedElements []string `json:"table_allowed_elements"`
 }
 
 func (r MD033) ID() string          { return "MD033" }
@@ -25,8 +28,29 @@ func (r MD033) isAllowed(tag string) bool {
 	return false
 }
 
+func (r MD033) isTableAllowed(tag string) bool {
+	for _, allowed := range r.TableAllowedElements {
+		if allowed == tag {
+			return true
+		}
+	}
+	return false
+}
+
 func (r MD033) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
+
+	// Build a line-based table mask for table_allowed_elements support.
+	var tableMask []bool
+	if len(r.TableAllowedElements) > 0 {
+		codeMask := fencedCodeBlockMask(doc.Lines)
+		tableMask = make([]bool, len(doc.Lines))
+		for _, tbl := range findTables(doc.Lines, codeMask) {
+			for i := tbl[0]; i <= tbl[1]; i++ {
+				tableMask[i] = true
+			}
+		}
+	}
 
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
@@ -48,19 +72,26 @@ func (r MD033) Check(doc *lint.Document) []lint.Violation {
 			})
 
 		case *ast.RawHTML:
-			line := 1
+			lineNum := 1
 			if node.Segments != nil && node.Segments.Len() > 0 {
 				seg := node.Segments.At(0)
-				line = countLine(doc.Source, seg.Start)
+				lineNum = countLine(doc.Source, seg.Start)
 			}
 			// Extract the tag name for allowed-element checking.
 			tag := rawHTMLTagName(node, doc.Source)
 			if r.isAllowed(tag) {
 				return ast.WalkContinue, nil
 			}
+			// Check table_allowed_elements when inside a table line.
+			if len(r.TableAllowedElements) > 0 && tableMask != nil {
+				lineIdx := lineNum - 1
+				if lineIdx >= 0 && lineIdx < len(tableMask) && tableMask[lineIdx] && r.isTableAllowed(tag) {
+					return ast.WalkContinue, nil
+				}
+			}
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
-				Line:    line,
+				Line:    lineNum,
 				Column:  1,
 				Message: fmt.Sprintf("Inline HTML [Element: %s]", tag),
 			})

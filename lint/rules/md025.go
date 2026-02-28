@@ -11,6 +11,10 @@ import (
 type MD025 struct {
 	// Level is the top-level heading level (default 1).
 	Level int `json:"level"`
+	// FrontMatterTitle is a field name or regex pattern used to identify a
+	// title in YAML front matter that counts as a top-level heading. If empty,
+	// "title" is used. Set to "^$" to disable.
+	FrontMatterTitle string `json:"front_matter_title"`
 }
 
 func (r MD025) ID() string          { return "MD025" }
@@ -23,6 +27,11 @@ func (r MD025) Check(doc *lint.Document) []lint.Violation {
 	}
 	var violations []lint.Violation
 	count := 0
+
+	// If the front matter contains a title, count it as the first top-level heading.
+	if frontMatterHasTitle(doc, r.FrontMatterTitle) {
+		count = 1
+	}
 
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {

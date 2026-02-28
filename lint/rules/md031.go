@@ -7,7 +7,11 @@ import (
 )
 
 // MD031 checks that fenced code blocks are surrounded by blank lines.
-type MD031 struct{}
+type MD031 struct {
+	// ListItems controls whether the rule is applied to fenced code blocks
+	// within list items (default true). Set to false to disable for list items.
+	ListItems *bool `json:"list_items"`
+}
 
 func (r MD031) ID() string          { return "MD031" }
 func (r MD031) Description() string { return "Fenced code blocks should be surrounded by blank lines" }
@@ -78,6 +82,7 @@ func (r MD031) Fix(source []byte) []byte {
 }
 
 func (r MD031) Check(doc *lint.Document) []lint.Violation {
+	checkListItems := r.ListItems == nil || *r.ListItems
 	var violations []lint.Violation
 	lines := doc.Lines
 	n := len(lines)
@@ -94,6 +99,10 @@ func (r MD031) Check(doc *lint.Document) []lint.Violation {
 				fenceLen = fl
 				// Check blank line before (not required if at document start)
 				if i > 0 && strings.TrimSpace(lines[i-1]) != "" {
+					// If list_items=false, skip when the fence is inside a list item.
+					if !checkListItems && isInsideListItem(lines, i) {
+						continue
+					}
 					violations = append(violations, lint.Violation{
 						Rule:    r.ID(),
 						Line:    i + 1,
@@ -112,6 +121,9 @@ func (r MD031) Check(doc *lint.Document) []lint.Violation {
 				inFence = false
 				// Check blank line after (not required if at document end)
 				if i < n-1 && strings.TrimSpace(lines[i+1]) != "" {
+					if !checkListItems && isInsideListItem(lines, i) {
+						continue
+					}
 					violations = append(violations, lint.Violation{
 						Rule:    r.ID(),
 						Line:    i + 1,
@@ -123,4 +135,30 @@ func (r MD031) Check(doc *lint.Document) []lint.Violation {
 		}
 	}
 	return violations
+}
+
+// isInsideListItem reports whether the line at index i appears to be inside a list item
+// by walking backwards through preceding lines to find a list item marker.
+func isInsideListItem(lines []string, i int) bool {
+	for k := i - 1; k >= 0; k-- {
+		line := lines[k]
+		if strings.TrimSpace(line) == "" {
+			continue // skip blank lines
+		}
+		trimmed := strings.TrimLeft(line, " ")
+		// Unordered list marker
+		if len(trimmed) >= 2 && (trimmed[0] == '-' || trimmed[0] == '*' || trimmed[0] == '+') && trimmed[1] == ' ' {
+			return true
+		}
+		// Ordered list marker (starts with digit)
+		if len(trimmed) >= 2 && trimmed[0] >= '0' && trimmed[0] <= '9' {
+			return true
+		}
+		// Non-empty non-indented line that is not a list marker: not in a list item.
+		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+			return false
+		}
+		// Indented non-empty line (list item continuation): keep looking.
+	}
+	return false
 }

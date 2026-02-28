@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
 	"github.com/yuin/goldmark/ast"
@@ -17,9 +18,9 @@ type MD003 struct {
 func (r MD003) ID() string          { return "MD003" }
 func (r MD003) Description() string { return "Heading style" }
 
-// headingStyleOf returns "atx" or "setext" for the given heading node by
+// headingStyleOf returns "atx", "atx_closed", or "setext" for the given heading node by
 // looking back in the source to find the start of the line: if it starts
-// with '#' it is ATX, otherwise it is setext.
+// with '#' it is ATX (possibly closed), otherwise it is setext.
 func headingStyleOf(h *ast.Heading, source []byte) string {
 	if h.Lines() == nil || h.Lines().Len() == 0 {
 		return "atx"
@@ -33,10 +34,34 @@ func headingStyleOf(h *ast.Heading, source []byte) string {
 	for pos > 0 && source[pos-1] != '\n' {
 		pos--
 	}
-	if pos < len(source) && source[pos] == '#' {
-		return "atx"
+	if pos >= len(source) || source[pos] != '#' {
+		return "setext"
 	}
-	return "setext"
+	// It's ATX. Find the end of the line to detect closed ATX (## Heading ##).
+	end := pos
+	for end < len(source) && source[end] != '\n' {
+		end++
+	}
+	lineStr := strings.TrimRight(string(source[pos:end]), " ")
+	// Count leading '#' characters (the heading marker).
+	leadingHashes := 0
+	for leadingHashes < len(lineStr) && lineStr[leadingHashes] == '#' {
+		leadingHashes++
+	}
+	// Closed ATX: the line ends with one or more '#' preceded by a space,
+	// and there is content between the opening and closing markers.
+	if leadingHashes < len(lineStr) && lineStr[len(lineStr)-1] == '#' {
+		// Find where the trailing '#' run starts.
+		i := len(lineStr) - 1
+		for i > leadingHashes && lineStr[i] == '#' {
+			i--
+		}
+		// The character before the trailing '#' run must be a space.
+		if lineStr[i] == ' ' {
+			return "atx_closed"
+		}
+	}
+	return "atx"
 }
 
 func (r MD003) Check(doc *lint.Document) []lint.Violation {
@@ -75,11 +100,17 @@ func (r MD003) Check(doc *lint.Document) []lint.Violation {
 
 		// setext only supports h1 and h2; for deeper levels ATX is required.
 		switch expected {
-		case "setext_with_atx", "setext_with_atx_closed":
+		case "setext_with_atx":
 			if h.Level <= 2 {
 				expected = "setext"
 			} else {
 				expected = "atx"
+			}
+		case "setext_with_atx_closed":
+			if h.Level <= 2 {
+				expected = "setext"
+			} else {
+				expected = "atx_closed"
 			}
 		case "setext":
 			if h.Level > 2 {
@@ -88,7 +119,11 @@ func (r MD003) Check(doc *lint.Document) []lint.Violation {
 			}
 		}
 
-		if actual != expected {
+		// For comparison: atx_closed headings also satisfy an "atx" expectation
+		// (they are ATX headings with an optional closing sequence).
+		matches := actual == expected ||
+			(expected == "atx" && actual == "atx_closed")
+		if !matches {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
 				Line:    line,
