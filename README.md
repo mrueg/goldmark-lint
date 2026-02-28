@@ -14,7 +14,9 @@ go install github.com/mrueg/goldmark-lint/cmd/goldmark-lint@latest
 ## Usage
 
 ```
-goldmark-lint glob0 [glob1] [...] [globN] [--fix] [--help]
+goldmark-lint glob0 [glob1] [...] [globN] [--fix] [--help] [--version]
+goldmark-lint - (read from stdin)
+goldmark-lint --format (read stdin, apply fixes, write stdout)
 
 Glob expressions:
   *  matches any number of characters, but not /
@@ -22,9 +24,14 @@ Glob expressions:
   ** matches any number of characters, including /
 
 Optional parameters:
+  --config         path to config file (overrides auto-discovery)
   --fix            updates files to resolve fixable issues
+  --format         read stdin, apply fixes, write stdout
+  --no-cache       disable reading/writing the .markdownlint-cli2-cache file
+  --no-globs       ignore the globs config key at runtime
   --output-format  output format: default, json, junit, tap (default: default)
   --help           writes this message to the console and exits without doing anything else
+  --version        prints the version and exits
 
 Exit codes:
   0: Linting was successful and there were no errors
@@ -40,6 +47,15 @@ goldmark-lint '**/*.md'
 
 # Lint and auto-fix fixable issues
 goldmark-lint --fix '**/*.md'
+
+# Read from stdin and report violations
+goldmark-lint -
+
+# Read from stdin, apply fixes, write to stdout (useful as an editor formatter)
+goldmark-lint --format
+
+# Use a custom config file
+goldmark-lint --config path/to/.markdownlint-cli2.yaml '**/*.md'
 ```
 
 ## Configuration
@@ -48,8 +64,14 @@ goldmark-lint reads configuration from a `.markdownlint-cli2.yaml` (or `.yml`,
 `.jsonc`, `.json`) file, following the same discovery and format as
 [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2).
 
+It also reads `.markdownlint.yaml` (or `.yml`, `.jsonc`, `.json`) files, which
+use a simpler rule-only format (compatible with
+[vscode-markdownlint](https://github.com/DavidAnson/vscode-markdownlint)).
+`.markdownlint-cli2.*` files take priority when both are present.
+
 The config file is searched starting from the current working directory and
-walking up to the filesystem root. The first file found is used.
+walking up to the filesystem root. The first file found is used. The `--config`
+flag overrides auto-discovery with an explicit path.
 
 ### Config file format
 
@@ -67,6 +89,33 @@ config:
 ignores:
   - "vendor/**"          # ignore files matching these glob patterns
   - "node_modules/**"
+
+# Inherit settings from another config file (merged with this file's settings)
+extends: base-config.yaml
+
+# Per-glob rule config overrides (applied in order; last match wins)
+overrides:
+  - files:
+      - "docs/**"
+    config:
+      MD013:
+        line_length: 120
+
+# Default input globs when no CLI arguments are provided
+globs:
+  - "**/*.md"
+
+# Enable --fix behaviour from the config file
+fix: false
+
+# Custom front matter pattern (Go regular expression)
+frontMatter: "---[\\s\\S]*?---"
+
+# Auto-ignore .gitignore entries (true = walk to git root; string = glob for gitignore files)
+gitignore: true
+
+# Disable inline markdownlint-disable comments
+noInlineConfig: false
 
 # Output formatters (same format as markdownlint-cli2)
 outputFormatters:
@@ -95,8 +144,46 @@ format:
 
 - Set a rule ID to `false` to disable it.
 - Set a rule ID to `true` to enable it with default options.
+- Set a rule ID to `"warning"` to enable it with warning severity (exit code 0).
 - Set a rule ID to an object to enable it with specific options.
 - Set `default: false` to disable all rules not explicitly listed.
+
+### Simple config format (.markdownlint.yaml)
+
+The `.markdownlint.yaml` (and `.yml`, `.json`, `.jsonc`) files use a flat
+rule-only format where the entire file is a rule config map:
+
+```yaml
+# .markdownlint.yaml
+default: true
+MD013:
+  line_length: 100
+MD001: false
+```
+
+### Inline disable comments
+
+goldmark-lint supports the same inline disable comment syntax as markdownlint:
+
+```markdown
+<!-- markdownlint-disable MD001 -->
+Violations on this and following lines are suppressed for MD001.
+<!-- markdownlint-enable MD001 -->
+
+<!-- markdownlint-disable-next-line MD013 -->
+This line's MD013 violation is suppressed.
+
+This line's MD009 violation is suppressed. <!-- markdownlint-disable-line MD009 -->
+
+<!-- markdownlint-disable-file MD001 -->
+MD001 is suppressed for the entire file regardless of comment position.
+
+<!-- markdownlint-configure-file { "MD001": false } -->
+File-level rule configuration via JSON.
+```
+
+Omit the rule ID to disable/enable all rules. Rule aliases (e.g.
+`heading-increment` for MD001) are also accepted.
 
 ### Supported rule options
 
@@ -150,6 +237,15 @@ format:
 - Parses Markdown with the goldmark library for accurate, spec-compliant analysis.
 - Reports violations with file, line, and column information.
 - Auto-fix support (`--fix`) for a subset of rules.
+- stdin support: lint with `goldmark-lint -` or format with `goldmark-lint --format`.
+- Configuration file discovery: searches from the current directory up to the filesystem root.
+- Supports `.markdownlint-cli2.yaml` and `.markdownlint.yaml` config formats.
+- Config inheritance via `extends` for composable configuration.
+- Per-glob rule overrides via `overrides` for fine-grained control.
+- Inline disable comments (`markdownlint-disable`, `markdownlint-disable-next-line`, etc.).
+- Multiple output formats: default text, JSON, JUnit XML, TAP.
+- Result caching via `.markdownlint-cli2-cache` to speed up repeated runs.
+- Gitignore integration via the `gitignore` config key.
 
 ## Rules
 
