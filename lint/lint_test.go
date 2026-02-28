@@ -1415,6 +1415,38 @@ func TestInlineDisable_ConfigureFile_DoesNotDisableOtherRules(t *testing.T) {
 	}
 }
 
+func TestNoInlineConfig_IgnoresDisableComment(t *testing.T) {
+	// When NoInlineConfig is true, inline disable comments are ignored.
+	src := "<!-- markdownlint-disable MD001 -->\n# Heading 1\n\n### Heading 3\n"
+	l := lint.NewLinter(rules.MD001{})
+	l.NoInlineConfig = true
+	v := l.Lint([]byte(src))
+	if len(v) == 0 {
+		t.Errorf("expected MD001 violation (NoInlineConfig=true ignores disable comment), got none")
+	}
+}
+
+func TestNoInlineConfig_IgnoresConfigureFileComment(t *testing.T) {
+	// When NoInlineConfig is true, configure-file comments are ignored.
+	src := "<!-- markdownlint-configure-file { \"MD001\": false } -->\n# Heading 1\n\n### Heading 3\n"
+	l := lint.NewLinter(rules.MD001{})
+	l.NoInlineConfig = true
+	v := l.Lint([]byte(src))
+	if len(v) == 0 {
+		t.Errorf("expected MD001 violation (NoInlineConfig=true ignores configure-file comment), got none")
+	}
+}
+
+func TestNoInlineConfig_False_HonorsDisableComment(t *testing.T) {
+	// When NoInlineConfig is false (default), inline disable comments are honored.
+	src := "<!-- markdownlint-disable MD001 -->\n# Heading 1\n\n### Heading 3\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	if len(v) != 0 {
+		t.Errorf("expected no violations (NoInlineConfig=false honors disable comment), got %v", v)
+	}
+}
+
 func integrationMarkdownlintAvailable() bool {
 	_, err := exec.LookPath("markdownlint")
 	return err == nil

@@ -27,6 +27,7 @@ type ConfigFile struct {
 	Ignores          []string               `yaml:"ignores"          json:"ignores"`
 	Overrides        []GlobOverride         `yaml:"overrides"        json:"overrides"`
 	OutputFormatters []interface{}          `yaml:"outputFormatters" json:"outputFormatters"`
+	NoInlineConfig   bool                   `yaml:"noInlineConfig"   json:"noInlineConfig"`
 }
 
 var configFileNames = []string{

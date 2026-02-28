@@ -95,10 +95,12 @@ func main() {
 	var ruleCfg map[string]interface{}
 	var ignores []string
 	var overrides []GlobOverride
+	var noInlineConfig bool
 	if cfg != nil {
 		ruleCfg = cfg.Config
 		ignores = cfg.Ignores
 		overrides = cfg.Overrides
+		noInlineConfig = cfg.NoInlineConfig
 	}
 
 	// Determine the formatter specs to use.
@@ -115,6 +117,7 @@ func main() {
 
 	// Default linter (used when no overrides are defined or override doesn't match).
 	linter := newLinterFromConfig(ruleCfg)
+	linter.NoInlineConfig = noInlineConfig
 
 	// Load cache (skip when --no-cache or --fix is used).
 	useCache := !*noCache && !*fix
@@ -198,6 +201,7 @@ func main() {
 			if len(overrides) > 0 {
 				fileCfg := effectiveConfigForFile(ruleCfg, overrides, file)
 				fileLinter = newLinterFromConfig(fileCfg)
+				fileLinter.NoInlineConfig = noInlineConfig
 			}
 
 			// Apply fixes if requested.
