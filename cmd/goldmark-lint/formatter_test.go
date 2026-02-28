@@ -499,6 +499,48 @@ func TestCLI_OutputFormatters_Config_JSON(t *testing.T) {
 	}
 }
 
+func TestFormatGitHubActions_Output(t *testing.T) {
+	violations := makeViolations()
+	var buf bytes.Buffer
+	formatGitHubActions(violations, &buf)
+	got := buf.String()
+	if !strings.Contains(got, "::error file=test.md,line=3,col=1::MD001") {
+		t.Errorf("expected error annotation for MD001, got: %s", got)
+	}
+	if !strings.Contains(got, "::warning file=test.md,line=5,col=82::MD013") {
+		t.Errorf("expected warning annotation for MD013, got: %s", got)
+	}
+}
+
+func TestFormatGitHubActions_Empty(t *testing.T) {
+	var buf bytes.Buffer
+	formatGitHubActions(nil, &buf)
+	if buf.Len() != 0 {
+		t.Errorf("expected empty output for no violations, got: %s", buf.String())
+	}
+}
+
+func TestCLI_OutputFormat_GitHub(t *testing.T) {
+	bin := buildBinary(t)
+	testfile := filepath.Join("..", "..", "testdata", "md001_invalid.md")
+	if _, err := os.Stat(testfile); err != nil {
+		t.Skip("testdata not available")
+	}
+
+	cmd := exec.Command(bin, "--output-format", "github", testfile)
+	stdout, _ := cmd.Output()
+	got := string(stdout)
+	if !strings.Contains(got, "::error file=") {
+		t.Errorf("expected GitHub Actions error annotation, got: %s", got)
+	}
+	if !strings.Contains(got, ",line=") {
+		t.Errorf("expected line in annotation, got: %s", got)
+	}
+	if !strings.Contains(got, ",col=") {
+		t.Errorf("expected col in annotation, got: %s", got)
+	}
+}
+
 func TestCLI_OutputFormat_Stdin_JSON(t *testing.T) {
 	bin := buildBinary(t)
 	cmd := exec.Command(bin, "--output-format", "json", "-")
