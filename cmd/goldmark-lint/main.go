@@ -39,6 +39,7 @@ Optional parameters:
 - --no-cache         disable reading/writing the .markdownlint-cli2-cache file
 - --no-globs         ignore the globs config key at runtime
 - --output-format    output format: default, json, junit, tap, sarif, github (default: default)
+- --watch            re-lint files whenever they change (runs until Ctrl+C)
 - --help             writes this message to the console and exits without doing anything else
 - --version          prints the version and exits
 
@@ -72,6 +73,7 @@ func main() {
 	noCache := flag.Bool("no-cache", false, "disable reading/writing the cache file")
 	noGlobs := flag.Bool("no-globs", false, "ignore the globs config key at runtime")
 	outputFormat := flag.String("output-format", "", "output format: default, json, junit, tap, sarif, github")
+	watch := flag.Bool("watch", false, "re-lint files whenever they change (runs until Ctrl+C)")
 	flag.Parse()
 
 	if *help {
@@ -189,8 +191,8 @@ func main() {
 		linter.FrontMatterRegexp = re
 	}
 
-	// Load cache (skip when --no-cache or fix is used).
-	useCache := !*noCache && !effectiveFix
+	// Load cache (skip when --no-cache, fix, or watch is used).
+	useCache := !*noCache && !effectiveFix && !*watch
 	cache := make(lintCache)
 	if useCache && cwd != "" {
 		cache = loadCache(cwd)
@@ -402,6 +404,45 @@ func main() {
 		if err := saveCache(cwd, cache); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not save cache: %v\n", err)
 		}
+	}
+
+	// --watch: after the initial lint run, poll files for changes and re-lint.
+	// Violations found during watch cycles are printed to stderr but do not
+	// affect the exit code – the process exits 0 on interrupt (Ctrl+C) since
+	// watch mode is an interactive session, not a one-shot check.
+	if *watch {
+		runWatch(allFiles, func(changed []string) {
+			var watchViolations []fileViolation
+			for _, file := range changed {
+				source, err := os.ReadFile(file)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", file, err)
+					continue
+				}
+				if effectiveFix {
+					fixed := linter.Fix(source)
+					if err := os.WriteFile(file, fixed, 0644); err != nil {
+						fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", file, err)
+						continue
+					}
+					source = fixed
+				}
+				fileLinter := linter
+				if len(overrides) > 0 {
+					fileCfg := effectiveConfigForFile(ruleCfg, overrides, file)
+					fileLinter = newLinterFromConfig(fileCfg)
+					fileLinter.NoInlineConfig = noInlineConfig
+					fileLinter.FrontMatterRegexp = linter.FrontMatterRegexp
+				}
+				violations := fileLinter.Lint(source)
+				for j := range violations {
+					violations[j].Severity = getRuleSeverity(violations[j].Rule, ruleCfg)
+				}
+				watchViolations = append(watchViolations, fileViolation{File: file, Violations: violations})
+			}
+			formatDefault(watchViolations, os.Stderr)
+		})
+		os.Exit(0)
 	}
 
 	os.Exit(exitCode)
