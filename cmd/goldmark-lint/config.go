@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,7 +32,7 @@ type ConfigFile struct {
 	Globs            []string               `yaml:"globs"            json:"globs"`
 	Fix              bool                   `yaml:"fix"              json:"fix"`
 	FrontMatter      string                 `yaml:"frontMatter"      json:"frontMatter"`
-	Gitignore        bool                   `yaml:"gitignore"        json:"gitignore"`
+	Gitignore        interface{}            `yaml:"gitignore"        json:"gitignore"`
 }
 
 var configFileNames = []string{
@@ -164,7 +165,7 @@ func loadConfigResolved(path string, visited map[string]bool) (*ConfigFile, erro
 		Globs:            globs,
 		Fix:              baseCfg.Fix || cfg.Fix,
 		FrontMatter:      frontMatter,
-		Gitignore:        baseCfg.Gitignore || cfg.Gitignore,
+		Gitignore:        mergeGitignore(baseCfg.Gitignore, cfg.Gitignore),
 		Config:           mergeConfigs(baseCfg.Config, cfg.Config),
 		Ignores:          append(baseCfg.Ignores, cfg.Ignores...),
 		Overrides:        append(baseCfg.Overrides, cfg.Overrides...),
@@ -421,6 +422,94 @@ func effectiveConfigForFile(base map[string]interface{}, overrides []GlobOverrid
 // isIgnored reports whether path matches any of the ignore glob patterns.
 func isIgnored(path string, patterns []string) bool {
 	return matchesAnyPattern(path, patterns)
+}
+
+// gitignoreIsEnabled reports whether the gitignore config value is enabled
+// (either bool true or a non-empty string glob pattern).
+func gitignoreIsEnabled(v interface{}) bool {
+	switch val := v.(type) {
+	case bool:
+		return val
+	case string:
+		return val != ""
+	}
+	return false
+}
+
+// gitignoreGlobPattern returns the explicit glob pattern when v is a non-empty
+// string, or "" when v is bool true (meaning: use the default walk-to-git-root logic).
+func gitignoreGlobPattern(v interface{}) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
+// mergeGitignore combines base and child gitignore values: if child is enabled
+// (bool true or non-empty string) the child value takes precedence; otherwise
+// the base value is preserved. This mirrors the existing bool || semantics.
+func mergeGitignore(base, child interface{}) interface{} {
+	if gitignoreIsEnabled(child) {
+		return child
+	}
+	return base
+}
+
+// findGitRoot walks up from dir to find the git repository root (the directory
+// containing a .git entry). Returns "" if not found.
+func findGitRoot(dir string) string {
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return ""
+}
+
+// collectGitignorePatterns reads all .gitignore files from cwd up to the git
+// repository root and returns the combined list of ignore patterns.
+func collectGitignorePatterns(cwd string) []string {
+	gitRoot := findGitRoot(cwd)
+	var patterns []string
+	dir := cwd
+	for {
+		patterns = append(patterns, parseGitignore(filepath.Join(dir, ".gitignore"))...)
+		if dir == gitRoot || gitRoot == "" {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return patterns
+}
+
+// findFilesMatchingGlob walks root and returns the absolute paths of all files
+// whose path relative to root matches the given glob pattern (supports **).
+// Walk errors (e.g. permission denied) are ignored; any accessible matches are returned.
+func findFilesMatchingGlob(root, pattern string) []string {
+	var matches []string
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return nil
+		}
+		if matchPath(pattern, filepath.ToSlash(rel)) {
+			matches = append(matches, path)
+		}
+		return nil
+	})
+	return matches
 }
 
 // parseGitignore reads a .gitignore file and returns glob patterns for files
