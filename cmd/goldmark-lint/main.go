@@ -40,6 +40,9 @@ Optional parameters:
 Config file:
 - Reads .markdownlint-cli2.yaml (or .yml, .jsonc, .json) from the current
   directory or any parent directory (same discovery as markdownlint-cli2).
+- Also reads .markdownlint.yaml (or .yml, .jsonc, .json), which uses the
+  simpler rule-only format (compatible with vscode-markdownlint).
+  .markdownlint-cli2.* files take priority when both are present.
 - Supports "config" (rule enable/disable and options), "ignores",
   "overrides" (per-glob rule config overrides), "extends" (inherit
   configuration from another config file), "outputFormatters", "globs"

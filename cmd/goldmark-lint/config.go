@@ -39,6 +39,10 @@ var configFileNames = []string{
 	".markdownlint-cli2.yml",
 	".markdownlint-cli2.jsonc",
 	".markdownlint-cli2.json",
+	".markdownlint.yaml",
+	".markdownlint.yml",
+	".markdownlint.jsonc",
+	".markdownlint.json",
 }
 
 // findConfigFile searches for a markdownlint-cli2 config file starting from dir
@@ -59,6 +63,14 @@ func findConfigFile(dir string) string {
 		dir = parent
 	}
 	return ""
+}
+
+// isSimpleFormatConfig reports whether path is a .markdownlint.* file (not
+// .markdownlint-cli2.*). These files use a rule-only format where the entire
+// content is the rule config map, with no wrapping "config:" key.
+func isSimpleFormatConfig(path string) bool {
+	base := filepath.Base(path)
+	return strings.HasPrefix(base, ".markdownlint.") && !strings.HasPrefix(base, ".markdownlint-cli2.")
 }
 
 // loadConfig loads and parses a markdownlint-cli2 config file, resolving any
@@ -83,6 +95,25 @@ func loadConfigResolved(path string, visited map[string]bool) (*ConfigFile, erro
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
+	}
+
+	// .markdownlint.* files use a simpler rule-only format where the entire
+	// file content is the rule config map (no "config:" wrapper).
+	if isSimpleFormatConfig(path) {
+		var ruleCfg map[string]interface{}
+		switch strings.ToLower(filepath.Ext(path)) {
+		case ".yaml", ".yml":
+			if err := yaml.Unmarshal(data, &ruleCfg); err != nil {
+				return nil, fmt.Errorf("parsing %s: %w", path, err)
+			}
+		case ".json", ".jsonc":
+			if err := json.Unmarshal(stripJSONComments(data), &ruleCfg); err != nil {
+				return nil, fmt.Errorf("parsing %s: %w", path, err)
+			}
+		default:
+			return nil, fmt.Errorf("unsupported config file format: %s", path)
+		}
+		return &ConfigFile{Config: ruleCfg}, nil
 	}
 
 	var cfg ConfigFile
