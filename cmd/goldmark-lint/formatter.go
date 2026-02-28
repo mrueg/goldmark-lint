@@ -151,9 +151,143 @@ func formatTAP(violations []fileViolation, w io.Writer) {
 	}
 }
 
+// sarifLog is the top-level SARIF 2.1.0 log structure.
+type sarifLog struct {
+	Schema  string     `json:"$schema"`
+	Version string     `json:"version"`
+	Runs    []sarifRun `json:"runs"`
+}
+
+type sarifRun struct {
+	Tool    sarifTool     `json:"tool"`
+	Results []sarifResult `json:"results"`
+}
+
+type sarifTool struct {
+	Driver sarifDriver `json:"driver"`
+}
+
+type sarifDriver struct {
+	Name           string      `json:"name"`
+	Version        string      `json:"version"`
+	InformationUri string      `json:"informationUri"`
+	Rules          []sarifRule `json:"rules"`
+}
+
+type sarifRule struct {
+	ID               string      `json:"id"`
+	ShortDescription sarifText   `json:"shortDescription"`
+	HelpUri          string      `json:"helpUri"`
+}
+
+type sarifText struct {
+	Text string `json:"text"`
+}
+
+type sarifResult struct {
+	RuleID    string          `json:"ruleId"`
+	Level     string          `json:"level"`
+	Message   sarifText       `json:"message"`
+	Locations []sarifLocation `json:"locations"`
+}
+
+type sarifLocation struct {
+	PhysicalLocation sarifPhysicalLocation `json:"physicalLocation"`
+}
+
+type sarifPhysicalLocation struct {
+	ArtifactLocation sarifArtifactLocation `json:"artifactLocation"`
+	Region           sarifRegion           `json:"region"`
+}
+
+type sarifArtifactLocation struct {
+	URI       string `json:"uri"`
+	URIBaseID string `json:"uriBaseId"`
+}
+
+type sarifRegion struct {
+	StartLine   int `json:"startLine"`
+	StartColumn int `json:"startColumn,omitempty"`
+}
+
+// sarifLevel maps a violation severity string to a SARIF level.
+func sarifLevel(severity string) string {
+	if severity == "warning" {
+		return "warning"
+	}
+	return "error"
+}
+
+// formatSARIF writes violations in SARIF 2.1.0 format to w.
+func formatSARIF(violations []fileViolation, w io.Writer) {
+	// Collect unique rules in order of first appearance.
+	seenRules := make(map[string]bool)
+	var rules []sarifRule
+	var results []sarifResult
+
+	for _, fv := range violations {
+		for _, v := range fv.Violations {
+			if !seenRules[v.Rule] {
+				seenRules[v.Rule] = true
+				rules = append(rules, sarifRule{
+					ID:               v.Rule,
+					ShortDescription: sarifText{Text: v.Message},
+					HelpUri:          ruleInfoURL(v.Rule),
+				})
+			}
+			loc := sarifLocation{
+				PhysicalLocation: sarifPhysicalLocation{
+					ArtifactLocation: sarifArtifactLocation{
+						URI:       fv.File,
+						URIBaseID: "%SRCROOT%",
+					},
+					Region: sarifRegion{
+						StartLine:   v.Line,
+						StartColumn: v.Column,
+					},
+				},
+			}
+			results = append(results, sarifResult{
+				RuleID:    v.Rule,
+				Level:     sarifLevel(v.Severity),
+				Message:   sarifText{Text: v.Message},
+				Locations: []sarifLocation{loc},
+			})
+		}
+	}
+
+	if results == nil {
+		results = []sarifResult{}
+	}
+	if rules == nil {
+		rules = []sarifRule{}
+	}
+
+	log := sarifLog{
+		Schema:  "https://json.schemastore.org/sarif-2.1.0.json",
+		Version: "2.1.0",
+		Runs: []sarifRun{
+			{
+				Tool: sarifTool{
+					Driver: sarifDriver{
+						Name:           "goldmark-lint",
+						Version:        version,
+						InformationUri: "https://github.com/mrueg/goldmark-lint",
+						Rules:          rules,
+					},
+				},
+				Results: results,
+			},
+		},
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(log)
+}
+
 // outputFormatterSpec holds a format name and optional outfile for a single formatter run.
 type outputFormatterSpec struct {
-	format  string // "default", "json", "junit", or "tap"
+	format  string // "default", "json", "junit", "tap", or "sarif"
 	outfile string
 }
 
@@ -167,6 +301,8 @@ func formatterNameToFormat(name string) string {
 		return "junit"
 	case "markdownlint-cli2-formatter-tap":
 		return "tap"
+	case "markdownlint-cli2-formatter-sarif":
+		return "sarif"
 	case "markdownlint-cli2-formatter-default":
 		return "default"
 	default:

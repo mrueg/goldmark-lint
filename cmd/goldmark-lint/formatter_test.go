@@ -165,6 +165,83 @@ func TestFormatTAP_Empty(t *testing.T) {
 	}
 }
 
+func TestFormatSARIF_ValidJSON(t *testing.T) {
+	violations := makeViolations()
+	var buf bytes.Buffer
+	formatSARIF(violations, &buf)
+
+	var log sarifLog
+	if err := json.Unmarshal(buf.Bytes(), &log); err != nil {
+		t.Fatalf("formatSARIF produced invalid JSON: %v\noutput: %s", err, buf.String())
+	}
+	if log.Version != "2.1.0" {
+		t.Errorf("SARIF version = %q, want %q", log.Version, "2.1.0")
+	}
+	if len(log.Runs) != 1 {
+		t.Fatalf("expected 1 run, got %d", len(log.Runs))
+	}
+	run := log.Runs[0]
+	if run.Tool.Driver.Name != "goldmark-lint" {
+		t.Errorf("tool driver name = %q, want %q", run.Tool.Driver.Name, "goldmark-lint")
+	}
+	if len(run.Results) != 2 {
+		t.Errorf("expected 2 results, got %d", len(run.Results))
+	}
+	if run.Results[0].RuleID != "MD001" {
+		t.Errorf("result[0] ruleId = %q, want %q", run.Results[0].RuleID, "MD001")
+	}
+	if run.Results[0].Level != "error" {
+		t.Errorf("result[0] level = %q, want %q", run.Results[0].Level, "error")
+	}
+	if run.Results[1].Level != "warning" {
+		t.Errorf("result[1] level = %q, want %q", run.Results[1].Level, "warning")
+	}
+	loc := run.Results[0].Locations[0].PhysicalLocation
+	if loc.ArtifactLocation.URI != "test.md" {
+		t.Errorf("uri = %q, want %q", loc.ArtifactLocation.URI, "test.md")
+	}
+	if loc.ArtifactLocation.URIBaseID != "%SRCROOT%" {
+		t.Errorf("uriBaseId = %q, want %q", loc.ArtifactLocation.URIBaseID, "%SRCROOT%")
+	}
+	if loc.Region.StartLine != 3 {
+		t.Errorf("startLine = %d, want 3", loc.Region.StartLine)
+	}
+	if loc.Region.StartColumn != 1 {
+		t.Errorf("startColumn = %d, want 1", loc.Region.StartColumn)
+	}
+	// Rules should be deduplicated
+	if len(run.Tool.Driver.Rules) != 2 {
+		t.Errorf("expected 2 rules, got %d", len(run.Tool.Driver.Rules))
+	}
+}
+
+func TestFormatSARIF_Empty(t *testing.T) {
+	var buf bytes.Buffer
+	formatSARIF(nil, &buf)
+
+	var log sarifLog
+	if err := json.Unmarshal(buf.Bytes(), &log); err != nil {
+		t.Fatalf("formatSARIF produced invalid JSON for empty violations: %v", err)
+	}
+	if len(log.Runs) != 1 {
+		t.Fatalf("expected 1 run, got %d", len(log.Runs))
+	}
+	if len(log.Runs[0].Results) != 0 {
+		t.Errorf("expected empty results, got %d", len(log.Runs[0].Results))
+	}
+	if len(log.Runs[0].Tool.Driver.Rules) != 0 {
+		t.Errorf("expected empty rules, got %d", len(log.Runs[0].Tool.Driver.Rules))
+	}
+}
+
+func TestFormatSARIF_Schema(t *testing.T) {
+	var buf bytes.Buffer
+	formatSARIF(makeViolations(), &buf)
+	if !strings.Contains(buf.String(), "sarif-2.1.0") {
+		t.Errorf("expected SARIF schema URI in output, got: %s", buf.String()[:min(100, buf.Len())])
+	}
+}
+
 func TestRuleInfoURL(t *testing.T) {
 	got := ruleInfoURL("MD001")
 	want := "https://github.com/DavidAnson/markdownlint/blob/main/doc/md001.md"
@@ -213,6 +290,7 @@ func TestFormatterNameToFormat(t *testing.T) {
 		{"markdownlint-cli2-formatter-json", "json"},
 		{"markdownlint-cli2-formatter-junit", "junit"},
 		{"markdownlint-cli2-formatter-tap", "tap"},
+		{"markdownlint-cli2-formatter-sarif", "sarif"},
 		{"markdownlint-cli2-formatter-default", "default"},
 		{"json", "json"},
 		{"unknown", "unknown"},
@@ -329,6 +407,33 @@ func TestCLI_OutputFormat_TAP(t *testing.T) {
 	}
 	if !strings.Contains(got, "not ok") {
 		t.Errorf("expected 'not ok' lines in TAP output, got: %s", got)
+	}
+}
+
+func TestCLI_OutputFormat_SARIF(t *testing.T) {
+	bin := buildBinary(t)
+	testfile := filepath.Join("..", "..", "testdata", "md001_invalid.md")
+	if _, err := os.Stat(testfile); err != nil {
+		t.Skip("testdata not available")
+	}
+
+	cmd := exec.Command(bin, "--output-format", "sarif", testfile)
+	stdout, _ := cmd.Output()
+	var log sarifLog
+	if err := json.Unmarshal(stdout, &log); err != nil {
+		t.Fatalf("output is not valid SARIF JSON: %v\noutput: %s", err, stdout)
+	}
+	if log.Version != "2.1.0" {
+		t.Errorf("SARIF version = %q, want %q", log.Version, "2.1.0")
+	}
+	if len(log.Runs) != 1 {
+		t.Fatalf("expected 1 run, got %d", len(log.Runs))
+	}
+	if len(log.Runs[0].Results) == 0 {
+		t.Error("expected at least one SARIF result")
+	}
+	if log.Runs[0].Tool.Driver.Name != "goldmark-lint" {
+		t.Errorf("tool name = %q, want %q", log.Runs[0].Tool.Driver.Name, "goldmark-lint")
 	}
 }
 

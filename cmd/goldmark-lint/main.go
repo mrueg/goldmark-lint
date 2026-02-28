@@ -37,7 +37,7 @@ Optional parameters:
 - --list-rules     print a table of all rules with their aliases, enabled/disabled state, and options
 - --no-cache       disable reading/writing the .markdownlint-cli2-cache file
 - --no-globs       ignore the globs config key at runtime
-- --output-format  output format: default, json, junit, tap (default: default)
+- --output-format  output format: default, json, junit, tap, sarif (default: default)
 - --help           writes this message to the console and exits without doing anything else
 - --version        prints the version and exits
 
@@ -69,7 +69,7 @@ func main() {
 	ver := flag.Bool("version", false, "prints the version and exits")
 	noCache := flag.Bool("no-cache", false, "disable reading/writing the cache file")
 	noGlobs := flag.Bool("no-globs", false, "ignore the globs config key at runtime")
-	outputFormat := flag.String("output-format", "", "output format: default, json, junit, tap")
+	outputFormat := flag.String("output-format", "", "output format: default, json, junit, tap, sarif")
 	flag.Parse()
 
 	if *help {
@@ -85,9 +85,9 @@ func main() {
 	// Validate --output-format flag if specified.
 	if *outputFormat != "" {
 		switch *outputFormat {
-		case "default", "json", "junit", "tap":
+		case "default", "json", "junit", "tap", "sarif":
 		default:
-			fmt.Fprintf(os.Stderr, "Error: unknown output format %q; supported formats: default, json, junit, tap\n", *outputFormat)
+			fmt.Fprintf(os.Stderr, "Error: unknown output format %q; supported formats: default, json, junit, tap, sarif\n", *outputFormat)
 			os.Exit(2)
 		}
 	}
@@ -382,6 +382,8 @@ func main() {
 			formatJUnit(allViolations, w)
 		case "tap":
 			formatTAP(allViolations, w)
+		case "sarif":
+			formatSARIF(allViolations, w)
 		default:
 			formatDefault(allViolations, w)
 		}
