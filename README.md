@@ -19,6 +19,9 @@ select rules.
   - [Supported rule options](#supported-rule-options)
 - [Features](#features)
 - [Additional features over markdownlint-cli2](#additional-features-over-markdownlint-cli2)
+  - [`--fail-on-warning`](#--fail-on-warning)
+  - [`--list-rules`](#--list-rules)
+  - [`--watch`](#--watch)
 - [Rules](#rules)
 - [License](#license)
 
@@ -94,9 +97,11 @@ Optional parameters:
   --fail-on-warning  exit with code 1 even when all violations are warnings
   --fix              updates files to resolve fixable issues
   --format           read stdin, apply fixes, write stdout
+  --list-rules       print a table of all rules with their aliases, enabled/disabled state, and options
   --no-cache         disable reading/writing the .markdownlint-cli2-cache file
   --no-globs         ignore the globs config key at runtime
-  --output-format    output format: default, json, junit, tap, sarif (default: default)
+  --output-format    output format: default, json, junit, tap, sarif, github (default: default)
+  --watch            re-lint files whenever they change (runs until Ctrl+C)
   --help             writes this message to the console and exits without doing anything else
   --version          prints the version and exits
 
@@ -126,6 +131,12 @@ goldmark-lint --format
 
 # Use a custom config file
 goldmark-lint --config path/to/.markdownlint-cli2.yaml '**/*.md'
+
+# Re-lint files on every change (interactive watch mode)
+goldmark-lint --watch '**/*.md'
+
+# Print all rules with their enabled state and current options
+goldmark-lint --list-rules
 ```
 
 ## Configuration
@@ -204,9 +215,11 @@ stdout). Supported formatter names:
 | `markdownlint-cli2-formatter-json`       | JSON array       |
 | `markdownlint-cli2-formatter-junit`      | JUnit XML        |
 | `markdownlint-cli2-formatter-tap`        | TAP              |
+| `markdownlint-cli2-formatter-sarif`      | SARIF 2.1.0      |
+| `markdownlint-cli2-formatter-github`     | GitHub Actions   |
 
 The `--output-format` CLI flag overrides `outputFormatters` from the config
-and accepts `default`, `json`, `junit`, or `tap`.
+and accepts `default`, `json`, `junit`, `tap`, `sarif`, or `github`.
 
 The `config` section mirrors the
 [markdownlint configuration](https://github.com/DavidAnson/markdownlint#options)
@@ -308,14 +321,16 @@ Omit the rule ID to disable/enable all rules. Rule aliases (e.g.
 - Reports violations with file, line, and column information.
 - Auto-fix support (`--fix`) for a subset of rules.
 - stdin support: lint with `goldmark-lint -` or format with `goldmark-lint --format`.
+- Watch mode (`--watch`): re-lint files on every change, running until interrupted.
 - Configuration file discovery: searches from the current directory up to the filesystem root.
 - Supports `.markdownlint-cli2.yaml` and `.markdownlint.yaml` config formats.
 - Config inheritance via `extends` for composable configuration.
 - Per-glob rule overrides via `overrides` for fine-grained control.
 - Inline disable comments (`markdownlint-disable`, `markdownlint-disable-next-line`, etc.).
-- Multiple output formats: default text, JSON, JUnit XML, TAP.
+- Multiple output formats: default text, JSON, JUnit XML, TAP, SARIF, and GitHub Actions annotations.
 - Result caching via `.markdownlint-cli2-cache` to speed up repeated runs.
 - Gitignore integration via the `gitignore` config key.
+- `--list-rules` flag to inspect all rules with their enabled state and current options.
 
 ## Additional features over markdownlint-cli2
 
@@ -325,6 +340,8 @@ goldmark-lint adds several features beyond what markdownlint-cli2 provides:
 |---------|:---:|:---:|
 | `--fail-on-warning` flag (exit code 1 for warnings) | ✅ | ❌ |
 | SARIF output format | ✅ | ❌ |
+| GitHub Actions annotation output format | ✅ | ❌ |
+| `--list-rules` flag (inspect rules, options, and enabled state) | ✅ | ❌ |
 | Single self-contained binary (no Node.js required) | ✅ | ❌ |
 | Embeddable Go library | ✅ | ❌ |
 
@@ -337,6 +354,26 @@ This is useful for stricter CI gates:
 
 ```sh
 goldmark-lint --fail-on-warning '**/*.md'
+```
+
+### `--list-rules`
+
+Print a table of every known rule with its ID, aliases, enabled/disabled state,
+and current option values (as JSON). Useful for inspecting which rules are active
+and what options they use with the current config:
+
+```sh
+goldmark-lint --list-rules
+goldmark-lint --config path/to/.markdownlint-cli2.yaml --list-rules
+```
+
+### `--watch`
+
+Re-lint files whenever they change, running until interrupted (Ctrl+C). Useful
+for keeping a terminal open while editing Markdown:
+
+```sh
+goldmark-lint --watch '**/*.md'
 ```
 
 ## Rules
