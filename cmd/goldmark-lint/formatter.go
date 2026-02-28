@@ -285,6 +285,22 @@ func formatSARIF(violations []fileViolation, w io.Writer) {
 	_ = enc.Encode(log)
 }
 
+// formatGitHubActions writes violations as GitHub Actions workflow commands to w.
+// Errors use ::error and warnings use ::warning so that GitHub Actions displays
+// them as native annotations in the PR diff view.
+func formatGitHubActions(violations []fileViolation, w io.Writer) {
+	for _, fv := range violations {
+		for _, v := range fv.Violations {
+			level := "error"
+			if v.Severity == "warning" {
+				level = "warning"
+			}
+			_, _ = fmt.Fprintf(w, "::%s file=%s,line=%d,col=%d::%s %s\n",
+				level, fv.File, v.Line, v.Column, v.Rule, v.Message)
+		}
+	}
+}
+
 // outputFormatterSpec holds a format name and optional outfile for a single formatter run.
 type outputFormatterSpec struct {
 	format  string // "default", "json", "junit", "tap", or "sarif"
@@ -305,6 +321,8 @@ func formatterNameToFormat(name string) string {
 		return "sarif"
 	case "markdownlint-cli2-formatter-default":
 		return "default"
+	case "markdownlint-cli2-formatter-github":
+		return "github"
 	default:
 		return name
 	}
