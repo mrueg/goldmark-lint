@@ -10,6 +10,7 @@ import (
 type MD028 struct{}
 
 func (r MD028) ID() string          { return "MD028" }
+func (r MD028) Aliases() []string   { return []string{"no-blanks-blockquote"} }
 func (r MD028) Description() string { return "Blank line inside blockquote" }
 
 // isBlockquoteLine reports whether the line is a blockquote line (starts with '>').

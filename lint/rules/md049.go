@@ -15,6 +15,7 @@ type MD049 struct {
 }
 
 func (r MD049) ID() string          { return "MD049" }
+func (r MD049) Aliases() []string   { return []string{"emphasis-style"} }
 func (r MD049) Description() string { return "Emphasis style should be consistent" }
 
 // md049StarRE matches single-asterisk emphasis *text* (not **).

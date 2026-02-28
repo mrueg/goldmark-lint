@@ -11,6 +11,7 @@ import (
 type MD020 struct{}
 
 func (r MD020) ID() string          { return "MD020" }
+func (r MD020) Aliases() []string   { return []string{"no-missing-space-closed-atx"} }
 func (r MD020) Description() string { return "No space inside hashes on closed ATX style heading" }
 
 // closedATXRE matches a closed ATX heading line.

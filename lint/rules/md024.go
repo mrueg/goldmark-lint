@@ -15,6 +15,7 @@ type MD024 struct {
 }
 
 func (r MD024) ID() string          { return "MD024" }
+func (r MD024) Aliases() []string   { return []string{"no-duplicate-heading"} }
 func (r MD024) Description() string { return "Multiple headings with the same content" }
 
 func (r MD024) Check(doc *lint.Document) []lint.Violation {

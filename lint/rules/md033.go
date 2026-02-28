@@ -17,6 +17,7 @@ type MD033 struct {
 }
 
 func (r MD033) ID() string          { return "MD033" }
+func (r MD033) Aliases() []string   { return []string{"no-inline-html"} }
 func (r MD033) Description() string { return "Inline HTML" }
 
 func (r MD033) isAllowed(tag string) bool {

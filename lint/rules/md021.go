@@ -10,6 +10,9 @@ import (
 type MD021 struct{}
 
 func (r MD021) ID() string { return "MD021" }
+func (r MD021) Aliases() []string {
+	return []string{"no-multiple-space-closed-atx"}
+}
 func (r MD021) Description() string {
 	return "Multiple spaces inside hashes on closed ATX style heading"
 }

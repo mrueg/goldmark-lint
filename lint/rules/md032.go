@@ -11,6 +11,7 @@ import (
 type MD032 struct{}
 
 func (r MD032) ID() string          { return "MD032" }
+func (r MD032) Aliases() []string   { return []string{"blanks-around-lists"} }
 func (r MD032) Description() string { return "Lists should be surrounded by blank lines" }
 
 // listItemRE matches unordered or ordered list item lines.

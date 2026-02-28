@@ -16,6 +16,7 @@ type MD003 struct {
 }
 
 func (r MD003) ID() string          { return "MD003" }
+func (r MD003) Aliases() []string   { return []string{"heading-style"} }
 func (r MD003) Description() string { return "Heading style" }
 
 // headingStyleOf returns "atx", "atx_closed", or "setext" for the given heading node by

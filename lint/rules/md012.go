@@ -14,6 +14,7 @@ type MD012 struct {
 }
 
 func (r MD012) ID() string          { return "MD012" }
+func (r MD012) Aliases() []string   { return []string{"no-multiple-blanks"} }
 func (r MD012) Description() string { return "Multiple consecutive blank lines" }
 
 func (r MD012) Fix(source []byte) []byte {

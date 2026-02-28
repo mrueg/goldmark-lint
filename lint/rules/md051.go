@@ -17,6 +17,7 @@ type MD051 struct {
 }
 
 func (r MD051) ID() string          { return "MD051" }
+func (r MD051) Aliases() []string   { return []string{"link-fragments"} }
 func (r MD051) Description() string { return "Link fragments should be valid" }
 
 // md051FragRE matches internal links with fragments: [text](#fragment).

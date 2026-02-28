@@ -17,6 +17,7 @@ type MD029 struct {
 }
 
 func (r MD029) ID() string          { return "MD029" }
+func (r MD029) Aliases() []string   { return []string{"ol-prefix"} }
 func (r MD029) Description() string { return "Ordered list item prefix" }
 
 // orderedItemRE matches an ordered list item prefix, capturing leading spaces,

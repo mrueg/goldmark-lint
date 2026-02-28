@@ -11,6 +11,7 @@ import (
 type MD037 struct{}
 
 func (r MD037) ID() string          { return "MD037" }
+func (r MD037) Aliases() []string   { return []string{"no-space-in-emphasis"} }
 func (r MD037) Description() string { return "Spaces inside emphasis markers" }
 
 // md037 regexes detect emphasis markers with a space immediately after the

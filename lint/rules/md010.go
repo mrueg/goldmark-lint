@@ -17,6 +17,7 @@ type MD010 struct {
 }
 
 func (r MD010) ID() string          { return "MD010" }
+func (r MD010) Aliases() []string   { return []string{"no-hard-tabs"} }
 func (r MD010) Description() string { return "Hard tabs" }
 
 func (r MD010) Fix(source []byte) []byte {

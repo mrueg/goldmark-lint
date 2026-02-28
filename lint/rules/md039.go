@@ -11,6 +11,7 @@ import (
 type MD039 struct{}
 
 func (r MD039) ID() string          { return "MD039" }
+func (r MD039) Aliases() []string   { return []string{"no-space-in-links"} }
 func (r MD039) Description() string { return "Spaces inside link text" }
 
 // md039RE matches a link with leading or trailing space in its text.

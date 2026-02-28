@@ -22,6 +22,7 @@ type MD041 struct {
 }
 
 func (r MD041) ID() string          { return "MD041" }
+func (r MD041) Aliases() []string   { return []string{"first-line-h1", "first-line-heading"} }
 func (r MD041) Description() string { return "First line in a file should be a top-level heading" }
 
 func (r MD041) Check(doc *lint.Document) []lint.Violation {

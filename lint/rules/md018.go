@@ -11,6 +11,7 @@ import (
 type MD018 struct{}
 
 func (r MD018) ID() string          { return "MD018" }
+func (r MD018) Aliases() []string   { return []string{"no-missing-space-atx"} }
 func (r MD018) Description() string { return "No space after hash on ATX style heading" }
 
 // md018RE matches an ATX-like heading line where the hashes are not followed by a space.

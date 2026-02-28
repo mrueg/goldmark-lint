@@ -15,7 +15,8 @@ type MD001 struct {
 	FrontMatterTitle string `json:"front_matter_title"`
 }
 
-func (r MD001) ID() string { return "MD001" }
+func (r MD001) ID() string          { return "MD001" }
+func (r MD001) Aliases() []string   { return []string{"heading-increment"} }
 func (r MD001) Description() string {
 	return "Heading levels should only increment by one level at a time"
 }

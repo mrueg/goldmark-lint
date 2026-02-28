@@ -13,6 +13,9 @@ import (
 type MD005 struct{}
 
 func (r MD005) ID() string { return "MD005" }
+func (r MD005) Aliases() []string {
+	return []string{"list-indent"}
+}
 func (r MD005) Description() string {
 	return "Inconsistent indentation for list items at the same level"
 }

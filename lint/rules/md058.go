@@ -10,6 +10,7 @@ import (
 type MD058 struct{}
 
 func (r MD058) ID() string          { return "MD058" }
+func (r MD058) Aliases() []string   { return []string{"blanks-around-tables"} }
 func (r MD058) Description() string { return "Tables should be surrounded by blank lines" }
 
 func (r MD058) Check(doc *lint.Document) []lint.Violation {

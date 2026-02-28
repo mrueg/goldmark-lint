@@ -9,6 +9,7 @@ import (
 type MD045 struct{}
 
 func (r MD045) ID() string          { return "MD045" }
+func (r MD045) Aliases() []string   { return []string{"no-alt-text"} }
 func (r MD045) Description() string { return "Images should have alternate text (alt text)" }
 
 func (r MD045) Check(doc *lint.Document) []lint.Violation {

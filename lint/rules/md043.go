@@ -17,6 +17,7 @@ type MD043 struct {
 }
 
 func (r MD043) ID() string          { return "MD043" }
+func (r MD043) Aliases() []string   { return []string{"required-headings"} }
 func (r MD043) Description() string { return "Required heading structure" }
 
 func (r MD043) Check(doc *lint.Document) []lint.Violation {

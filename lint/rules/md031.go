@@ -14,6 +14,7 @@ type MD031 struct {
 }
 
 func (r MD031) ID() string          { return "MD031" }
+func (r MD031) Aliases() []string   { return []string{"blanks-around-fences"} }
 func (r MD031) Description() string { return "Fenced code blocks should be surrounded by blank lines" }
 
 // detectFence returns (isFence, fenceChar, fenceLen) for a line.

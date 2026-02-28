@@ -9,6 +9,7 @@ import (
 type MD042 struct{}
 
 func (r MD042) ID() string          { return "MD042" }
+func (r MD042) Aliases() []string   { return []string{"no-empty-links"} }
 func (r MD042) Description() string { return "No empty links" }
 
 // inlineNodeLine returns the 1-based line number of an inline node by walking

@@ -15,6 +15,7 @@ type MD036 struct {
 }
 
 func (r MD036) ID() string          { return "MD036" }
+func (r MD036) Aliases() []string   { return []string{"no-emphasis-as-heading"} }
 func (r MD036) Description() string { return "Emphasis used instead of a heading" }
 
 const defaultMD036Punctuation = ".,;:!?。，；：！？"
