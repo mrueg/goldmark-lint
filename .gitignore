@@ -1,3 +1,5 @@
 /goldmark-lint
 /goldmark-lint.exe
+cmd/goldmark-lint/goldmark-lint
+cmd/goldmark-lint/goldmark-lint.exe
 .markdownlint-cli2-cache
