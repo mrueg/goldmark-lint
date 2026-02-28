@@ -109,8 +109,8 @@ func (l *Linter) Lint(source []byte) []Violation {
 
 	var disabled []disableSet
 	if !l.NoInlineConfig {
-		disabled := parseInlineDisables(lines, l.resolveRuleID)
-	}>>>>>>> main
+		disabled = parseInlineDisables(lines, l.resolveRuleID)
+	}
 
 	var violations []Violation
 	for _, rule := range l.Rules {
