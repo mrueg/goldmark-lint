@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func buildBinary(t *testing.T) string {
@@ -414,5 +415,70 @@ func TestCLI_NoGlobs(t *testing.T) {
 	}
 	if exitErr.ExitCode() != 2 {
 		t.Errorf("--no-globs exit code = %d, want 2", exitErr.ExitCode())
+	}
+}
+
+func TestCLI_Watch(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("signal-based test not supported on Windows")
+	}
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Valid\n\nContent.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, "--watch", mdFile)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("failed to start --watch process: %v", err)
+	}
+
+	// Wait for the "Watching" message to appear in stderr.
+	deadline := make(chan struct{})
+	go func() {
+		<-time.After(5 * time.Second)
+		close(deadline)
+	}()
+
+	watching := false
+	for !watching {
+		select {
+		case <-deadline:
+			_ = cmd.Process.Kill()
+			t.Fatalf("timed out waiting for watch message; stderr: %s", stderr.String())
+		default:
+			time.Sleep(50 * time.Millisecond)
+			if strings.Contains(stderr.String(), "Watching") {
+				watching = true
+			}
+		}
+	}
+
+	// Modify the file to trigger a re-lint.
+	if err := os.WriteFile(mdFile, []byte("# Updated\n\nContent.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Allow one poll cycle to detect the change.
+	time.Sleep(watchInterval + 100*time.Millisecond)
+
+	// Send interrupt to stop the watcher.
+	if err := cmd.Process.Signal(os.Interrupt); err != nil {
+		t.Fatalf("failed to send interrupt: %v", err)
+	}
+
+	err := cmd.Wait()
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if exitErr.ExitCode() != 0 {
+			t.Errorf("--watch exit code after interrupt = %d, want 0", exitErr.ExitCode())
+		}
+	} else if err != nil {
+		t.Errorf("unexpected error waiting for --watch process: %v", err)
 	}
 }
