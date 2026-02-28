@@ -151,12 +151,6 @@ func (l *Linter) Lint(source []byte) []Violation {
 	return violations
 }
 
-// parseFrontMatterFields parses the YAML front matter of source and returns a
-// map of simple "key: value" pairs. Only scalar (non-nested) fields are supported.
-func parseFrontMatterFields(source []byte) map[string]string {
-	return parseFrontMatterFieldsAt(source, frontMatterEnd(source))
-}
-
 // parseFrontMatterFieldsAt parses YAML front matter up to end bytes in source.
 func parseFrontMatterFieldsAt(source []byte, end int) map[string]string {
 	fields := make(map[string]string)
@@ -239,13 +233,6 @@ func frontMatterEnd(source []byte) int {
 		pos = lineEnd + 1
 	}
 	return 0
-}
-
-// stripFrontMatter returns a copy of source with the YAML front matter block
-// replaced by blank lines, preserving line numbers so that violations reported
-// by rules refer to the correct lines in the original file.
-func stripFrontMatter(source []byte) []byte {
-	return stripFrontMatterAt(source, frontMatterEnd(source))
 }
 
 // stripFrontMatterAt strips the front matter block up to end bytes in source.
