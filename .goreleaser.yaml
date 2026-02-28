@@ -25,7 +25,8 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
 
 kos:
-  - repository: ghcr.io/mrueg/goldmark-lint
+  - repositories:
+      - ghcr.io/mrueg/goldmark-lint
     tags:
       - "{{.Version}}"
       - latest
