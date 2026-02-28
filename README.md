@@ -112,7 +112,7 @@ format:
 | MD022 | `lines_below`          | `1`                                  | Blank lines required below headings                  |
 | MD024 | `siblings_only`        | `false`                              | Only check sibling headings                          |
 | MD025 | `level`                | `1`                                  | Top-level heading level                              |
-| MD026 | `punctuation`          | `.,;:!?`                             | Punctuation characters to check in headings          |
+| MD026 | `punctuation`          | `.,;:!。，；：！`                    | Punctuation characters to check in headings          |
 | MD029 | `style`                | `one_or_ordered`                     | Ordered list numbering style                         |
 | MD030 | `ul_single`            | `1`                                  | Spaces after unordered list marker (single-line item) |
 | MD030 | `ol_single`            | `1`                                  | Spaces after ordered list marker (single-line item)  |
