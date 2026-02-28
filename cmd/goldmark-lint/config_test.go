@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -819,5 +820,300 @@ func TestCLI_NoInlineConfig_False_HonorsDisableComment(t *testing.T) {
 	cmd.Dir = dir
 	if err := cmd.Run(); err != nil {
 		t.Errorf("expected exit 0 when disable comment is honored, got: %v", err)
+	}
+}
+
+func TestLoadConfig_Globs(t *testing.T) {
+	dir := t.TempDir()
+	content := "globs:\n  - \"**/*.md\"\n  - \"docs/*.md\"\n"
+	cfgPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Globs) != 2 {
+		t.Fatalf("expected 2 globs, got %d: %v", len(cfg.Globs), cfg.Globs)
+	}
+	if cfg.Globs[0] != "**/*.md" || cfg.Globs[1] != "docs/*.md" {
+		t.Errorf("globs = %v, want [**/*.md docs/*.md]", cfg.Globs)
+	}
+}
+
+func TestLoadConfig_Fix(t *testing.T) {
+	dir := t.TempDir()
+	content := "fix: true\n"
+	cfgPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.Fix {
+		t.Errorf("expected Fix=true, got false")
+	}
+}
+
+func TestLoadConfig_FrontMatter(t *testing.T) {
+	dir := t.TempDir()
+	content := "frontMatter: \"^---[\\\\s\\\\S]*?^---$\"\n"
+	cfgPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.FrontMatter == "" {
+		t.Errorf("expected non-empty FrontMatter, got empty string")
+	}
+}
+
+func TestLoadConfig_Gitignore(t *testing.T) {
+	dir := t.TempDir()
+	content := "gitignore: true\n"
+	cfgPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.Gitignore {
+		t.Errorf("expected Gitignore=true, got false")
+	}
+}
+
+func TestParseGitignore(t *testing.T) {
+	dir := t.TempDir()
+	content := "# comment\n\nnode_modules/\nbuild/\n!important.md\ndist/**\n"
+	gitignorePath := filepath.Join(dir, ".gitignore")
+	if err := os.WriteFile(gitignorePath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	patterns := parseGitignore(gitignorePath)
+	// Should have 3 patterns: node_modules/, build/, dist/**
+	// Comment, empty line, and negation (!) should be excluded.
+	if len(patterns) != 3 {
+		t.Fatalf("expected 3 patterns, got %d: %v", len(patterns), patterns)
+	}
+	if patterns[0] != "node_modules/" || patterns[1] != "build/" || patterns[2] != "dist/**" {
+		t.Errorf("patterns = %v, want [node_modules/ build/ dist/**]", patterns)
+	}
+}
+
+func TestParseGitignore_NotFound(t *testing.T) {
+	patterns := parseGitignore("/nonexistent/.gitignore")
+	if patterns != nil {
+		t.Errorf("expected nil for missing .gitignore, got %v", patterns)
+	}
+}
+
+func TestLoadConfig_Extends_PreservesGlobs(t *testing.T) {
+	dir := t.TempDir()
+
+	baseContent := "globs:\n  - \"base/**/*.md\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "base.yaml"), []byte(baseContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Child without globs: should inherit base globs.
+	childContent := "extends: base.yaml\n"
+	childPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(childPath, []byte(childContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(childPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Globs) != 1 || cfg.Globs[0] != "base/**/*.md" {
+		t.Errorf("globs = %v, want [base/**/*.md] (inherited from base)", cfg.Globs)
+	}
+}
+
+func TestLoadConfig_Extends_ChildGlobsOverrideBase(t *testing.T) {
+	dir := t.TempDir()
+
+	baseContent := "globs:\n  - \"base/**/*.md\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "base.yaml"), []byte(baseContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	childContent := "extends: base.yaml\nglobs:\n  - \"child/**/*.md\"\n"
+	childPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(childPath, []byte(childContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(childPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Globs) != 1 || cfg.Globs[0] != "child/**/*.md" {
+		t.Errorf("globs = %v, want [child/**/*.md] (child overrides base)", cfg.Globs)
+	}
+}
+
+func TestLoadConfig_Extends_FixMerge(t *testing.T) {
+	dir := t.TempDir()
+
+	// Base with fix:true, child without fix should still have fix:true.
+	baseContent := "fix: true\n"
+	if err := os.WriteFile(filepath.Join(dir, "base.yaml"), []byte(baseContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	childContent := "extends: base.yaml\n"
+	childPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(childPath, []byte(childContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(childPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.Fix {
+		t.Errorf("expected Fix=true (inherited from base), got false")
+	}
+}
+
+func TestCLI_GlobsFromConfig(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// A valid markdown file.
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Heading\n\nContent.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Config with globs pointing to test.md.
+	cfgContent := "globs:\n  - \"test.md\"\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run without CLI file args - globs from config should be used.
+	cmd := exec.Command(bin)
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 when using globs from config, got: %v", err)
+	}
+}
+
+func TestCLI_FixFromConfig(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// A file with a fixable violation (trailing spaces).
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Heading\n\nContent   \nNo newline at end"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Config with fix:true.
+	cfgContent := "fix: true\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 after fixing all issues via config fix:true, got: %v", err)
+	}
+
+	fixed, err := os.ReadFile(mdFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "# Heading\n\nContent\nNo newline at end\n"
+	if string(fixed) != want {
+		t.Errorf("fixed content = %q, want %q", string(fixed), want)
+	}
+}
+
+func TestCLI_GitignoreFromConfig(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// Create a file that would produce violations.
+	mdFile := filepath.Join(dir, "ignored.md")
+	if err := os.WriteFile(mdFile, []byte("Not a heading\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// .gitignore lists the file.
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("ignored.md\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Config with gitignore:true.
+	cfgContent := "gitignore: true\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 for file ignored via .gitignore, got: %v", err)
+	}
+}
+
+func TestCLI_FrontMatterFromConfig(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// A file with TOML-style front matter (+++...+++) followed by a top-level heading.
+	// Without a custom frontMatter regex, the +++ lines are treated as content before
+	// the heading, causing MD041 to fire (first line is not a top-level heading).
+	// With the custom regex, the front matter is stripped and MD041 passes.
+	mdFile := filepath.Join(dir, "test.md")
+	content := "+++\ntitle = \"Test\"\n+++\n# Heading\n\nContent.\n"
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Config with custom frontMatter regex for TOML +++ delimiters.
+	// Only enable MD041 so that other rules (e.g. MD012 for blank lines from stripped
+	// front matter) don't interfere with the test.
+	cfgContent := "frontMatter: \"(?s)^\\\\+{3}\\\\n.*?\\\\n\\\\+{3}\\\\n\"\nconfig:\n  default: false\n  MD041: true\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 when TOML front matter is recognized via custom regex, got: %v", err)
+	}
+}
+
+func TestCLI_FrontMatter_InvalidRegex(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Heading\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Config with invalid frontMatter regex.
+	cfgContent := "frontMatter: \"[invalid\"\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = dir
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected non-zero exit for invalid frontMatter regex, got nil error")
+	}
+	if exitErr.ExitCode() != 2 {
+		t.Errorf("invalid frontMatter regex exit code = %d, want 2", exitErr.ExitCode())
 	}
 }
