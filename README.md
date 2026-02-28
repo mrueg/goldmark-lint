@@ -11,6 +11,18 @@ select rules.
 go install github.com/mrueg/goldmark-lint/cmd/goldmark-lint@latest
 ```
 
+### Docker
+
+Container images are published to the GitHub Container Registry:
+
+```sh
+# Lint all Markdown files in the current directory tree
+docker run --rm -v "$(pwd):/work" -w /work ghcr.io/mrueg/goldmark-lint '**/*.md'
+
+# Read from stdin
+echo "# Hello" | docker run --rm -i ghcr.io/mrueg/goldmark-lint -
+```
+
 ## Library usage
 
 goldmark-lint can also be used as a Go library. Import the `lint` and
