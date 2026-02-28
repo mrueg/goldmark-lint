@@ -125,6 +125,158 @@ func TestLoadConfig_JSONC(t *testing.T) {
 	}
 }
 
+func TestFindConfigFile_SimpleYAML(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".markdownlint.yaml")
+	if err := os.WriteFile(cfgPath, []byte("MD001: false\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := findConfigFile(dir)
+	if got != cfgPath {
+		t.Errorf("expected %q, got %q", cfgPath, got)
+	}
+}
+
+func TestFindConfigFile_SimpleYML(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".markdownlint.yml")
+	if err := os.WriteFile(cfgPath, []byte("MD001: false\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := findConfigFile(dir)
+	if got != cfgPath {
+		t.Errorf("expected %q, got %q", cfgPath, got)
+	}
+}
+
+func TestFindConfigFile_SimpleJSON(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".markdownlint.json")
+	if err := os.WriteFile(cfgPath, []byte(`{"MD001":false}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := findConfigFile(dir)
+	if got != cfgPath {
+		t.Errorf("expected %q, got %q", cfgPath, got)
+	}
+}
+
+func TestFindConfigFile_SimpleJSONC(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".markdownlint.jsonc")
+	if err := os.WriteFile(cfgPath, []byte("// comment\n{\"MD001\":false}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := findConfigFile(dir)
+	if got != cfgPath {
+		t.Errorf("expected %q, got %q", cfgPath, got)
+	}
+}
+
+func TestFindConfigFile_Cli2TakesPriorityOverSimple(t *testing.T) {
+	dir := t.TempDir()
+	cli2Path := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	simplePath := filepath.Join(dir, ".markdownlint.yaml")
+	if err := os.WriteFile(cli2Path, []byte("config: {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(simplePath, []byte("MD001: false\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := findConfigFile(dir)
+	if got != cli2Path {
+		t.Errorf("expected cli2 config %q to take priority, got %q", cli2Path, got)
+	}
+}
+
+func TestLoadConfig_SimpleFormatYAML(t *testing.T) {
+	dir := t.TempDir()
+	content := "MD001: false\nMD013:\n  line_length: 100\n"
+	cfgPath := filepath.Join(dir, ".markdownlint.yaml")
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("expected non-nil config")
+	}
+	if cfg.Config == nil {
+		t.Fatal("expected non-nil config.Config")
+	}
+	if v, ok := cfg.Config["MD001"]; !ok || v != false {
+		t.Errorf("MD001 config = %v, want false", v)
+	}
+	// Simple format has no ignores or overrides.
+	if len(cfg.Ignores) != 0 {
+		t.Errorf("expected no ignores, got %v", cfg.Ignores)
+	}
+}
+
+func TestLoadConfig_SimpleFormatJSON(t *testing.T) {
+	dir := t.TempDir()
+	content := `{"MD001":false,"MD013":{"line_length":100}}`
+	cfgPath := filepath.Join(dir, ".markdownlint.json")
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Config == nil {
+		t.Fatal("expected non-nil config.Config")
+	}
+	if v, ok := cfg.Config["MD001"]; !ok || v != false {
+		t.Errorf("MD001 config = %v, want false", v)
+	}
+}
+
+func TestLoadConfig_SimpleFormatJSONC(t *testing.T) {
+	dir := t.TempDir()
+	content := "// disable MD001\n{\"MD001\":false}"
+	cfgPath := filepath.Join(dir, ".markdownlint.jsonc")
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Config == nil {
+		t.Fatal("expected non-nil config.Config")
+	}
+	if v, ok := cfg.Config["MD001"]; !ok || v != false {
+		t.Errorf("MD001 config = %v, want false", v)
+	}
+}
+
+func TestIsSimpleFormatConfig(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{".markdownlint.yaml", true},
+		{".markdownlint.yml", true},
+		{".markdownlint.json", true},
+		{".markdownlint.jsonc", true},
+		{".markdownlint-cli2.yaml", false},
+		{".markdownlint-cli2.yml", false},
+		{".markdownlint-cli2.json", false},
+		{".markdownlint-cli2.jsonc", false},
+		{"/some/dir/.markdownlint.yaml", true},
+		{"/some/dir/.markdownlint-cli2.yaml", false},
+	}
+	for _, tt := range tests {
+		got := isSimpleFormatConfig(tt.path)
+		if got != tt.want {
+			t.Errorf("isSimpleFormatConfig(%q) = %v, want %v", tt.path, got, tt.want)
+		}
+	}
+}
+
 func TestIsRuleEnabled_DefaultTrue(t *testing.T) {
 	cfg := map[string]interface{}{}
 	if !isRuleEnabled("MD001", cfg) {
