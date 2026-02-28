@@ -406,8 +406,12 @@ func main() {
 // option values (as a JSON object, omitting empty values).
 func printRulesTable(w io.Writer, cfg map[string]interface{}) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "RULE\tALIASES\tENABLED\tOPTIONS")
-	fmt.Fprintln(tw, "----\t-------\t-------\t-------")
+	if _, err := fmt.Fprintln(tw, "RULE\tALIASES\tENABLED\tOPTIONS"); err != nil {
+		return
+	}
+	if _, err := fmt.Fprintln(tw, "----\t-------\t-------\t-------"); err != nil {
+		return
+	}
 	for _, info := range buildAllRulesInfo(cfg) {
 		aliases := ""
 		if ar, ok := info.rule.(lint.AliasedRule); ok {
@@ -418,9 +422,11 @@ func printRulesTable(w io.Writer, cfg map[string]interface{}) {
 			enabled = "false"
 		}
 		options := ruleOptionsJSON(info.rule)
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", info.rule.ID(), aliases, enabled, options)
+		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", info.rule.ID(), aliases, enabled, options); err != nil {
+			return
+		}
 	}
-	tw.Flush()
+	_ = tw.Flush()
 }
 
 // ruleOptionsJSON marshals rule to JSON and returns the result, omitting the
