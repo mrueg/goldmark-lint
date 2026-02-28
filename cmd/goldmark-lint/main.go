@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 
 	"github.com/mrueg/goldmark-lint/lint"
@@ -37,7 +38,10 @@ Config file:
   directory or any parent directory (same discovery as markdownlint-cli2).
 - Supports "config" (rule enable/disable and options), "ignores",
   "overrides" (per-glob rule config overrides), "extends" (inherit
-  configuration from another config file), and "outputFormatters" keys.
+  configuration from another config file), "outputFormatters", "globs"
+  (default input globs), "fix" (enable --fix from config), "frontMatter"
+  (custom front matter regex), and "gitignore" (auto-ignore .gitignore
+  entries) keys.
 
 Exit codes:
 - 0: Linting was successful and there were no errors
@@ -61,11 +65,6 @@ func main() {
 	if *ver {
 		fmt.Println(version)
 		os.Exit(0)
-	}
-
-	if flag.NArg() < 1 {
-		fmt.Fprint(os.Stderr, helpText)
-		os.Exit(2)
 	}
 
 	// Validate --output-format flag if specified.
@@ -92,15 +91,35 @@ func main() {
 		}
 	}
 
+	// Determine the effective input globs: CLI args take priority, then config globs.
+	inputGlobs := flag.Args()
+	if len(inputGlobs) == 0 && cfg != nil && len(cfg.Globs) > 0 {
+		inputGlobs = cfg.Globs
+	}
+	if len(inputGlobs) == 0 {
+		fmt.Fprint(os.Stderr, helpText)
+		os.Exit(2)
+	}
+
 	var ruleCfg map[string]interface{}
 	var ignores []string
 	var overrides []GlobOverride
 	var noInlineConfig bool
+	// effectiveFix is true when --fix is passed on CLI or fix:true is in config.
+	effectiveFix := *fix
 	if cfg != nil {
 		ruleCfg = cfg.Config
 		ignores = cfg.Ignores
 		overrides = cfg.Overrides
 		noInlineConfig = cfg.NoInlineConfig
+		if cfg.Fix {
+			effectiveFix = true
+		}
+		// gitignore: read .gitignore from cwd and add patterns to ignores.
+		if cfg.Gitignore && cwd != "" {
+			gitignorePatterns := parseGitignore(filepath.Join(cwd, ".gitignore"))
+			ignores = append(ignores, gitignorePatterns...)
+		}
 	}
 
 	// Determine the formatter specs to use.
@@ -118,9 +137,18 @@ func main() {
 	// Default linter (used when no overrides are defined or override doesn't match).
 	linter := newLinterFromConfig(ruleCfg)
 	linter.NoInlineConfig = noInlineConfig
+	// frontMatter: set custom front matter regexp on linter if configured.
+	if cfg != nil && cfg.FrontMatter != "" {
+		re, err := regexp.Compile(cfg.FrontMatter)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: invalid frontMatter regex %q: %v\n", cfg.FrontMatter, err)
+			os.Exit(2)
+		}
+		linter.FrontMatterRegexp = re
+	}
 
-	// Load cache (skip when --no-cache or --fix is used).
-	useCache := !*noCache && !*fix
+	// Load cache (skip when --no-cache or fix is used).
+	useCache := !*noCache && !effectiveFix
 	cache := make(lintCache)
 	if useCache && cwd != "" {
 		cache = loadCache(cwd)
@@ -132,6 +160,7 @@ func main() {
 	var allViolations []fileViolation
 
 	// Handle stdin ("-") sequentially – stdin cannot be parallelised.
+	// Stdin can only be requested via CLI args (not config globs).
 	for _, pattern := range flag.Args() {
 		if pattern != "-" {
 			continue
@@ -148,7 +177,7 @@ func main() {
 
 	// Collect all non-stdin files in order so that output remains deterministic.
 	var allFiles []string
-	for _, pattern := range flag.Args() {
+	for _, pattern := range inputGlobs {
 		if pattern == "-" {
 			continue
 		}
@@ -202,10 +231,11 @@ func main() {
 				fileCfg := effectiveConfigForFile(ruleCfg, overrides, file)
 				fileLinter = newLinterFromConfig(fileCfg)
 				fileLinter.NoInlineConfig = noInlineConfig
+				fileLinter.FrontMatterRegexp = linter.FrontMatterRegexp
 			}
 
 			// Apply fixes if requested.
-			if *fix {
+			if effectiveFix {
 				fixed := fileLinter.Fix(source)
 				if err := os.WriteFile(file, fixed, 0644); err != nil {
 					results[i] = fileResult{err: err, errCode: 2}

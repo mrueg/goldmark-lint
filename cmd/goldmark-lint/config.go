@@ -28,6 +28,10 @@ type ConfigFile struct {
 	Overrides        []GlobOverride         `yaml:"overrides"        json:"overrides"`
 	OutputFormatters []interface{}          `yaml:"outputFormatters" json:"outputFormatters"`
 	NoInlineConfig   bool                   `yaml:"noInlineConfig"   json:"noInlineConfig"`
+	Globs            []string               `yaml:"globs"            json:"globs"`
+	Fix              bool                   `yaml:"fix"              json:"fix"`
+	FrontMatter      string                 `yaml:"frontMatter"      json:"frontMatter"`
+	Gitignore        bool                   `yaml:"gitignore"        json:"gitignore"`
 }
 
 var configFileNames = []string{
@@ -115,7 +119,21 @@ func loadConfigResolved(path string, visited map[string]bool) (*ConfigFile, erro
 	if len(cfg.OutputFormatters) > 0 {
 		outputFormatters = cfg.OutputFormatters
 	}
+	// Globs: child overrides base when set; otherwise inherit base globs.
+	globs := baseCfg.Globs
+	if len(cfg.Globs) > 0 {
+		globs = cfg.Globs
+	}
+	// FrontMatter: child overrides base when set.
+	frontMatter := baseCfg.FrontMatter
+	if cfg.FrontMatter != "" {
+		frontMatter = cfg.FrontMatter
+	}
 	merged := &ConfigFile{
+		Globs:            globs,
+		Fix:              baseCfg.Fix || cfg.Fix,
+		FrontMatter:      frontMatter,
+		Gitignore:        baseCfg.Gitignore || cfg.Gitignore,
 		Config:           mergeConfigs(baseCfg.Config, cfg.Config),
 		Ignores:          append(baseCfg.Ignores, cfg.Ignores...),
 		Overrides:        append(baseCfg.Overrides, cfg.Overrides...),
@@ -372,6 +390,25 @@ func effectiveConfigForFile(base map[string]interface{}, overrides []GlobOverrid
 // isIgnored reports whether path matches any of the ignore glob patterns.
 func isIgnored(path string, patterns []string) bool {
 	return matchesAnyPattern(path, patterns)
+}
+
+// parseGitignore reads a .gitignore file and returns glob patterns for files
+// that should be ignored. Comment lines (starting with #) and empty lines are
+// skipped. Negation patterns (starting with !) are also skipped.
+func parseGitignore(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var patterns []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "!") {
+			continue
+		}
+		patterns = append(patterns, line)
+	}
+	return patterns
 }
 
 // matchPath checks whether name matches the glob pattern, supporting ** for

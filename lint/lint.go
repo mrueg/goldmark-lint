@@ -51,9 +51,10 @@ type Document struct {
 
 // Linter holds the list of rules and runs them on documents.
 type Linter struct {
-	Rules    []Rule
-	aliasMap map[string]string // upper(alias) → canonical rule ID
-	NoInlineConfig bool
+	Rules              []Rule
+	aliasMap           map[string]string // upper(alias) → canonical rule ID
+	NoInlineConfig     bool
+	FrontMatterRegexp  *regexp.Regexp    // custom front matter pattern; nil uses default
 }
 
 // NewLinter creates a new Linter with the given rules.
@@ -80,10 +81,23 @@ func (l *Linter) resolveRuleID(name string) string {
 	return upper
 }
 
+// fmEnd returns the byte offset of the end of the front matter block in source,
+// using the custom FrontMatterRegexp if set, otherwise the default YAML --- detection.
+func (l *Linter) fmEnd(source []byte) int {
+	if l.FrontMatterRegexp != nil {
+		loc := l.FrontMatterRegexp.FindIndex(source)
+		if loc != nil && loc[0] == 0 {
+			return loc[1]
+		}
+		return 0
+	}
+	return frontMatterEnd(source)
+}
+
 // Fix applies all fixable rules to source and returns the corrected content.
 // Front matter is preserved unchanged.
 func (l *Linter) Fix(source []byte) []byte {
-	fmEnd := frontMatterEnd(source)
+	fmEnd := l.fmEnd(source)
 	rest := source[fmEnd:]
 	for _, rule := range l.Rules {
 		if fixable, ok := rule.(FixableRule); ok {
@@ -95,8 +109,9 @@ func (l *Linter) Fix(source []byte) []byte {
 
 // Lint parses source and runs all rules on it, returning violations sorted by line.
 func (l *Linter) Lint(source []byte) []Violation {
-	fmFields := parseFrontMatterFields(source)
-	source = stripFrontMatter(source)
+	end := l.fmEnd(source)
+	fmFields := parseFrontMatterFieldsAt(source, end)
+	source = stripFrontMatterAt(source, end)
 
 	reader := text.NewReader(source)
 	md := goldmark.New()
@@ -139,8 +154,12 @@ func (l *Linter) Lint(source []byte) []Violation {
 // parseFrontMatterFields parses the YAML front matter of source and returns a
 // map of simple "key: value" pairs. Only scalar (non-nested) fields are supported.
 func parseFrontMatterFields(source []byte) map[string]string {
+	return parseFrontMatterFieldsAt(source, frontMatterEnd(source))
+}
+
+// parseFrontMatterFieldsAt parses YAML front matter up to end bytes in source.
+func parseFrontMatterFieldsAt(source []byte, end int) map[string]string {
 	fields := make(map[string]string)
-	end := frontMatterEnd(source)
 	if end == 0 {
 		return fields
 	}
@@ -226,7 +245,11 @@ func frontMatterEnd(source []byte) int {
 // replaced by blank lines, preserving line numbers so that violations reported
 // by rules refer to the correct lines in the original file.
 func stripFrontMatter(source []byte) []byte {
-	end := frontMatterEnd(source)
+	return stripFrontMatterAt(source, frontMatterEnd(source))
+}
+
+// stripFrontMatterAt strips the front matter block up to end bytes in source.
+func stripFrontMatterAt(source []byte, end int) []byte {
 	if end == 0 {
 		return source
 	}
