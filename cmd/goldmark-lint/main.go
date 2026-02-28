@@ -20,6 +20,7 @@ https://github.com/mrueg/goldmark-lint
 
 Syntax: goldmark-lint glob0 [glob1] [...] [globN] [--fix] [--help] [--version]
         goldmark-lint - (read from stdin)
+        goldmark-lint --format (read stdin, apply fixes, write stdout)
 
 Glob expressions:
 - * matches any number of characters, but not /
@@ -27,8 +28,11 @@ Glob expressions:
 - ** matches any number of characters, including /
 
 Optional parameters:
+- --config         path to config file (overrides auto-discovery)
 - --fix            updates files to resolve fixable issues
+- --format         read stdin, apply fixes, write stdout
 - --no-cache       disable reading/writing the .markdownlint-cli2-cache file
+- --no-globs       ignore the globs config key at runtime
 - --output-format  output format: default, json, junit, tap (default: default)
 - --help           writes this message to the console and exits without doing anything else
 - --version        prints the version and exits
@@ -50,10 +54,13 @@ Exit codes:
 `
 
 func main() {
+	configPath := flag.String("config", "", "path to config file (overrides auto-discovery)")
 	fix := flag.Bool("fix", false, "updates files to resolve fixable issues")
+	format := flag.Bool("format", false, "read stdin, apply fixes, write stdout")
 	help := flag.Bool("help", false, "writes help message and exits")
 	ver := flag.Bool("version", false, "prints the version and exits")
 	noCache := flag.Bool("no-cache", false, "disable reading/writing the cache file")
+	noGlobs := flag.Bool("no-globs", false, "ignore the globs config key at runtime")
 	outputFormat := flag.String("output-format", "", "output format: default, json, junit, tap")
 	flag.Parse()
 
@@ -77,10 +84,18 @@ func main() {
 		}
 	}
 
-	// Auto-discover config file starting from the current working directory.
+	// Auto-discover config file starting from the current working directory,
+	// or use the explicitly specified --config path.
 	var cfg *ConfigFile
 	cwd, _ := os.Getwd()
-	if cwd != "" {
+	if *configPath != "" {
+		loaded, err := loadConfig(*configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading config %s: %v\n", *configPath, err)
+			os.Exit(2)
+		}
+		cfg = loaded
+	} else if cwd != "" {
 		if cfgPath := findConfigFile(cwd); cfgPath != "" {
 			loaded, err := loadConfig(cfgPath)
 			if err != nil {
@@ -92,11 +107,12 @@ func main() {
 	}
 
 	// Determine the effective input globs: CLI args take priority, then config globs.
+	// When --no-globs is set, config globs are ignored.
 	inputGlobs := flag.Args()
-	if len(inputGlobs) == 0 && cfg != nil && len(cfg.Globs) > 0 {
+	if len(inputGlobs) == 0 && !*noGlobs && cfg != nil && len(cfg.Globs) > 0 {
 		inputGlobs = cfg.Globs
 	}
-	if len(inputGlobs) == 0 {
+	if len(inputGlobs) == 0 && !*format {
 		fmt.Fprint(os.Stderr, helpText)
 		os.Exit(2)
 	}
@@ -152,6 +168,21 @@ func main() {
 	cache := make(lintCache)
 	if useCache && cwd != "" {
 		cache = loadCache(cwd)
+	}
+
+	// --format: read stdin, apply fixes, write stdout, then exit.
+	if *format {
+		source, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
+			os.Exit(2)
+		}
+		fixed := linter.Fix(source)
+		if _, err := os.Stdout.Write(fixed); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing stdout: %v\n", err)
+			os.Exit(2)
+		}
+		os.Exit(0)
 	}
 
 	exitCode := 0

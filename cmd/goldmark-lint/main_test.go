@@ -238,3 +238,99 @@ func TestCLI_ErrorSeverityExitOne(t *testing.T) {
 		t.Errorf("error severity exit code = %d, want 1", exitErr.ExitCode())
 	}
 }
+
+func TestCLI_ConfigFlag(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// A file that triggers MD041 (no top-level heading).
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("Not a heading\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Config disables MD041.
+	cfgPath := filepath.Join(dir, "custom-config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("config:\n  MD041: false\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// With --config pointing to the custom file, MD041 should be disabled, exit 0.
+	cmd := exec.Command(bin, "--config", cfgPath, mdFile)
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 with MD041 disabled via --config, got: %v", err)
+	}
+}
+
+func TestCLI_ConfigFlag_BadPath(t *testing.T) {
+	bin := buildBinary(t)
+	cmd := exec.Command(bin, "--config", "/nonexistent/config.yaml", "somefile.md")
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected non-zero exit for bad --config path, got nil error")
+	}
+	if exitErr.ExitCode() != 2 {
+		t.Errorf("bad --config exit code = %d, want 2", exitErr.ExitCode())
+	}
+}
+
+func TestCLI_Format(t *testing.T) {
+	bin := buildBinary(t)
+	// Input with trailing spaces (MD009) and no final newline (MD047).
+	// --format should apply both fixes.
+	input := "# Heading\n\nContent   \nNo newline at end"
+	cmd := exec.Command(bin, "--format")
+	cmd.Stdin = strings.NewReader(input)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("--format exited with error: %v", err)
+	}
+	want := "# Heading\n\nContent\nNo newline at end\n"
+	if string(out) != want {
+		t.Errorf("--format output = %q, want %q", string(out), want)
+	}
+}
+
+func TestCLI_Format_NoArgs(t *testing.T) {
+	bin := buildBinary(t)
+	// --format alone (no globs needed) should succeed.
+	cmd := exec.Command(bin, "--format")
+	cmd.Stdin = strings.NewReader("# Valid\n\nContent.\n")
+	if err := cmd.Run(); err != nil {
+		t.Errorf("--format with valid input should exit 0, got: %v", err)
+	}
+}
+
+func TestCLI_NoGlobs(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Valid\n\nContent.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Config has globs key that would normally provide input files.
+	cfgPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("globs:\n  - \"*.md\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without --no-globs, config globs are used and exit 0 (valid file).
+	cmd := exec.Command(bin, "--config", cfgPath)
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 using config globs, got: %v", err)
+	}
+
+	// With --no-globs, config globs are ignored; no input files → exit 2.
+	cmd2 := exec.Command(bin, "--config", cfgPath, "--no-globs")
+	cmd2.Dir = dir
+	err := cmd2.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected non-zero exit with --no-globs and no CLI args, got nil error")
+	}
+	if exitErr.ExitCode() != 2 {
+		t.Errorf("--no-globs exit code = %d, want 2", exitErr.ExitCode())
+	}
+}
