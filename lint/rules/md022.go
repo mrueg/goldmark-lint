@@ -15,6 +15,7 @@ type MD022 struct {
 }
 
 func (r MD022) ID() string          { return "MD022" }
+func (r MD022) Aliases() []string   { return []string{"blanks-around-headings"} }
 func (r MD022) Description() string { return "Headings should be surrounded by blank lines" }
 
 func (r MD022) Check(doc *lint.Document) []lint.Violation {

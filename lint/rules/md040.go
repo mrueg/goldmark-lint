@@ -16,6 +16,7 @@ type MD040 struct {
 }
 
 func (r MD040) ID() string          { return "MD040" }
+func (r MD040) Aliases() []string   { return []string{"fenced-code-language"} }
 func (r MD040) Description() string { return "Fenced code blocks should have a language specified" }
 
 // md040FenceRE matches a fenced code block opening line.

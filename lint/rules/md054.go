@@ -17,6 +17,7 @@ type MD054 struct {
 }
 
 func (r MD054) ID() string          { return "MD054" }
+func (r MD054) Aliases() []string   { return []string{"link-image-style"} }
 func (r MD054) Description() string { return "Link and image style" }
 
 func (r MD054) defaults() MD054 {

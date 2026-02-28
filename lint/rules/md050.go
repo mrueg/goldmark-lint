@@ -15,6 +15,7 @@ type MD050 struct {
 }
 
 func (r MD050) ID() string          { return "MD050" }
+func (r MD050) Aliases() []string   { return []string{"strong-style"} }
 func (r MD050) Description() string { return "Strong style should be consistent" }
 
 // md050StarRE matches double-asterisk strong **text**.

@@ -11,6 +11,7 @@ import (
 type MD011 struct{}
 
 func (r MD011) ID() string          { return "MD011" }
+func (r MD011) Aliases() []string   { return []string{"no-reversed-links"} }
 func (r MD011) Description() string { return "Reversed link syntax" }
 
 // reversedLinkRE matches the pattern (text)[url] which is a reversed link.

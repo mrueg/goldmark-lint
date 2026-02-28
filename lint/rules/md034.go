@@ -11,6 +11,7 @@ import (
 type MD034 struct{}
 
 func (r MD034) ID() string          { return "MD034" }
+func (r MD034) Aliases() []string   { return []string{"no-bare-urls"} }
 func (r MD034) Description() string { return "Bare URL used" }
 
 // bareURLRE matches an http or https URL within a string, stopping at whitespace

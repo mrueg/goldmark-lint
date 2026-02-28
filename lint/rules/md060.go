@@ -15,6 +15,7 @@ type MD060 struct {
 }
 
 func (r MD060) ID() string          { return "MD060" }
+func (r MD060) Aliases() []string   { return []string{"table-column-style"} }
 func (r MD060) Description() string { return "Table column style" }
 
 func tableColumnStyle(line string) string {

@@ -15,6 +15,7 @@ type MD055 struct {
 }
 
 func (r MD055) ID() string          { return "MD055" }
+func (r MD055) Aliases() []string   { return []string{"table-pipe-style"} }
 func (r MD055) Description() string { return "Table pipe style" }
 
 func rowPipeStyle(line string) string {

@@ -18,6 +18,7 @@ type MD044 struct {
 }
 
 func (r MD044) ID() string          { return "MD044" }
+func (r MD044) Aliases() []string   { return []string{"proper-names"} }
 func (r MD044) Description() string { return "Proper names should have the correct capitalization" }
 
 func (r MD044) Check(doc *lint.Document) []lint.Violation {

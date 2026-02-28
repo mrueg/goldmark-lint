@@ -10,6 +10,7 @@ import (
 type MD038 struct{}
 
 func (r MD038) ID() string          { return "MD038" }
+func (r MD038) Aliases() []string   { return []string{"no-space-in-code"} }
 func (r MD038) Description() string { return "Spaces inside code span elements" }
 
 // findCodeSpanViolations returns true if the line has a code span with leading

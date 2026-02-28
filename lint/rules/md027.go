@@ -11,6 +11,7 @@ import (
 type MD027 struct{}
 
 func (r MD027) ID() string          { return "MD027" }
+func (r MD027) Aliases() []string   { return []string{"no-multiple-space-blockquote"} }
 func (r MD027) Description() string { return "Multiple spaces after blockquote symbol" }
 
 // md027RE matches a blockquote line where 2+ spaces follow the '>' markers.

@@ -14,6 +14,7 @@ type MD048 struct {
 }
 
 func (r MD048) ID() string          { return "MD048" }
+func (r MD048) Aliases() []string   { return []string{"code-fence-style"} }
 func (r MD048) Description() string { return "Code fence style" }
 
 func (r MD048) Check(doc *lint.Document) []lint.Violation {

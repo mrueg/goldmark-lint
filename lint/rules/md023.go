@@ -11,6 +11,7 @@ import (
 type MD023 struct{}
 
 func (r MD023) ID() string          { return "MD023" }
+func (r MD023) Aliases() []string   { return []string{"heading-start-left"} }
 func (r MD023) Description() string { return "Headings must start at the beginning of the line" }
 
 // md023atxRE matches an ATX heading with 1–3 leading spaces.

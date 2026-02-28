@@ -15,6 +15,7 @@ type MD035 struct {
 }
 
 func (r MD035) ID() string          { return "MD035" }
+func (r MD035) Aliases() []string   { return []string{"hr-style"} }
 func (r MD035) Description() string { return "Horizontal rule style" }
 
 // md035HRRe matches a horizontal rule line (3+ of the same character with optional spaces).

@@ -14,6 +14,7 @@ type MD004 struct {
 }
 
 func (r MD004) ID() string          { return "MD004" }
+func (r MD004) Aliases() []string   { return []string{"ul-style"} }
 func (r MD004) Description() string { return "Unordered list style" }
 
 func (r MD004) Check(doc *lint.Document) []lint.Violation {

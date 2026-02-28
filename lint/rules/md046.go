@@ -14,6 +14,7 @@ type MD046 struct {
 }
 
 func (r MD046) ID() string          { return "MD046" }
+func (r MD046) Aliases() []string   { return []string{"code-block-style"} }
 func (r MD046) Description() string { return "Code block style" }
 
 func (r MD046) Check(doc *lint.Document) []lint.Violation {

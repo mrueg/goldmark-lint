@@ -1405,6 +1405,66 @@ func TestInlineDisable_ConfigureFile_DisableRule(t *testing.T) {
 	}
 }
 
+func TestInlineDisable_ConfigureFile_DisableRuleByAlias(t *testing.T) {
+	// configure-file should accept rule aliases (e.g. "heading-increment" for MD001).
+	src := "<!-- markdownlint-configure-file { \"heading-increment\": false } -->\n# Heading 1\n\n### Heading 3\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	if len(v) != 0 {
+		t.Errorf("expected no violations (configure-file heading-increment:false), got %v", v)
+	}
+}
+
+func TestInlineDisable_ConfigureFile_EnableRuleByAlias(t *testing.T) {
+	// configure-file with true (re-enable) should work with aliases too.
+	src := "<!-- markdownlint-configure-file { \"heading-increment\": true } -->\n# Heading 1\n\n### Heading 3\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	if len(v) == 0 {
+		t.Errorf("expected MD001 violation (configure-file heading-increment:true keeps rule enabled), got none")
+	}
+}
+
+func TestInlineDisable_DisableByAlias(t *testing.T) {
+	// Inline markdownlint-disable should accept rule aliases.
+	src := "<!-- markdownlint-disable heading-increment -->\n# Heading 1\n\n### Heading 3\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	if len(v) != 0 {
+		t.Errorf("expected no violations (disable by alias heading-increment), got %v", v)
+	}
+}
+
+func TestInlineDisable_DisableNextLineByAlias(t *testing.T) {
+	// markdownlint-disable-next-line should accept rule aliases.
+	src := "# Heading 1\n<!-- markdownlint-disable-next-line heading-increment -->\n### Heading 3\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	if len(v) != 0 {
+		t.Errorf("expected no violations (disable-next-line by alias heading-increment), got %v", v)
+	}
+}
+
+func TestInlineDisable_DisableLineByAlias(t *testing.T) {
+	// markdownlint-disable-line should accept rule aliases.
+	src := "# Heading 1\n### Heading 3 <!-- markdownlint-disable-line heading-increment -->\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	if len(v) != 0 {
+		t.Errorf("expected no violations (disable-line by alias heading-increment), got %v", v)
+	}
+}
+
+func TestInlineDisable_DisableFileByAlias(t *testing.T) {
+	// markdownlint-disable-file should accept rule aliases.
+	src := "<!-- markdownlint-disable-file heading-increment -->\n# Heading 1\n\n### Heading 3\n"
+	l := lint.NewLinter(rules.MD001{})
+	v := l.Lint([]byte(src))
+	if len(v) != 0 {
+		t.Errorf("expected no violations (disable-file by alias heading-increment), got %v", v)
+	}
+}
+
 func TestInlineDisable_ConfigureFile_DoesNotDisableOtherRules(t *testing.T) {
 	// configure-file disabling MD001 should not suppress MD009.
 	src := "<!-- markdownlint-configure-file { \"MD001\": false } -->\nTrailing spaces   \n"

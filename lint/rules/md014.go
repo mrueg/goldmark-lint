@@ -10,6 +10,9 @@ import (
 type MD014 struct{}
 
 func (r MD014) ID() string { return "MD014" }
+func (r MD014) Aliases() []string {
+	return []string{"commands-show-output"}
+}
 func (r MD014) Description() string {
 	return "Dollar signs used before commands without showing output"
 }

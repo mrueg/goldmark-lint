@@ -25,6 +25,13 @@ type FixableRule interface {
 	Fix(source []byte) []byte
 }
 
+// AliasedRule is an optional interface for rules that have human-readable
+// aliases (e.g. "heading-increment" for MD001), matching markdownlint aliases.
+type AliasedRule interface {
+	Rule
+	Aliases() []string
+}
+
 // Violation represents a lint violation found in a document.
 type Violation struct {
 	Rule     string
@@ -43,12 +50,32 @@ type Document struct {
 
 // Linter holds the list of rules and runs them on documents.
 type Linter struct {
-	Rules []Rule
+	Rules    []Rule
+	aliasMap map[string]string // upper(alias) → canonical rule ID
 }
 
 // NewLinter creates a new Linter with the given rules.
 func NewLinter(rules ...Rule) *Linter {
-	return &Linter{Rules: rules}
+	aliasMap := make(map[string]string)
+	for _, r := range rules {
+		if ar, ok := r.(AliasedRule); ok {
+			for _, alias := range ar.Aliases() {
+				aliasMap[strings.ToUpper(alias)] = r.ID()
+			}
+		}
+	}
+	return &Linter{Rules: rules, aliasMap: aliasMap}
+}
+
+// resolveRuleID normalises name to a canonical rule ID. If name matches a known
+// alias (case-insensitively), the corresponding rule ID is returned; otherwise
+// name is returned uppercased (IDs are always stored uppercased).
+func (l *Linter) resolveRuleID(name string) string {
+	upper := strings.ToUpper(name)
+	if id, ok := l.aliasMap[upper]; ok {
+		return id
+	}
+	return upper
 }
 
 // Fix applies all fixable rules to source and returns the corrected content.
@@ -79,7 +106,7 @@ func (l *Linter) Lint(source []byte) []Violation {
 		AST:    node,
 	}
 
-	disabled := parseInlineDisables(lines)
+	disabled := parseInlineDisables(lines, l.resolveRuleID)
 
 	var violations []Violation
 	for _, rule := range l.Rules {
@@ -185,8 +212,10 @@ func splitLines(source []byte) []string {
 
 // markdownlintCommentRE matches markdownlint inline disable/enable comments.
 // It captures the command and optional rule IDs.
+// Rule names and aliases may contain hyphens (e.g. "heading-increment"), so
+// [\w-]+ is used instead of \w+.
 var markdownlintCommentRE = regexp.MustCompile(
-	`<!--\s*markdownlint-(disable-next-line|disable-line|disable-file|enable-file|disable|enable|capture|restore)((?:\s+\w+)*)\s*-->`,
+	`<!--\s*markdownlint-(disable-next-line|disable-line|disable-file|enable-file|disable|enable|capture|restore)((?:\s+[\w-]+)*)\s*-->`,
 )
 
 // markdownlintConfigureFileRE matches markdownlint-configure-file comments
@@ -219,18 +248,19 @@ func parseConfigureFileComment(source string) string {
 
 // applyConfigureFile parses a markdownlint-configure-file JSON payload and returns
 // file-level disable/enable overrides. Values of false disable a rule; true enables it.
-func applyConfigureFile(jsonPayload string, fileDis *disableSet) {
+func applyConfigureFile(jsonPayload string, fileDis *disableSet, resolve func(string) string) {
 	var cfg map[string]interface{}
 	if err := json.Unmarshal([]byte(jsonPayload), &cfg); err != nil {
 		return
 	}
 	for key, val := range cfg {
+		id := resolve(key)
 		switch v := val.(type) {
 		case bool:
 			if !v {
-				fileDis.rules[strings.ToUpper(key)] = true
+				fileDis.rules[id] = true
 			} else {
-				delete(fileDis.rules, strings.ToUpper(key))
+				delete(fileDis.rules, id)
 			}
 		}
 	}
@@ -258,7 +288,8 @@ func copyDisableSet(d disableSet) disableSet {
 
 // parseInlineDisables scans source lines for markdownlint inline disable
 // comments and returns a per-line (0-based) slice of disableSet values.
-func parseInlineDisables(lines []string) []disableSet {
+// resolve maps a rule name (alias or ID) to its canonical uppercase rule ID.
+func parseInlineDisables(lines []string, resolve func(string) string) []disableSet {
 	n := len(lines)
 	result := make([]disableSet, n)
 	for i := range result {
@@ -273,7 +304,7 @@ func parseInlineDisables(lines []string) []disableSet {
 	fileConfig := disableSet{rules: make(map[string]bool)}
 	fullSource := strings.Join(lines, "\n")
 	if payload := parseConfigureFileComment(fullSource); payload != "" {
-		applyConfigureFile(payload, &fileConfig)
+		applyConfigureFile(payload, &fileConfig, resolve)
 	}
 	for _, line := range lines {
 		cmd, ruleIDs := parseMarkdownlintComment(line)
@@ -283,7 +314,7 @@ func parseInlineDisables(lines []string) []disableSet {
 				fileDisable.all = true
 			} else {
 				for _, r := range ruleIDs {
-					fileDisable.rules[r] = true
+					fileDisable.rules[resolve(r)] = true
 				}
 			}
 		case "enable-file":
@@ -291,7 +322,7 @@ func parseInlineDisables(lines []string) []disableSet {
 				fileDisable = disableSet{rules: make(map[string]bool)}
 			} else {
 				for _, r := range ruleIDs {
-					delete(fileDisable.rules, r)
+					delete(fileDisable.rules, resolve(r))
 				}
 			}
 		}
@@ -311,7 +342,7 @@ func parseInlineDisables(lines []string) []disableSet {
 				current.all = true
 			} else {
 				for _, r := range ruleIDs {
-					current.rules[r] = true
+					current.rules[resolve(r)] = true
 				}
 			}
 		case "enable":
@@ -319,7 +350,7 @@ func parseInlineDisables(lines []string) []disableSet {
 				current = disableSet{rules: make(map[string]bool)}
 			} else {
 				for _, r := range ruleIDs {
-					delete(current.rules, r)
+					delete(current.rules, resolve(r))
 				}
 			}
 		case "capture":
@@ -362,7 +393,7 @@ func parseInlineDisables(lines []string) []disableSet {
 				result[i].all = true
 			} else {
 				for _, r := range ruleIDs {
-					result[i].rules[r] = true
+					result[i].rules[resolve(r)] = true
 				}
 			}
 		}
@@ -374,7 +405,7 @@ func parseInlineDisables(lines []string) []disableSet {
 				extra.all = true
 			} else {
 				for _, r := range ruleIDs {
-					extra.rules[r] = true
+					extra.rules[resolve(r)] = true
 				}
 			}
 			nextLineExtra = &extra

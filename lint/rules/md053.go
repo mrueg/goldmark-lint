@@ -13,6 +13,7 @@ type MD053 struct {
 }
 
 func (r MD053) ID() string          { return "MD053" }
+func (r MD053) Aliases() []string   { return []string{"link-image-reference-definitions"} }
 func (r MD053) Description() string { return "Link and image reference definitions should be needed" }
 
 func (r MD053) ignoredDefs() map[string]bool {

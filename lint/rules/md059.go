@@ -14,6 +14,7 @@ type MD059 struct {
 }
 
 func (r MD059) ID() string          { return "MD059" }
+func (r MD059) Aliases() []string   { return []string{"descriptive-link-text"} }
 func (r MD059) Description() string { return "Link text should be descriptive" }
 
 func (r MD059) prohibited() []string {

@@ -15,6 +15,7 @@ type MD030 struct {
 }
 
 func (r MD030) ID() string          { return "MD030" }
+func (r MD030) Aliases() []string   { return []string{"list-marker-space"} }
 func (r MD030) Description() string { return "Spaces after list markers" }
 
 // md030FullRE captures marker type and the spaces following it.

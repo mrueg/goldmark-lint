@@ -14,6 +14,7 @@ type MD007 struct {
 }
 
 func (r MD007) ID() string          { return "MD007" }
+func (r MD007) Aliases() []string   { return []string{"ul-indent"} }
 func (r MD007) Description() string { return "Unordered list indentation" }
 
 // unorderedListMarkers holds the valid unordered list marker bytes.

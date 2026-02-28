@@ -14,6 +14,7 @@ type MD026 struct {
 }
 
 func (r MD026) ID() string          { return "MD026" }
+func (r MD026) Aliases() []string   { return []string{"no-trailing-punctuation"} }
 func (r MD026) Description() string { return "Trailing punctuation in heading" }
 
 const defaultMD026Punctuation = ".,;:!?"

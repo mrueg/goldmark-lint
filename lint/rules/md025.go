@@ -14,6 +14,7 @@ type MD025 struct {
 }
 
 func (r MD025) ID() string          { return "MD025" }
+func (r MD025) Aliases() []string   { return []string{"single-h1", "single-title"} }
 func (r MD025) Description() string { return "Multiple top-level headings in the same document" }
 
 func (r MD025) Check(doc *lint.Document) []lint.Violation {

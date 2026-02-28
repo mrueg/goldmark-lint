@@ -16,6 +16,9 @@ type MD052 struct {
 }
 
 func (r MD052) ID() string { return "MD052" }
+func (r MD052) Aliases() []string {
+	return []string{"reference-links-images"}
+}
 func (r MD052) Description() string {
 	return "Reference links and images should use a label that is defined"
 }

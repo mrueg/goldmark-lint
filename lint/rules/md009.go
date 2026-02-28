@@ -14,6 +14,7 @@ type MD009 struct {
 }
 
 func (r MD009) ID() string          { return "MD009" }
+func (r MD009) Aliases() []string   { return []string{"no-trailing-spaces"} }
 func (r MD009) Description() string { return "Trailing spaces" }
 
 func (r MD009) Fix(source []byte) []byte {

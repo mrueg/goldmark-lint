@@ -10,7 +10,8 @@ import (
 // MD001 checks that heading levels only increment by one level at a time.
 type MD001 struct{}
 
-func (r MD001) ID() string { return "MD001" }
+func (r MD001) ID() string          { return "MD001" }
+func (r MD001) Aliases() []string   { return []string{"heading-increment"} }
 func (r MD001) Description() string {
 	return "Heading levels should only increment by one level at a time"
 }
