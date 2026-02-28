@@ -1037,8 +1037,27 @@ func TestLoadConfig_Gitignore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !cfg.Gitignore {
-		t.Errorf("expected Gitignore=true, got false")
+	if !gitignoreIsEnabled(cfg.Gitignore) {
+		t.Errorf("expected Gitignore enabled, got %v", cfg.Gitignore)
+	}
+}
+
+func TestLoadConfig_Gitignore_String(t *testing.T) {
+	dir := t.TempDir()
+	content := "gitignore: \"**/.gitignore\"\n"
+	cfgPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !gitignoreIsEnabled(cfg.Gitignore) {
+		t.Errorf("expected Gitignore enabled, got %v", cfg.Gitignore)
+	}
+	if gitignoreGlobPattern(cfg.Gitignore) != "**/.gitignore" {
+		t.Errorf("expected glob pattern **/.gitignore, got %q", gitignoreGlobPattern(cfg.Gitignore))
 	}
 }
 
@@ -1064,6 +1083,81 @@ func TestParseGitignore_NotFound(t *testing.T) {
 	patterns := parseGitignore("/nonexistent/.gitignore")
 	if patterns != nil {
 		t.Errorf("expected nil for missing .gitignore, got %v", patterns)
+	}
+}
+
+func TestFindGitRoot(t *testing.T) {
+	dir := t.TempDir()
+	// No .git → should return "".
+	if got := findGitRoot(dir); got != "" {
+		t.Errorf("findGitRoot with no .git = %q, want \"\"", got)
+	}
+
+	// Create a .git directory at the root.
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(dir, "sub")
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// From sub-directory, should find dir as git root.
+	if got := findGitRoot(sub); got != dir {
+		t.Errorf("findGitRoot from sub = %q, want %q", got, dir)
+	}
+	// From root itself, should find dir.
+	if got := findGitRoot(dir); got != dir {
+		t.Errorf("findGitRoot from root = %q, want %q", got, dir)
+	}
+}
+
+func TestCollectGitignorePatterns(t *testing.T) {
+	root := t.TempDir()
+	// Set up: root/.git, root/.gitignore, root/sub/.gitignore
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("root-ignored/\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(root, "sub")
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, ".gitignore"), []byte("sub-ignored/\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Collecting from sub should return patterns from both sub and root.
+	patterns := collectGitignorePatterns(sub)
+	if len(patterns) != 2 {
+		t.Fatalf("expected 2 patterns, got %d: %v", len(patterns), patterns)
+	}
+	if patterns[0] != "sub-ignored/" || patterns[1] != "root-ignored/" {
+		t.Errorf("patterns = %v, want [sub-ignored/ root-ignored/]", patterns)
+	}
+}
+
+func TestFindFilesMatchingGlob(t *testing.T) {
+	root := t.TempDir()
+	// Create root/.gitignore and root/sub/.gitignore and root/sub/other.txt
+	sub := filepath.Join(root, "sub")
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, ".gitignore"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "other.txt"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	matches := findFilesMatchingGlob(root, "**/.gitignore")
+	if len(matches) != 2 {
+		t.Fatalf("expected 2 matches, got %d: %v", len(matches), matches)
 	}
 }
 
@@ -1213,6 +1307,71 @@ func TestCLI_GitignoreFromConfig(t *testing.T) {
 	cmd.Dir = dir
 	if err := cmd.Run(); err != nil {
 		t.Errorf("expected exit 0 for file ignored via .gitignore, got: %v", err)
+	}
+}
+
+func TestCLI_GitignoreFromConfig_WalkUp(t *testing.T) {
+	bin := buildBinary(t)
+
+	root := t.TempDir()
+	// Simulate a git repository root with .git present.
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Root .gitignore ignores the file.
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("ignored.md\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sub-directory that has no .gitignore of its own.
+	sub := filepath.Join(root, "docs")
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// The file is in the sub-directory.
+	mdFile := filepath.Join(sub, "ignored.md")
+	if err := os.WriteFile(mdFile, []byte("Not a heading\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Config lives in the sub-directory with gitignore:true.
+	cfgContent := "gitignore: true\n"
+	if err := os.WriteFile(filepath.Join(sub, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = sub
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 for file ignored via parent .gitignore, got: %v", err)
+	}
+}
+
+func TestCLI_GitignoreFromConfig_StringGlob(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// Sub-directory with its own .gitignore that ignores the md file.
+	sub := filepath.Join(dir, "sub")
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	mdFile := filepath.Join(sub, "ignored.md")
+	if err := os.WriteFile(mdFile, []byte("Not a heading\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, ".gitignore"), []byte("ignored.md\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Config uses gitignore as a glob string.
+	cfgContent := "gitignore: \"**/.gitignore\"\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 for file ignored via gitignore glob string, got: %v", err)
 	}
 }
 

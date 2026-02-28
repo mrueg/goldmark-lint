@@ -134,10 +134,18 @@ func main() {
 		if cfg.Fix {
 			effectiveFix = true
 		}
-		// gitignore: read .gitignore from cwd and add patterns to ignores.
-		if cfg.Gitignore && cwd != "" {
-			gitignorePatterns := parseGitignore(filepath.Join(cwd, ".gitignore"))
-			ignores = append(ignores, gitignorePatterns...)
+		// gitignore: read .gitignore files and add patterns to ignores.
+		if gitignoreIsEnabled(cfg.Gitignore) && cwd != "" {
+			pattern := gitignoreGlobPattern(cfg.Gitignore)
+			if pattern == "" {
+				// bool true: walk from cwd up to the git repository root.
+				ignores = append(ignores, collectGitignorePatterns(cwd)...)
+			} else {
+				// string: use the glob pattern to find gitignore files.
+				for _, f := range findFilesMatchingGlob(cwd, pattern) {
+					ignores = append(ignores, parseGitignore(f)...)
+				}
+			}
 		}
 	}
 
