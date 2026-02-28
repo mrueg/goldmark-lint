@@ -43,7 +43,8 @@ type Document struct {
 
 // Linter holds the list of rules and runs them on documents.
 type Linter struct {
-	Rules []Rule
+	Rules          []Rule
+	NoInlineConfig bool
 }
 
 // NewLinter creates a new Linter with the given rules.
@@ -79,7 +80,10 @@ func (l *Linter) Lint(source []byte) []Violation {
 		AST:    node,
 	}
 
-	disabled := parseInlineDisables(lines)
+	var disabled []disableSet
+	if !l.NoInlineConfig {
+		disabled = parseInlineDisables(lines)
+	}
 
 	var violations []Violation
 	for _, rule := range l.Rules {

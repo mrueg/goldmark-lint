@@ -759,3 +759,65 @@ func TestCLI_ConfigRuleOptions(t *testing.T) {
 		t.Errorf("expected exit 0 with line_length:100 config, got: %v", err)
 	}
 }
+
+func TestLoadConfig_NoInlineConfig(t *testing.T) {
+	dir := t.TempDir()
+	content := "noInlineConfig: true\n"
+	cfgPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.NoInlineConfig {
+		t.Errorf("expected NoInlineConfig=true, got false")
+	}
+}
+
+func TestCLI_NoInlineConfig_IgnoresDisableComment(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// File has an inline disable comment that would suppress MD001 without noInlineConfig.
+	// Use config to limit active rules to MD001 only so other rules don't interfere.
+	mdFile := filepath.Join(dir, "test.md")
+	content := "<!-- markdownlint-disable MD001 -->\n# Heading 1\n\n### Heading 3\n"
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfgContent := "noInlineConfig: true\nconfig:\n  default: false\n  MD001: true\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err == nil {
+		t.Errorf("expected exit 1 (violations present when noInlineConfig:true ignores disable comment)")
+	}
+}
+
+func TestCLI_NoInlineConfig_False_HonorsDisableComment(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// Same file but without noInlineConfig - the disable comment is honored.
+	// Use config to limit active rules to MD001 only so other rules don't interfere.
+	mdFile := filepath.Join(dir, "test.md")
+	content := "<!-- markdownlint-disable MD001 -->\n# Heading 1\n\n### Heading 3\n"
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfgContent := "config:\n  default: false\n  MD001: true\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 when disable comment is honored, got: %v", err)
+	}
+}
