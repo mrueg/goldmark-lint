@@ -8,7 +8,12 @@ import (
 )
 
 // MD001 checks that heading levels only increment by one level at a time.
-type MD001 struct{}
+type MD001 struct {
+	// FrontMatterTitle is a field name or regex pattern used to identify a
+	// title in YAML front matter that counts as an h1 heading. If empty,
+	// "title" is used. Set to an empty string to disable (use "^$").
+	FrontMatterTitle string `json:"front_matter_title"`
+}
 
 func (r MD001) ID() string { return "MD001" }
 func (r MD001) Description() string {
@@ -18,6 +23,11 @@ func (r MD001) Description() string {
 func (r MD001) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	prevLevel := 0
+
+	// If the front matter contains a title, treat it as an h1.
+	if frontMatterHasTitle(doc, r.FrontMatterTitle) {
+		prevLevel = 1
+	}
 
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {

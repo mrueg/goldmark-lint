@@ -8,7 +8,11 @@ import (
 )
 
 // MD027 checks for multiple spaces after blockquote symbols.
-type MD027 struct{}
+type MD027 struct {
+	// ListItems controls whether the rule is applied to blockquotes within
+	// list items (default true). Set to false to disable for list items.
+	ListItems *bool `json:"list_items"`
+}
 
 func (r MD027) ID() string          { return "MD027" }
 func (r MD027) Description() string { return "Multiple spaces after blockquote symbol" }
@@ -17,11 +21,19 @@ func (r MD027) Description() string { return "Multiple spaces after blockquote s
 // Group 1: optional leading spaces + one or more '>' characters.
 var md027RE = regexp.MustCompile(`^( {0,3}>+) {2,}`)
 
+// md027ListItemRE matches a list item continuation prefix (spaces before blockquote).
+var md027ListItemRE = regexp.MustCompile(`^ {2,}`)
+
 func (r MD027) Check(doc *lint.Document) []lint.Violation {
+	checkListItems := r.ListItems == nil || *r.ListItems
 	var violations []lint.Violation
 	mask := fencedCodeBlockMask(doc.Lines)
 	for i, line := range doc.Lines {
 		if mask[i] {
+			continue
+		}
+		if !checkListItems && md027ListItemRE.MatchString(line) {
+			// Line is indented (likely a list item); skip.
 			continue
 		}
 		if md027RE.MatchString(line) {

@@ -21,6 +21,13 @@ type MD013 struct {
 	Tables *bool `json:"tables"`
 	// Headings controls whether heading lines are checked (default true).
 	Headings *bool `json:"headings"`
+	// Strict enforces line_length for all contexts, ignoring the separate
+	// heading_line_length and code_block_line_length limits (default false).
+	Strict bool `json:"strict"`
+	// Stern disables URL exemption: when false (default), lines that exceed
+	// the limit only due to a URL are not reported. When true, all lines are
+	// checked by their full length including any URLs.
+	Stern bool `json:"stern"`
 }
 
 func (r MD013) ID() string          { return "MD013" }
@@ -32,11 +39,11 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 		defaultLimit = 80
 	}
 	headingLimit := r.HeadingLineLength
-	if headingLimit == 0 {
+	if r.Strict || headingLimit == 0 {
 		headingLimit = defaultLimit
 	}
 	codeBlockLimit := r.CodeBlockLineLength
-	if codeBlockLimit == 0 {
+	if r.Strict || codeBlockLimit == 0 {
 		codeBlockLimit = defaultLimit
 	}
 

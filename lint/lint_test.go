@@ -1702,3 +1702,239 @@ func TestFrontMatter_Fix_PreservesFrontMatter(t *testing.T) {
 		t.Errorf("Fix() = %q, want %q", got, want)
 	}
 }
+
+// --- New option tests ---
+
+func TestMD001_FrontMatterTitle(t *testing.T) {
+	// When front_matter_title is set and front matter has a title field,
+	// an h2 as the first heading should NOT trigger MD001 (h1 is implied).
+	src := "---\ntitle: My Page\n---\n\n## Heading 2\n"
+	v := lintString(t, rules.MD001{FrontMatterTitle: "title"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations with front_matter_title set, got %v", v)
+	}
+}
+
+func TestMD001_FrontMatterTitle_Disabled(t *testing.T) {
+	// Without front_matter_title, a jump from (implied) h0 to h2 is not checked
+	// but h2->h3->... should still be checked.
+	src := "---\ntitle: My Page\n---\n\n## Heading 2\n\n#### Heading 4\n"
+	v := lintString(t, rules.MD001{}, src)
+	// h2->h4 is a skip; violation expected.
+	if len(v) == 0 {
+		t.Errorf("expected violations for h2->h4 skip, got none")
+	}
+}
+
+func TestMD003_ATXClosed(t *testing.T) {
+	// Closed ATX headings should be detected as "atx_closed".
+	src := "## Heading ##\n\n### Sub heading ###\n"
+	v := lintString(t, rules.MD003{Style: "atx_closed"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for atx_closed style, got %v", v)
+	}
+}
+
+func TestMD003_ATXClosed_Invalid(t *testing.T) {
+	// Open ATX headings should trigger a violation when atx_closed is required.
+	src := "## Heading\n"
+	v := lintString(t, rules.MD003{Style: "atx_closed"}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for open ATX when atx_closed required, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD003_SetextWithATXClosed(t *testing.T) {
+	// setext_with_atx_closed: h1/h2 use setext, h3+ use atx_closed.
+	src := "Heading 1\n=========\n\n### Heading 3 ###\n"
+	v := lintString(t, rules.MD003{Style: "setext_with_atx_closed"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for setext_with_atx_closed, got %v", v)
+	}
+}
+
+func TestMD004_Sublist(t *testing.T) {
+	// sublist style: each nesting level uses a different marker.
+	// Level 0: dash, level 1: asterisk, level 2: plus.
+	src := "- item1\n  * sub-item\n- item2\n"
+	v := lintString(t, rules.MD004{Style: "sublist"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for sublist style, got %v", v)
+	}
+}
+
+func TestMD004_Sublist_Invalid(t *testing.T) {
+	// Both top-level items use dash (correct), but nesting level should be asterisk.
+	src := "- item1\n  - wrong-sub\n"
+	v := lintString(t, rules.MD004{Style: "sublist"}, src)
+	if len(v) == 0 {
+		t.Errorf("expected violations for wrong sublist marker, got none")
+	}
+}
+
+func TestMD007_StartIndented(t *testing.T) {
+	// With start_indented=true, top-level items must be indented by indent spaces.
+	src := "  - item1\n    - sub-item\n"
+	v := lintString(t, rules.MD007{Indent: 2, StartIndented: true}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for start_indented, got %v", v)
+	}
+}
+
+func TestMD007_StartIndent(t *testing.T) {
+	// With start_indented=true and start_indent=4, top-level must start at 4 spaces.
+	src := "    - item1\n      - sub-item\n"
+	v := lintString(t, rules.MD007{Indent: 2, StartIndented: true, StartIndent: 4}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for start_indent=4, got %v", v)
+	}
+}
+
+func TestMD009_CodeBlocks_Disabled(t *testing.T) {
+	f := false
+	src := "```\ncode with trailing   \n```\n"
+	v := lintString(t, rules.MD009{CodeBlocks: &f}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations in code block when code_blocks=false, got %v", v)
+	}
+}
+
+func TestMD009_Strict(t *testing.T) {
+	// Strict mode: br_spaces are also disallowed.
+	src := "Hard line break  \n"
+	v := lintString(t, rules.MD009{Strict: true}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation in strict mode, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD010_CodeBlocks_Disabled(t *testing.T) {
+	f := false
+	src := "```\ncode\twith tab\n```\n"
+	v := lintString(t, rules.MD010{CodeBlocks: &f}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations in code block when code_blocks=false, got %v", v)
+	}
+}
+
+func TestMD010_IgnoreCodeLanguages(t *testing.T) {
+	src := "```makefile\nrule:\n\tcommand\n```\n"
+	v := lintString(t, rules.MD010{IgnoreCodeLanguages: []string{"makefile"}}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for ignored language, got %v", v)
+	}
+}
+
+func TestMD013_Strict(t *testing.T) {
+	// strict=true: heading_line_length is ignored; line_length applies everywhere.
+	heading := "# " + strings.Repeat("a", 79) + "\n"
+	src := heading
+	// With strict=true and line_length=80: heading of 82 chars should trigger.
+	v := lintString(t, rules.MD013{LineLength: 80, HeadingLineLength: 200, Strict: true}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation with strict=true, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD022_LinesAboveArray(t *testing.T) {
+	// Per-level: h1 needs 0 blank lines above (since it's first), h2 needs 2.
+	src := "# Heading 1\n\n\n## Heading 2\n\nText\n"
+	v := lintString(t, rules.MD022{LinesAbove: rules.IntOrArray{0, 2}}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations with per-level LinesAbove, got %v", v)
+	}
+}
+
+func TestMD025_FrontMatterTitle(t *testing.T) {
+	// front_matter_title: document with front matter title + one h1 = no duplicate.
+	src := "---\ntitle: My Page\n---\n\n# Heading 1\n"
+	v := lintString(t, rules.MD025{FrontMatterTitle: "title"}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation (front matter title + h1 = 2 top-level headings), got %d: %v", len(v), v)
+	}
+}
+
+func TestMD026_DefaultPunctuation(t *testing.T) {
+	// Default punctuation should include full-width chars.
+	src := "# Heading。\n"
+	v := lintString(t, rules.MD026{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for full-width period with default punctuation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD026_NoPunctuationQuestion(t *testing.T) {
+	// The default no longer includes '?' - it should not trigger a violation.
+	src := "# Heading?\n"
+	v := lintString(t, rules.MD026{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for '?' with default punctuation (not included), got %v", v)
+	}
+}
+
+func TestMD027_ListItems_Disabled(t *testing.T) {
+	// list_items=false: skip blockquote check for indented (list item) lines.
+	f := false
+	src := "- item\n  >  block quote with spaces\n"
+	v := lintString(t, rules.MD027{ListItems: &f}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations when list_items=false for indented blockquote, got %v", v)
+	}
+}
+
+func TestMD030_ULMulti(t *testing.T) {
+	// ul_multi=2: multi-line UL items should have 2 spaces after marker.
+	src := "-  Item 1\n\n   Continuation\n"
+	v := lintString(t, rules.MD030{ULSingle: 1, ULMulti: 2}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for ul_multi=2 with multi-line item, got %v", v)
+	}
+}
+
+func TestMD031_ListItems_Disabled(t *testing.T) {
+	// list_items=false: skip fenced code block blank-line check inside list items.
+	f := false
+	src := "- item\n  ```go\n  code\n  ```\n- item2\n"
+	v := lintString(t, rules.MD031{ListItems: &f}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations when list_items=false for code block in list, got %v", v)
+	}
+}
+
+func TestMD033_TableAllowedElements(t *testing.T) {
+	// table_allowed_elements: <br> is allowed inside table cells.
+	// Without table_allowed_elements, <br> in a table cell triggers MD033.
+	// With it, no violation.
+	src := "| Col |\n| ---- |\n| text<br>text |\n"
+	v := lintString(t, rules.MD033{TableAllowedElements: []string{"br"}}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for table_allowed_elements, got %v", v)
+	}
+}
+
+func TestMD041_FrontMatterTitle(t *testing.T) {
+	// front_matter_title: front matter with title satisfies MD041.
+	src := "---\ntitle: My Page\n---\n\nSome content\n"
+	v := lintString(t, rules.MD041{FrontMatterTitle: "title"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations when front_matter_title matches, got %v", v)
+	}
+}
+
+func TestMD041_AllowPreamble(t *testing.T) {
+	// allow_preamble=true: non-heading content before heading is allowed.
+	src := "Some preamble text.\n\n# Heading\n"
+	v := lintString(t, rules.MD041{AllowPreamble: true}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations with allow_preamble=true, got %v", v)
+	}
+}
+
+func TestMD041_AllowPreamble_Invalid(t *testing.T) {
+	// allow_preamble=true but no heading at all: should trigger.
+	src := "Some preamble text.\n\nMore text.\n"
+	v := lintString(t, rules.MD041{AllowPreamble: true}, src)
+	if len(v) == 0 {
+		t.Errorf("expected violations when allow_preamble=true but no heading exists, got none")
+	}
+}

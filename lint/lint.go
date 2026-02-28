@@ -36,9 +36,10 @@ type Violation struct {
 
 // Document holds the parsed markdown document along with source.
 type Document struct {
-	Source []byte
-	Lines  []string
-	AST    ast.Node
+	Source            []byte
+	Lines             []string
+	AST               ast.Node
+	FrontMatterFields map[string]string // key-value pairs from YAML front matter, if any
 }
 
 // Linter holds the list of rules and runs them on documents.
@@ -67,6 +68,7 @@ func (l *Linter) Fix(source []byte) []byte {
 
 // Lint parses source and runs all rules on it, returning violations sorted by line.
 func (l *Linter) Lint(source []byte) []Violation {
+	fmFields := parseFrontMatterFields(source)
 	source = stripFrontMatter(source)
 
 	reader := text.NewReader(source)
@@ -75,9 +77,10 @@ func (l *Linter) Lint(source []byte) []Violation {
 
 	lines := splitLines(source)
 	doc := &Document{
-		Source: source,
-		Lines:  lines,
-		AST:    node,
+		Source:            source,
+		Lines:             lines,
+		AST:               node,
+		FrontMatterFields: fmFields,
 	}
 
 	var disabled []disableSet
@@ -106,7 +109,51 @@ func (l *Linter) Lint(source []byte) []Violation {
 	return violations
 }
 
-// frontMatterEnd returns the byte offset of the first byte after the YAML
+// parseFrontMatterFields parses the YAML front matter of source and returns a
+// map of simple "key: value" pairs. Only scalar (non-nested) fields are supported.
+func parseFrontMatterFields(source []byte) map[string]string {
+	fields := make(map[string]string)
+	end := frontMatterEnd(source)
+	if end == 0 {
+		return fields
+	}
+	// Skip the opening "---\n" line.
+	start := bytes.IndexByte(source, '\n')
+	if start < 0 {
+		return fields
+	}
+	start++ // skip past opening newline
+	for start < end {
+		next := bytes.IndexByte(source[start:], '\n')
+		var lineEnd int
+		if next < 0 {
+			lineEnd = end
+		} else {
+			lineEnd = start + next
+		}
+		line := strings.TrimRight(string(source[start:lineEnd]), "\r")
+		if line == "---" || line == "..." {
+			break
+		}
+		if idx := strings.Index(line, ":"); idx > 0 {
+			key := strings.TrimSpace(line[:idx])
+			val := strings.TrimSpace(line[idx+1:])
+			// Strip surrounding quotes.
+			if len(val) >= 2 &&
+				((val[0] == '"' && val[len(val)-1] == '"') ||
+					(val[0] == '\'' && val[len(val)-1] == '\'')) {
+				val = val[1 : len(val)-1]
+			}
+			fields[key] = val
+		}
+		if next < 0 {
+			break
+		}
+		start = lineEnd + 1
+	}
+	return fields
+}
+
 // front matter block, or 0 if the source does not begin with valid front matter.
 // Front matter starts with "---" on the very first line and ends with a line
 // containing only "---" or "...".
