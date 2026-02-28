@@ -31,15 +31,16 @@ Glob expressions:
 - ** matches any number of characters, including /
 
 Optional parameters:
-- --config         path to config file (overrides auto-discovery)
-- --fix            updates files to resolve fixable issues
-- --format         read stdin, apply fixes, write stdout
-- --list-rules     print a table of all rules with their aliases, enabled/disabled state, and options
-- --no-cache       disable reading/writing the .markdownlint-cli2-cache file
-- --no-globs       ignore the globs config key at runtime
-- --output-format  output format: default, json, junit, tap, sarif (default: default)
-- --help           writes this message to the console and exits without doing anything else
-- --version        prints the version and exits
+- --config           path to config file (overrides auto-discovery)
+- --fail-on-warning  exit with code 1 even when all violations are warnings
+- --fix              updates files to resolve fixable issues
+- --format           read stdin, apply fixes, write stdout
+- --list-rules       print a table of all rules with their aliases, enabled/disabled state, and options
+- --no-cache         disable reading/writing the .markdownlint-cli2-cache file
+- --no-globs         ignore the globs config key at runtime
+- --output-format    output format: default, json, junit, tap, sarif (default: default)
+- --help             writes this message to the console and exits without doing anything else
+- --version          prints the version and exits
 
 Config file:
 - Reads .markdownlint-cli2.yaml (or .yml, .jsonc, .json) from the current
@@ -62,6 +63,7 @@ Exit codes:
 
 func main() {
 	configPath := flag.String("config", "", "path to config file (overrides auto-discovery)")
+	failOnWarning := flag.Bool("fail-on-warning", false, "exit with code 1 even when all violations are warnings")
 	fix := flag.Bool("fix", false, "updates files to resolve fixable issues")
 	format := flag.Bool("format", false, "read stdin, apply fixes, write stdout")
 	help := flag.Bool("help", false, "writes help message and exits")
@@ -337,7 +339,7 @@ func main() {
 	if exitCode < 1 {
 		for _, fv := range allViolations {
 			for _, v := range fv.Violations {
-				if v.Severity != "warning" {
+				if v.Severity != "warning" || *failOnWarning {
 					exitCode = 1
 					break
 				}

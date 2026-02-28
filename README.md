@@ -18,6 +18,7 @@ select rules.
   - [Inline disable comments](#inline-disable-comments)
   - [Supported rule options](#supported-rule-options)
 - [Features](#features)
+- [Additional features over markdownlint-cli2](#additional-features-over-markdownlint-cli2)
 - [Rules](#rules)
 - [License](#license)
 
@@ -89,14 +90,15 @@ Glob expressions:
   ** matches any number of characters, including /
 
 Optional parameters:
-  --config         path to config file (overrides auto-discovery)
-  --fix            updates files to resolve fixable issues
-  --format         read stdin, apply fixes, write stdout
-  --no-cache       disable reading/writing the .markdownlint-cli2-cache file
-  --no-globs       ignore the globs config key at runtime
-  --output-format  output format: default, json, junit, tap (default: default)
-  --help           writes this message to the console and exits without doing anything else
-  --version        prints the version and exits
+  --config           path to config file (overrides auto-discovery)
+  --fail-on-warning  exit with code 1 even when all violations are warnings
+  --fix              updates files to resolve fixable issues
+  --format           read stdin, apply fixes, write stdout
+  --no-cache         disable reading/writing the .markdownlint-cli2-cache file
+  --no-globs         ignore the globs config key at runtime
+  --output-format    output format: default, json, junit, tap, sarif (default: default)
+  --help             writes this message to the console and exits without doing anything else
+  --version          prints the version and exits
 
 Exit codes:
   0: Linting was successful and there were no errors
@@ -112,6 +114,9 @@ goldmark-lint '**/*.md'
 
 # Lint and auto-fix fixable issues
 goldmark-lint --fix '**/*.md'
+
+# Treat warnings as errors (useful for strict CI gates)
+goldmark-lint --fail-on-warning '**/*.md'
 
 # Read from stdin and report violations
 goldmark-lint -
@@ -311,6 +316,28 @@ Omit the rule ID to disable/enable all rules. Rule aliases (e.g.
 - Multiple output formats: default text, JSON, JUnit XML, TAP.
 - Result caching via `.markdownlint-cli2-cache` to speed up repeated runs.
 - Gitignore integration via the `gitignore` config key.
+
+## Additional features over markdownlint-cli2
+
+goldmark-lint adds several features beyond what markdownlint-cli2 provides:
+
+| Feature | goldmark-lint | markdownlint-cli2 |
+|---------|:---:|:---:|
+| `--fail-on-warning` flag (exit code 1 for warnings) | ✅ | ❌ |
+| SARIF output format | ✅ | ❌ |
+| Single self-contained binary (no Node.js required) | ✅ | ❌ |
+| Embeddable Go library | ✅ | ❌ |
+
+### `--fail-on-warning`
+
+By default, violations marked as `"warning"` severity in the config do not cause
+a non-zero exit code. The `--fail-on-warning` flag changes this so that any
+violation — regardless of severity — causes goldmark-lint to exit with code 1.
+This is useful for stricter CI gates:
+
+```sh
+goldmark-lint --fail-on-warning '**/*.md'
+```
 
 ## Rules
 
