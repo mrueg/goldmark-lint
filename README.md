@@ -11,7 +11,44 @@ select rules.
 go install github.com/mrueg/goldmark-lint/cmd/goldmark-lint@latest
 ```
 
-## Usage
+## Library usage
+
+goldmark-lint can also be used as a Go library. Import the `lint` and
+`lint/rules` packages:
+
+```go
+import (
+    "fmt"
+
+    "github.com/mrueg/goldmark-lint/lint/rules"
+)
+
+func main() {
+    linter := rules.NewDefaultLinter()
+    violations := linter.Lint([]byte("# Hello\n\nsome text\n"))
+    for _, v := range violations {
+        fmt.Printf("line %d: [%s] %s\n", v.Line, v.Rule, v.Message)
+    }
+}
+```
+
+To enable only specific rules, or to customise rule options, construct the
+linter directly with [lint.NewLinter]:
+
+```go
+import (
+    "github.com/mrueg/goldmark-lint/lint"
+    "github.com/mrueg/goldmark-lint/lint/rules"
+)
+
+linter := lint.NewLinter(
+    rules.MD001{},
+    rules.MD013{LineLength: 100},
+)
+violations := linter.Lint(source)
+```
+
+## CLI usage
 
 ```
 goldmark-lint glob0 [glob1] [...] [globN] [--fix] [--help] [--version]
