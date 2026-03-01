@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
 	"sync"
 	"text/tabwriter"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/mrueg/goldmark-lint/lint"
 )
 
@@ -243,7 +243,7 @@ func main() {
 		if pattern == "-" {
 			continue
 		}
-		files, err := filepath.Glob(pattern)
+		files, err := doublestar.FilepathGlob(pattern)
 		if err != nil || len(files) == 0 {
 			files = []string{pattern}
 		}

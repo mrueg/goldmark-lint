@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"gopkg.in/yaml.v3"
 
 	"github.com/mrueg/goldmark-lint/lint"
@@ -427,10 +427,16 @@ func mergeConfigs(base, overlay map[string]interface{}) map[string]interface{} {
 // matchesAnyPattern reports whether path matches any of the given glob patterns.
 func matchesAnyPattern(path string, patterns []string) bool {
 	normalized := filepath.ToSlash(filepath.Clean(path))
+	parts := strings.Split(normalized, "/")
 	for _, pattern := range patterns {
 		pattern = filepath.ToSlash(pattern)
-		if matchPath(pattern, normalized) {
-			return true
+		// Try matching the pattern starting from each position in the path so
+		// that relative patterns (e.g. "vendor/**") work against both relative
+		// and absolute paths.
+		for i := range parts {
+			if ok, _ := doublestar.Match(pattern, strings.Join(parts[i:], "/")); ok {
+				return true
+			}
 		}
 	}
 	return false
@@ -525,21 +531,13 @@ func collectGitignorePatterns(cwd string) []string {
 // whose path relative to root matches the given glob pattern (supports **).
 // Walk errors (e.g. permission denied) are ignored; any accessible matches are returned.
 func findFilesMatchingGlob(root, pattern string) []string {
-	var matches []string
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return nil
-		}
-		if matchPath(pattern, filepath.ToSlash(rel)) {
-			matches = append(matches, path)
-		}
-		return nil
-	})
-	return matches
+	fsys := os.DirFS(root)
+	matches, _ := doublestar.Glob(fsys, pattern)
+	result := make([]string, 0, len(matches))
+	for _, m := range matches {
+		result = append(result, filepath.Join(root, m))
+	}
+	return result
 }
 
 // parseGitignore reads a .gitignore file and returns glob patterns for files
@@ -561,53 +559,3 @@ func parseGitignore(path string) []string {
 	return patterns
 }
 
-// matchPath checks whether name matches the glob pattern, supporting ** for
-// matching across path separators. For patterns containing **, the match is
-// attempted at each path component position so that relative patterns such
-// as "vendor/**" also match absolute paths like "/abs/path/vendor/file".
-func matchPath(pattern, name string) bool {
-	if !strings.Contains(pattern, "**") {
-		if ok, _ := filepath.Match(pattern, name); ok {
-			return true
-		}
-		ok, _ := filepath.Match(pattern, filepath.Base(name))
-		return ok
-	}
-	patParts := strings.Split(pattern, "/")
-	nameParts := strings.Split(name, "/")
-	// Try matching the pattern starting from each position in the path so that
-	// relative patterns work against both relative and absolute paths.
-	for i := range nameParts {
-		if matchSegments(patParts, nameParts[i:]) {
-			return true
-		}
-	}
-	return false
-}
-
-// matchSegments recursively matches pattern segments against name segments,
-// handling ** as a wildcard that matches zero or more path segments.
-func matchSegments(pat, name []string) bool {
-	if len(pat) == 0 {
-		return len(name) == 0
-	}
-	if pat[0] == "**" {
-		if matchSegments(pat[1:], name) {
-			return true
-		}
-		for i := range name {
-			if matchSegments(pat[1:], name[i+1:]) {
-				return true
-			}
-		}
-		return false
-	}
-	if len(name) == 0 {
-		return false
-	}
-	ok, _ := filepath.Match(pat[0], name[0])
-	if !ok {
-		return false
-	}
-	return matchSegments(pat[1:], name[1:])
-}
