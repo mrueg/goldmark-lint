@@ -63,7 +63,7 @@ func TestIsColorEnabled_NoColorEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if isColorEnabled(f) {
 		t.Error("expected color disabled when NO_COLOR is set")
 	}
@@ -75,7 +75,7 @@ func TestIsColorEnabled_RegularFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if isColorEnabled(f) {
 		t.Error("expected color disabled for regular file (not a terminal)")
 	}
