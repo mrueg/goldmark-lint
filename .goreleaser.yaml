@@ -48,6 +48,12 @@ homebrew_casks:
       email: manuel@rueg.eu
     commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
     directory: Formula
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/goldmark-lint"]
+          end
 
 changelog:
   sort: asc
