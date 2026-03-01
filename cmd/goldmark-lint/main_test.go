@@ -418,6 +418,46 @@ func TestCLI_NoGlobs(t *testing.T) {
 	}
 }
 
+func TestCLI_Summary(t *testing.T) {
+	bin := buildBinary(t)
+	testfile := filepath.Join("..", "..", "testdata", "md001_invalid.md")
+	if _, err := os.Stat(testfile); err != nil {
+		t.Skip("testdata not available")
+	}
+
+	cmd := exec.Command(bin, "--summary", testfile)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	_ = cmd.Run()
+	got := stderr.String()
+	if !strings.Contains(got, "Summary:") {
+		t.Errorf("expected 'Summary:' in stderr, got: %s", got)
+	}
+	if !strings.Contains(got, "MD001:") {
+		t.Errorf("expected 'MD001:' in summary output, got: %s", got)
+	}
+}
+
+func TestCLI_Summary_NoViolations(t *testing.T) {
+	bin := buildBinary(t)
+	testfile := filepath.Join("..", "..", "testdata", "md001_valid.md")
+	if _, err := os.Stat(testfile); err != nil {
+		t.Skip("testdata not available")
+	}
+
+	cmd := exec.Command(bin, "--summary", testfile)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 for valid file with --summary, got: %v", err)
+	}
+	// No summary printed when there are no violations.
+	if strings.Contains(stderr.String(), "Summary:") {
+		t.Errorf("expected no summary output for zero violations, got: %s", stderr.String())
+	}
+}
+
+
 func TestCLI_Watch(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("signal-based test not supported on Windows")

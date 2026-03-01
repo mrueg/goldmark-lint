@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+  "sort"
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
@@ -347,6 +348,38 @@ func formatGitHubActions(violations []fileViolation, w io.Writer) {
 			_, _ = fmt.Fprintf(w, "::%s file=%s,line=%d,col=%d::%s %s\n",
 				level, fv.File, v.Line, v.Column, v.Rule, v.Message)
 		}
+	}
+}
+
+// formatSummary writes a count-per-rule summary to w.
+// Rules are sorted by count descending, then by rule ID ascending for ties.
+func formatSummary(violations []fileViolation, w io.Writer) {
+	counts := make(map[string]int)
+	for _, fv := range violations {
+		for _, v := range fv.Violations {
+			counts[v.Rule]++
+		}
+	}
+	if len(counts) == 0 {
+		return
+	}
+	type ruleCount struct {
+		rule  string
+		count int
+	}
+	entries := make([]ruleCount, 0, len(counts))
+	for rule, count := range counts {
+		entries = append(entries, ruleCount{rule, count})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].count != entries[j].count {
+			return entries[i].count > entries[j].count
+		}
+		return entries[i].rule < entries[j].rule
+	})
+	_, _ = fmt.Fprintln(w, "Summary:")
+	for _, e := range entries {
+		_, _ = fmt.Fprintf(w, "  %s: %d\n", e.rule, e.count)
 	}
 }
 

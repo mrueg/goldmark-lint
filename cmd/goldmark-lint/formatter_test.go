@@ -567,6 +567,57 @@ func TestCLI_OutputFormatters_Config_JSON(t *testing.T) {
 	}
 }
 
+func TestFormatSummary_Output(t *testing.T) {
+	violations := makeViolations()
+	var buf bytes.Buffer
+	formatSummary(violations, &buf)
+	got := buf.String()
+	if !strings.Contains(got, "Summary:") {
+		t.Errorf("expected 'Summary:' header, got: %s", got)
+	}
+	if !strings.Contains(got, "MD001: 1") {
+		t.Errorf("expected 'MD001: 1' in summary, got: %s", got)
+	}
+	if !strings.Contains(got, "MD013: 1") {
+		t.Errorf("expected 'MD013: 1' in summary, got: %s", got)
+	}
+}
+
+func TestFormatSummary_Empty(t *testing.T) {
+	var buf bytes.Buffer
+	formatSummary(nil, &buf)
+	if buf.Len() != 0 {
+		t.Errorf("expected empty output for no violations, got: %s", buf.String())
+	}
+}
+
+func TestFormatSummary_SortedByCountDesc(t *testing.T) {
+	violations := []fileViolation{
+		{
+			File: "a.md",
+			Violations: []lint.Violation{
+				{Rule: "MD001", Line: 1, Column: 1, Message: "msg"},
+				{Rule: "MD013", Line: 2, Column: 1, Message: "msg"},
+				{Rule: "MD013", Line: 3, Column: 1, Message: "msg"},
+				{Rule: "MD013", Line: 4, Column: 1, Message: "msg"},
+			},
+		},
+	}
+	var buf bytes.Buffer
+	formatSummary(violations, &buf)
+	got := buf.String()
+	// MD013 (count 3) should appear before MD001 (count 1)
+	md013Idx := strings.Index(got, "MD013")
+	md001Idx := strings.Index(got, "MD001")
+	if md013Idx == -1 || md001Idx == -1 {
+		t.Fatalf("expected both MD013 and MD001 in summary, got: %s", got)
+	}
+	if md013Idx > md001Idx {
+		t.Errorf("expected MD013 (higher count) before MD001 in summary, got: %s", got)
+	}
+}
+
+
 func TestFormatGitHubActions_Output(t *testing.T) {
 	violations := makeViolations()
 	var buf bytes.Buffer
