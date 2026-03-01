@@ -49,6 +49,74 @@ func TestFormatDefault_Empty(t *testing.T) {
 	}
 }
 
+func TestIsColorEnabled_NonFile(t *testing.T) {
+	var buf bytes.Buffer
+	if isColorEnabled(&buf) {
+		t.Error("expected color disabled for non-file writer")
+	}
+}
+
+func TestIsColorEnabled_NoColorEnv(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	// Even if writing to a real file, NO_COLOR must disable color.
+	f, err := os.CreateTemp(t.TempDir(), "color-test-*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	if isColorEnabled(f) {
+		t.Error("expected color disabled when NO_COLOR is set")
+	}
+}
+
+func TestIsColorEnabled_RegularFile(t *testing.T) {
+	// A regular file on disk is not a character device, so color should be disabled.
+	f, err := os.CreateTemp(t.TempDir(), "color-test-*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	if isColorEnabled(f) {
+		t.Error("expected color disabled for regular file (not a terminal)")
+	}
+}
+
+func TestFormatDefault_ColorCodes_WhenColorEnabled(t *testing.T) {
+	violations := makeViolations()
+
+	// Plain output (color=false) must NOT contain ANSI escape sequences.
+	var plain bytes.Buffer
+	formatDefaultWithColor(violations, &plain, false)
+	if strings.Contains(plain.String(), "\033[") {
+		t.Errorf("expected no ANSI codes in plain output, got: %q", plain.String())
+	}
+	if !strings.Contains(plain.String(), "test.md:3:1 MD001") {
+		t.Errorf("plain output missing expected violation text, got: %s", plain.String())
+	}
+
+	// Colored output (color=true) must contain ANSI escape sequences and
+	// still contain the rule ID, file name, and position fields.
+	var colored bytes.Buffer
+	formatDefaultWithColor(violations, &colored, true)
+	got := colored.String()
+	if !strings.Contains(got, "\033[") {
+		t.Errorf("expected ANSI codes in colored output, got: %q", got)
+	}
+	if !strings.Contains(got, "test.md") {
+		t.Errorf("colored output missing file name, got: %s", got)
+	}
+	if !strings.Contains(got, "MD001") {
+		t.Errorf("colored output missing rule ID, got: %s", got)
+	}
+	// Errors use red; warnings use yellow.
+	if !strings.Contains(got, colorRed) {
+		t.Errorf("expected red color code for error violation, got: %q", got)
+	}
+	if !strings.Contains(got, colorYellow) {
+		t.Errorf("expected yellow color code for warning violation, got: %q", got)
+	}
+}
+
 func TestFormatJSON_ValidJSON(t *testing.T) {
 	violations := makeViolations()
 	var buf bytes.Buffer

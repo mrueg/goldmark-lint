@@ -5,11 +5,39 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"sort"
+	"os"
+  "sort"
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
 )
+
+// ANSI color/style escape sequences.
+const (
+	colorReset  = "\033[0m"
+	colorBold   = "\033[1m"
+	colorRed    = "\033[31m"
+	colorYellow = "\033[33m"
+	colorCyan   = "\033[36m"
+)
+
+// isColorEnabled reports whether colored output should be used for w.
+// Colors are enabled only when w is an interactive terminal and the NO_COLOR
+// environment variable is not set (see https://no-color.org/).
+func isColorEnabled(w io.Writer) bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
+}
 
 // fileViolation groups violations for a single file.
 type fileViolation struct {
@@ -23,10 +51,31 @@ func ruleInfoURL(ruleID string) string {
 }
 
 // formatDefault writes violations in the default text format to w.
+// When w is an interactive terminal and NO_COLOR is not set, the output is
+// colored: the file path is bold, the position is cyan, and the rule ID is
+// red (errors) or yellow (warnings).
 func formatDefault(violations []fileViolation, w io.Writer) {
+	formatDefaultWithColor(violations, w, isColorEnabled(w))
+}
+
+// formatDefaultWithColor is the internal implementation of formatDefault.
+// color controls whether ANSI escape sequences are emitted.
+func formatDefaultWithColor(violations []fileViolation, w io.Writer, color bool) {
 	for _, fv := range violations {
 		for _, v := range fv.Violations {
-			_, _ = fmt.Fprintf(w, "%s:%d:%d %s %s\n", fv.File, v.Line, v.Column, v.Rule, v.Message)
+			if color {
+				ruleColor := colorRed
+				if v.Severity == "warning" {
+					ruleColor = colorYellow
+				}
+				_, _ = fmt.Fprintf(w, "%s%s%s:%s%d:%d%s %s%s%s %s\n",
+					colorBold, fv.File, colorReset,
+					colorCyan, v.Line, v.Column, colorReset,
+					ruleColor, v.Rule, colorReset,
+					v.Message)
+			} else {
+				_, _ = fmt.Fprintf(w, "%s:%d:%d %s %s\n", fv.File, v.Line, v.Column, v.Rule, v.Message)
+			}
 		}
 	}
 }
