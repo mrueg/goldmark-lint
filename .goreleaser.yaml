@@ -43,6 +43,11 @@ brews:
     homepage: "https://github.com/mrueg/goldmark-lint"
     description: "A Markdown linter written in Go using the goldmark parser"
     license: "MIT"
+    commit_author:
+      name: Manuel Rüger
+      email: manuel@rueg.eu
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    directory: Formula
 
 changelog:
   sort: asc
