@@ -35,6 +35,15 @@ kos:
       - linux/amd64
       - linux/arm64
 
+brews:
+  - repository:
+      owner: mrueg
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/mrueg/goldmark-lint"
+    description: "A Markdown linter written in Go using the goldmark parser"
+    license: "MIT"
+
 changelog:
   sort: asc
   filters:

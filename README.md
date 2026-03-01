@@ -8,6 +8,7 @@ select rules.
 ## Table of Contents
 
 - [Installation](#installation)
+  - [Homebrew](#homebrew)
   - [Docker](#docker)
 - [Library usage](#library-usage)
 - [CLI usage](#cli-usage)
@@ -30,6 +31,12 @@ select rules.
 
 ```sh
 go install github.com/mrueg/goldmark-lint/cmd/goldmark-lint@latest
+```
+
+### Homebrew
+
+```sh
+brew install mrueg/tap/goldmark-lint
 ```
 
 ### Docker
