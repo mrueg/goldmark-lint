@@ -21,6 +21,7 @@ select rules.
 - [Additional features over markdownlint-cli2](#additional-features-over-markdownlint-cli2)
   - [`--fail-on-warning`](#--fail-on-warning)
   - [`--list-rules`](#--list-rules)
+  - [`--summary`](#--summary)
   - [`--watch`](#--watch)
 - [Rules](#rules)
 - [License](#license)
@@ -80,6 +81,46 @@ linter := lint.NewLinter(
 violations := linter.Lint(source)
 ```
 
+To auto-fix issues in a document, call `linter.Fix` with the source bytes.
+It applies all rules that implement the `lint.FixableRule` interface and
+returns the corrected content:
+
+```go
+import (
+    "os"
+
+    "github.com/mrueg/goldmark-lint/lint/rules"
+)
+
+source, _ := os.ReadFile("README.md")
+linter := rules.NewDefaultLinter()
+fixed := linter.Fix(source)
+_ = os.WriteFile("README.md", fixed, 0644)
+```
+
+To implement a custom rule that also supports auto-fixing, implement the
+`lint.FixableRule` interface by adding a `Fix(source []byte) []byte` method:
+
+```go
+import "github.com/mrueg/goldmark-lint/lint"
+
+type MyRule struct{}
+
+func (r MyRule) ID() string          { return "MY001" }
+func (r MyRule) Description() string { return "My custom rule" }
+
+func (r MyRule) Check(doc *lint.Document) []lint.Violation {
+    // ... return violations
+    return nil
+}
+
+// Fix rewrites source to resolve violations found by Check.
+func (r MyRule) Fix(source []byte) []byte {
+    // ... apply fixes and return corrected source
+    return source
+}
+```
+
 ## CLI usage
 
 ```
@@ -101,6 +142,7 @@ Optional parameters:
   --no-cache         disable reading/writing the .markdownlint-cli2-cache file
   --no-globs         ignore the globs config key at runtime
   --output-format    output format: default, json, junit, tap, sarif, github (default: default)
+  --summary          print a count-per-rule breakdown after linting
   --watch            re-lint files whenever they change (runs until Ctrl+C)
   --help             writes this message to the console and exits without doing anything else
   --version          prints the version and exits
@@ -137,6 +179,9 @@ goldmark-lint --watch '**/*.md'
 
 # Print all rules with their enabled state and current options
 goldmark-lint --list-rules
+
+# Print a violation count per rule after linting
+goldmark-lint --summary '**/*.md'
 ```
 
 ## Configuration
@@ -331,6 +376,7 @@ Omit the rule ID to disable/enable all rules. Rule aliases (e.g.
 - Result caching via `.markdownlint-cli2-cache` to speed up repeated runs.
 - Gitignore integration via the `gitignore` config key.
 - `--list-rules` flag to inspect all rules with their enabled state and current options.
+- `--summary` flag to print a per-rule violation count after linting.
 
 ## Additional features over markdownlint-cli2
 
@@ -342,6 +388,7 @@ goldmark-lint adds several features beyond what markdownlint-cli2 provides:
 | SARIF output format | ✅ | ❌ |
 | GitHub Actions annotation output format | ✅ | ❌ |
 | `--list-rules` flag (inspect rules, options, and enabled state) | ✅ | ❌ |
+| `--summary` flag (per-rule violation count breakdown) | ✅ | ❌ |
 | Single self-contained binary (no Node.js required) | ✅ | ❌ |
 | Embeddable Go library | ✅ | ❌ |
 
@@ -365,6 +412,24 @@ and what options they use with the current config:
 ```sh
 goldmark-lint --list-rules
 goldmark-lint --config path/to/.markdownlint-cli2.yaml --list-rules
+```
+
+### `--summary`
+
+Print a per-rule count of violations after linting finishes. Useful for
+identifying which rules produce the most noise in a project:
+
+```sh
+goldmark-lint --summary '**/*.md'
+```
+
+Example output:
+
+```
+Summary:
+  MD013: 42
+  MD009:  7
+  MD047:  3
 ```
 
 ### `--watch`
@@ -405,7 +470,7 @@ Rules that are implemented in goldmark-lint are marked ✅. Rules marked 🔧 al
 | [MD026](https://github.com/DavidAnson/markdownlint/blob/main/doc/md026.md) | Trailing punctuation in heading | ✅ 🔧 |
 | [MD027](https://github.com/DavidAnson/markdownlint/blob/main/doc/md027.md) | Multiple spaces after blockquote symbol | ✅ 🔧 |
 | [MD028](https://github.com/DavidAnson/markdownlint/blob/main/doc/md028.md) | Blank line inside blockquote | ✅ |
-| [MD029](https://github.com/DavidAnson/markdownlint/blob/main/doc/md029.md) | Ordered list item prefix | ✅ |
+| [MD029](https://github.com/DavidAnson/markdownlint/blob/main/doc/md029.md) | Ordered list item prefix | ✅ 🔧 |
 | [MD030](https://github.com/DavidAnson/markdownlint/blob/main/doc/md030.md) | Spaces after list markers | ✅ 🔧 |
 | [MD031](https://github.com/DavidAnson/markdownlint/blob/main/doc/md031.md) | Fenced code blocks should be surrounded by blank lines | ✅ 🔧 |
 | [MD032](https://github.com/DavidAnson/markdownlint/blob/main/doc/md032.md) | Lists should be surrounded by blank lines | ✅ 🔧 |
