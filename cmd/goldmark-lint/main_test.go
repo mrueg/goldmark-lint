@@ -418,6 +418,75 @@ func TestCLI_NoGlobs(t *testing.T) {
 	}
 }
 
+func TestCLI_Diff(t *testing.T) {
+	bin := buildBinary(t)
+
+	// Skip if git is not available.
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	dir := t.TempDir()
+
+	// Initialize a git repository.
+	gitRun := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	gitRun("init")
+	gitRun("config", "user.email", "test@example.com")
+	gitRun("config", "user.name", "Test")
+
+	// Create two markdown files and commit them.
+	file1 := filepath.Join(dir, "unchanged.md")
+	file2 := filepath.Join(dir, "changed.md")
+	if err := os.WriteFile(file1, []byte("# Unchanged\n\nContent.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file2, []byte("# Changed\n\nContent.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun("add", ".")
+	gitRun("commit", "-m", "initial commit")
+
+	// Modify only file2 (introduce a violation: heading skips a level).
+	if err := os.WriteFile(file2, []byte("# Changed\n\n### Skipped\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without --diff, both files are linted; file2 has a violation → exit 1.
+	cmd := exec.Command(bin, filepath.Join(dir, "*.md"))
+	cmd.Dir = dir
+	// filepath.Glob won't expand the glob in a different dir, so pass both files.
+	cmd = exec.Command(bin, file1, file2)
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+		t.Fatalf("expected exit 1 linting both files with violation, got: %v", err)
+	}
+
+	// With --diff HEAD, only file2 (the changed file) is linted → exit 1.
+	cmd2 := exec.Command(bin, "--diff", "HEAD", file1, file2)
+	cmd2.Dir = dir
+	err2 := cmd2.Run()
+	var exitErr2 *exec.ExitError
+	if !errors.As(err2, &exitErr2) || exitErr2.ExitCode() != 1 {
+		t.Fatalf("expected exit 1 linting changed file with violation via --diff HEAD, got: %v", err2)
+	}
+
+	// With --diff HEAD, linting only the unchanged file (file1) → exit 0.
+	// (file2 is changed, file1 is not – so if we pass only file1 to --diff HEAD it should be filtered out.)
+	cmd3 := exec.Command(bin, "--diff", "HEAD", file1)
+	cmd3.Dir = dir
+	if err3 := cmd3.Run(); err3 != nil {
+		t.Errorf("expected exit 0 when --diff HEAD filters out unchanged file, got: %v", err3)
+	}
+}
+
 func TestCLI_Watch(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("signal-based test not supported on Windows")
