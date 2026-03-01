@@ -715,6 +715,15 @@ func TestMD042_Invalid(t *testing.T) {
 	}
 }
 
+func TestMD042_NestedInlineNoPanic(t *testing.T) {
+	// Link inside emphasis - inlineNodeLine must not panic
+	src := "**[text]()**\n"
+	v := lintString(t, rules.MD042{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
 func TestMD045_Valid(t *testing.T) {
 	src := "![alt text](image.png)\n"
 	v := lintString(t, rules.MD045{}, src)

@@ -16,6 +16,9 @@ func (r MD042) Description() string { return "No empty links" }
 // up to the nearest ancestor block node that has source line information.
 func inlineNodeLine(n ast.Node, source []byte) int {
 	for p := n.Parent(); p != nil; p = p.Parent() {
+		if p.Type() != ast.TypeBlock {
+			continue
+		}
 		if p.Lines() != nil && p.Lines().Len() > 0 {
 			seg := p.Lines().At(0)
 			return countLine(source, seg.Start)
