@@ -32,6 +32,7 @@ Glob expressions:
 
 Optional parameters:
 - --config           path to config file (overrides auto-discovery)
+- --diff             only lint files changed vs the given git ref (e.g. --diff main, --diff HEAD)
 - --fail-on-warning  exit with code 1 even when all violations are warnings
 - --fix              updates files to resolve fixable issues
 - --format           read stdin, apply fixes, write stdout
@@ -64,6 +65,7 @@ Exit codes:
 
 func main() {
 	configPath := flag.String("config", "", "path to config file (overrides auto-discovery)")
+	diff := flag.String("diff", "", "only lint files changed vs the given git ref (e.g. main, HEAD)")
 	failOnWarning := flag.Bool("fail-on-warning", false, "exit with code 1 even when all violations are warnings")
 	fix := flag.Bool("fix", false, "updates files to resolve fixable issues")
 	format := flag.Bool("format", false, "read stdin, apply fixes, write stdout")
@@ -249,6 +251,35 @@ func main() {
 				allFiles = append(allFiles, file)
 			}
 		}
+	}
+
+	// --diff: filter allFiles to only those changed vs the given git ref.
+	if *diff != "" {
+		diffCwd := cwd
+		if diffCwd == "" {
+			diffCwd = "."
+		}
+		changedAbs, err := gitChangedFiles(*diff, diffCwd)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(2)
+		}
+		changedSet := make(map[string]bool, len(changedAbs))
+		for _, f := range changedAbs {
+			changedSet[f] = true
+		}
+		filtered := make([]string, 0, len(allFiles))
+		for _, f := range allFiles {
+			abs, absErr := filepath.Abs(f)
+			if absErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not resolve path %s: %v\n", f, absErr)
+				continue
+			}
+			if changedSet[abs] {
+				filtered = append(filtered, f)
+			}
+		}
+		allFiles = filtered
 	}
 
 	// fileResult carries the outcome of processing a single file.
