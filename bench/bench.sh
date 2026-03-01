@@ -164,7 +164,7 @@ if [[ "${HAS_HYPERFINE}" -eq 1 ]]; then
     warn "Install it with: npm install -g markdownlint-cli2"
   fi
 
-  hyperfine "${HYPERFINE_ARGS[@]}"
+  hyperfine "${HYPERFINE_ARGS[@]}" --ignore-failure
 
 else
   warn "hyperfine not found — falling back to shell 'time'."
