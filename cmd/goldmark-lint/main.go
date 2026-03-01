@@ -39,6 +39,7 @@ Optional parameters:
 - --no-cache         disable reading/writing the .markdownlint-cli2-cache file
 - --no-globs         ignore the globs config key at runtime
 - --output-format    output format: default, json, junit, tap, sarif, github (default: default)
+- --summary           print a count-per-rule breakdown after linting
 - --watch            re-lint files whenever they change (runs until Ctrl+C)
 - --help             writes this message to the console and exits without doing anything else
 - --version          prints the version and exits
@@ -73,6 +74,7 @@ func main() {
 	noCache := flag.Bool("no-cache", false, "disable reading/writing the cache file")
 	noGlobs := flag.Bool("no-globs", false, "ignore the globs config key at runtime")
 	outputFormat := flag.String("output-format", "", "output format: default, json, junit, tap, sarif, github")
+	summary := flag.Bool("summary", false, "print a count-per-rule breakdown after linting")
 	watch := flag.Bool("watch", false, "re-lint files whenever they change (runs until Ctrl+C)")
 	flag.Parse()
 
@@ -394,6 +396,11 @@ func main() {
 			formatDefault(allViolations, w)
 		}
 		closeFile()
+	}
+
+	// Print per-rule summary if requested.
+	if *summary {
+		formatSummary(allViolations, os.Stderr)
 	}
 
 	// Persist updated cache entries.
