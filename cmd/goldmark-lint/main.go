@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"text/tabwriter"
@@ -262,11 +263,17 @@ func main() {
 	newEntries := make(lintCache) // updated cache entries collected from goroutines
 	var mu sync.Mutex             // protects newEntries
 
+	// Bound the number of concurrent goroutines to avoid resource exhaustion
+	// on large repositories. Using GOMAXPROCS as the concurrency limit ensures
+	// we keep all CPUs busy without spawning more goroutines than useful.
+	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
 	var wg sync.WaitGroup
 	for i, file := range allFiles {
 		wg.Add(1)
 		go func(i int, file string) {
 			defer wg.Done()
+			sem <- struct{}{} // acquire a slot; limits concurrent work
+			defer func() { <-sem }() // release slot on exit
 
 			source, err := os.ReadFile(file)
 			if err != nil {

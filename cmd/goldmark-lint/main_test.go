@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -480,5 +481,47 @@ func TestCLI_Watch(t *testing.T) {
 		}
 	} else if err != nil {
 		t.Errorf("unexpected error waiting for --watch process: %v", err)
+	}
+}
+
+// TestCLI_ParallelDeterministic verifies that linting multiple files in parallel
+// produces output in a consistent (deterministic) order regardless of goroutine
+// scheduling. It runs the linter several times on the same set of files and
+// checks that the output is identical across runs.
+func TestCLI_ParallelDeterministic(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+
+	// Create several files with violations so output contains file references.
+	files := make([]string, 5)
+	for i := range files {
+		name := filepath.Join(dir, fmt.Sprintf("file%02d.md", i))
+		// MD001: skipped heading level triggers a violation.
+		if err := os.WriteFile(name, []byte("# Heading\n\n### Skipped\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		files[i] = name
+	}
+
+	args := append([]string{"--no-cache"}, files...)
+	run := func() string {
+		cmd := exec.Command(bin, args...)
+		var stderr strings.Builder
+		cmd.Stderr = &stderr
+		_ = cmd.Run() // violations → exit 1, that's fine
+		return stderr.String()
+	}
+
+	first := run()
+	if first == "" {
+		t.Fatal("expected violation output but got nothing")
+	}
+
+	// Run several more times and confirm the output is always identical.
+	for range 5 {
+		if got := run(); got != first {
+			t.Errorf("parallel output not deterministic:\nfirst run:\n%s\nlater run:\n%s", first, got)
+		}
 	}
 }
