@@ -19,7 +19,7 @@ select rules.
   - [Inline disable comments](#inline-disable-comments)
   - [Supported rule options](#supported-rule-options)
 - [Features](#features)
-- [Additional features over markdownlint-cli2](#additional-features-over-markdownlint-cli2)
+- [Comparison with markdownlint-cli2](#comparison-with-markdownlint-cli2)
   - [`--fail-on-warning`](#--fail-on-warning)
   - [`--list-rules`](#--list-rules)
   - [`--summary`](#--summary)
@@ -385,9 +385,10 @@ Omit the rule ID to disable/enable all rules. Rule aliases (e.g.
 - `--list-rules` flag to inspect all rules with their enabled state and current options.
 - `--summary` flag to print a per-rule violation count after linting.
 
-## Additional features over markdownlint-cli2
+## Comparison with markdownlint-cli2
 
-goldmark-lint adds several features beyond what markdownlint-cli2 provides:
+goldmark-lint adds several features beyond what markdownlint-cli2 provides, but
+markdownlint-cli2 also has capabilities that goldmark-lint does not:
 
 | Feature | goldmark-lint | markdownlint-cli2 |
 |---------|:---:|:---:|
@@ -398,6 +399,8 @@ goldmark-lint adds several features beyond what markdownlint-cli2 provides:
 | `--summary` flag (per-rule violation count breakdown) | ✅ | ❌ |
 | Single self-contained binary (no Node.js required) | ✅ | ❌ |
 | Embeddable Go library | ✅ | ❌ |
+| Custom rule plugins | ❌ | ✅ |
+| Shared configurations via npm packages | ❌ | ✅ |
 
 ### `--fail-on-warning`
 
