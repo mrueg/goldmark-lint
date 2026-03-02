@@ -10,6 +10,7 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 )
 
@@ -48,6 +49,11 @@ type Document struct {
 	Lines             []string
 	AST               ast.Node
 	FrontMatterFields map[string]string // key-value pairs from YAML front matter, if any
+	// LinkRefs maps a normalised link label to its destination URL as parsed by
+	// goldmark. It covers all link reference definitions in the document and is
+	// derived from the goldmark parser context rather than a hand-rolled regex,
+	// so it correctly handles angle-bracket destinations, title-on-next-line, etc.
+	LinkRefs map[string][]byte
 }
 
 // Linter holds the list of rules and runs them on documents.
@@ -114,9 +120,17 @@ func (l *Linter) Lint(source []byte) []Violation {
 	fmFields := parseFrontMatterFieldsAt(source, end)
 	source = stripFrontMatterAt(source, end)
 
+	pctx := parser.NewContext()
 	reader := text.NewReader(source)
 	md := goldmark.New(goldmark.WithExtensions(extension.Table, extension.Strikethrough, extension.TaskList))
-	node := md.Parser().Parse(reader)
+	node := md.Parser().Parse(reader, parser.WithContext(pctx))
+
+	// Build a normalised label → destination map from goldmark's parsed references.
+	linkRefs := make(map[string][]byte)
+	for _, ref := range pctx.References() {
+		key := strings.ToLower(string(ref.Label()))
+		linkRefs[key] = ref.Destination()
+	}
 
 	lines := splitLines(source)
 	doc := &Document{
@@ -124,6 +138,7 @@ func (l *Linter) Lint(source []byte) []Violation {
 		Lines:             lines,
 		AST:               node,
 		FrontMatterFields: fmFields,
+		LinkRefs:          linkRefs,
 	}
 
 	var disabled []disableSet

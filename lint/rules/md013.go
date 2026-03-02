@@ -2,7 +2,6 @@ package rules
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -179,13 +178,10 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 	return violations
 }
 
-// linkDefURLRE matches a link reference definition and captures the URL.
-// Example: [label]: https://example.com
-var linkDefURLRE = regexp.MustCompile(`^\s*\[[^\]]+\]:\s+(\S+)`)
-
 // urlLengthsPerLine returns a map from 1-based line number to a slice of URL
 // rune lengths found on that line. It uses the document's AST to find inline
-// links and images, and a regex for link reference definitions.
+// links and images, and doc.LinkRefs (populated from the goldmark parser
+// context) to find link reference definition lines.
 func urlLengthsPerLine(doc *lint.Document) map[int][]int {
 	result := make(map[int][]int)
 	addURL := func(lineNum, urlLen int) {
@@ -212,25 +208,83 @@ func urlLengthsPerLine(doc *lint.Document) map[int][]int {
 		return ast.WalkContinue, nil
 	})
 
-	// Link reference definitions are not exposed as link nodes in the AST.
-	for i, line := range doc.Lines {
-		if m := linkDefURLRE.FindStringSubmatch(line); m != nil {
-			addURL(i+1, utf8.RuneCountInString(m[1]))
+	// Use goldmark's parsed link reference definitions (doc.LinkRefs) to find
+	// definition lines. We scan the raw lines for a matching label and look up
+	// the destination length from the goldmark-parsed map, so angle-bracket
+	// destinations and backslash escapes are handled correctly.
+	if len(doc.LinkRefs) > 0 {
+		for i, line := range doc.Lines {
+			label := linkRefLabel(line)
+			if label == "" {
+				continue
+			}
+			key := strings.ToLower(label)
+			if dest, ok := doc.LinkRefs[key]; ok {
+				addURL(i+1, utf8.RuneCount(dest))
+			}
 		}
 	}
 
 	return result
 }
 
-// inlineLinkLine returns the 1-based line number for a Link or Image node by
-// inspecting its child Text nodes. Falls back to the nearest parent block line.
-func inlineLinkLine(n ast.Node, source []byte) int {
-	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-		if t, ok := c.(*ast.Text); ok {
-			return countLine(source, t.Segment.Start)
+// linkRefLabel returns the link-reference label from a line that looks like a
+// link reference definition (e.g. "[foo]: https://..."), or "" if the line
+// is not a definition.  The returned string is the raw label text (before
+// normalisation).
+func linkRefLabel(line string) string {
+	// Up to 3 leading spaces, then '['.
+	i := 0
+	for i < len(line) && i < 3 && line[i] == ' ' {
+		i++
+	}
+	if i >= len(line) || line[i] != '[' {
+		return ""
+	}
+	i++ // skip '['
+	start := i
+	for i < len(line) {
+		if line[i] == '\\' && i+1 < len(line) {
+			i += 2 // skip backslash-escaped character
+			continue
 		}
+		if line[i] == ']' || line[i] == '[' {
+			break
+		}
+		i++
+	}
+	if i >= len(line) || line[i] != ']' || i == start {
+		return ""
+	}
+	label := line[start:i]
+	i++ // skip ']'
+	if i >= len(line) || line[i] != ':' {
+		return ""
+	}
+	return label
+}
+
+// inlineLinkLine returns the 1-based line number for a Link or Image node by
+// inspecting its descendant Text nodes (recursing into CodeSpan and other
+// inline containers). Falls back to the nearest parent block line.
+func inlineLinkLine(n ast.Node, source []byte) int {
+	if t := firstTextLeaf(n); t != nil {
+		return countLine(source, t.Segment.Start)
 	}
 	return blockFirstLine(n, source)
+}
+
+// firstTextLeaf returns the first *ast.Text leaf under n (depth-first), or nil.
+func firstTextLeaf(n ast.Node) *ast.Text {
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		if t, ok := c.(*ast.Text); ok {
+			return t
+		}
+		if t := firstTextLeaf(c); t != nil {
+			return t
+		}
+	}
+	return nil
 }
 
 // autoLinkSourceLine returns the 1-based line number for an AutoLink node.
