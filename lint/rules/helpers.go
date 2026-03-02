@@ -240,21 +240,6 @@ func lastTextStopInInline(n ast.Node) int {
 }
 
 
-// headingTextStripCode returns heading text with all inline code spans removed.
-// Used by MD026 to check trailing punctuation: markdownlint does not treat
-// punctuation inside backtick code spans as trailing punctuation.
-func headingTextStripCode(n ast.Node, source []byte) string {
-	var b []byte
-	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-		if _, ok := c.(*ast.CodeSpan); ok {
-			continue // skip code span and its content
-		}
-		b = append(b, inlineNodeText(c, source)...)
-	}
-	return string(b)
-}
-
-
 // headingAnchor converts heading text to a GitHub-style anchor.
 func headingAnchor(text string) string {
 	result := strings.ToLower(text)
