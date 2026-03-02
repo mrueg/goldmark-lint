@@ -1530,13 +1530,14 @@ func TestMD060_Invalid(t *testing.T) {
 	}
 }
 
-func TestMD060_Default_Consistent(t *testing.T) {
-	// Default style is "consistent": data row not consistent with header → 1 violation.
+func TestMD060_Default_Any(t *testing.T) {
+	// Default style is "any": data row not aligned with header → aligned violations.
 	src := "| Col1 | Col2 |\n| ---- | ---- |\n|A|B|\n"
 	v := lintString(t, rules.MD060{}, src)
-	// Header row | Col1 | Col2 | is "compact"; data row |A|B| is "tight" → 1 violation.
-	if len(v) != 1 {
-		t.Errorf("expected 1 violation with default consistent style, got %d: %v", len(v), v)
+	// Data row |A|B| has pipes at cols 0,2,4 while header has pipes at 0,7,14.
+	// Aligned check fails (2 misaligned pipes); aligned has fewer errors than compact (4).
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations with default any style, got %d: %v", len(v), v)
 	}
 }
 

@@ -191,10 +191,12 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 			if !r.Stern && linkRefDefLines[i] {
 				continue
 			}
-			// Skip "link only" lines: lines whose non-whitespace content consists
-			// entirely of links/images, with no bare text outside them.
-			// Such lines mirror markdownlint's linkOnlyLineNumbers exemption.
-			if !r.Stern && linkOnlyLines[i+1] {
+			// Skip "link only" lines that have an inline URL in the source.
+			// These lines cannot be reformatted because the URL is the unavoidable
+			// cause of the length. Reference-link-only lines (no URL in source)
+			// are NOT exempted here; they fall through to the URL/trailing-word
+			// checks below, matching markdownlint behaviour.
+			if !r.Stern && linkOnlyLines[i+1] && len(lineURLLens[i+1]) > 0 {
 				continue
 			}
 			// URL exemption: skip lines that exceed the limit only due to a URL.

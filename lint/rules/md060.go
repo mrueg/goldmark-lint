@@ -9,7 +9,7 @@ import (
 
 // MD060 checks table column style consistency.
 type MD060 struct {
-	// Style is "consistent" (default), "any", "compact", "tight", or "aligned".
+	// Style is "any" (default), "compact", "tight", "aligned", or "consistent".
 	Style            string `json:"style"`
 	AlignedDelimiter bool   `json:"aligned_delimiter"`
 }
@@ -196,7 +196,7 @@ func rowCompactTightViolations(line, ruleID string, lineNum int) (compact, tight
 func (r MD060) Check(doc *lint.Document) []lint.Violation {
 	style := r.Style
 	if style == "" {
-		style = "consistent"
+		style = "any"
 	}
 
 	mask := fencedCodeBlockMask(doc.Lines)
