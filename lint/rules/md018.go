@@ -15,15 +15,17 @@ func (r MD018) Aliases() []string   { return []string{"no-missing-space-atx"} }
 func (r MD018) Description() string { return "No space after hash on ATX style heading" }
 
 // md018RE matches an ATX-like heading line where the hashes are not followed by a space.
-// Group 1: indent, Group 2: hashes, Group 3: rest starting with non-space, non-hash char.
-var md018RE = regexp.MustCompile(`^( {0,3})(#{1,6})([^ \t#\n].*)$`)
+// No leading indentation is allowed, matching markdownlint's behaviour; this avoids
+// false positives on continuation lines such as "  #8636](url)" inside list items.
+// Group 1: hashes, Group 2: rest starting with non-space, non-hash char.
+var md018RE = regexp.MustCompile(`^(#{1,6})([^ \t#\n].*)$`)
 
 func (r MD018) Fix(source []byte) []byte {
 	lines := strings.Split(string(source), "\n")
 	mask := fencedCodeBlockMask(lines)
 	for i, line := range lines {
 		if !mask[i] {
-			lines[i] = md018RE.ReplaceAllString(line, "$1$2 $3")
+			lines[i] = md018RE.ReplaceAllString(line, "$1 $2")
 		}
 	}
 	return []byte(strings.Join(lines, "\n"))
