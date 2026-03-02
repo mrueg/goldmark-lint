@@ -78,16 +78,27 @@ func (r MD009) Check(doc *lint.Document) []lint.Violation {
 			}
 			return ast.WalkContinue, nil
 		})
+		// Also mark blank (all-whitespace) lines that immediately follow an
+		// indented code block line. Such lines are the trailing "gap" after
+		// a code chunk and should not be flagged for trailing spaces,
+		// matching markdownlint behaviour.
+		for i := 1; i < len(codeMask); i++ {
+			if codeMask[i] {
+				continue
+			}
+			if strings.TrimSpace(doc.Lines[i]) != "" {
+				continue
+			}
+			// If the immediately preceding line is part of a code block, mark this line too.
+			if codeMask[i-1] {
+				codeMask[i] = true
+			}
+		}
 	}
 
 	var violations []lint.Violation
 	for i, line := range doc.Lines {
 		if !checkCodeBlocks && codeMask[i] {
-			continue
-		}
-		// Skip blank lines (lines containing only whitespace): markdownlint does not
-		// flag trailing spaces on lines that have no non-whitespace content.
-		if strings.TrimSpace(line) == "" {
 			continue
 		}
 		trimmed := strings.TrimRight(line, " \t")
