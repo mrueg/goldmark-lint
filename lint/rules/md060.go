@@ -106,6 +106,9 @@ func tableAlignedViolations(lines []string, t [2]int, ruleID string) []lint.Viol
 // content; tight requires no spaces.
 func tableCompactTightViolations(lines []string, t [2]int, ruleID string) (compact, tight []lint.Violation) {
 	for row := t[0]; row <= t[1]; row++ {
+		if isTableDelimiterRow(lines[row]) {
+			continue
+		}
 		c, ti := rowCompactTightViolations(lines[row], ruleID, row+1)
 		compact = append(compact, c...)
 		tight = append(tight, ti...)

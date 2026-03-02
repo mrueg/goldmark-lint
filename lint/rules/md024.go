@@ -18,6 +18,49 @@ func (r MD024) ID() string          { return "MD024" }
 func (r MD024) Aliases() []string   { return []string{"no-duplicate-heading"} }
 func (r MD024) Description() string { return "Multiple headings with the same content" }
 
+// headingRawContent returns the raw source content of a heading (after stripping
+// ATX markers like ##, or the raw first line for setext headings).
+// This preserves inline formatting characters and matches markdownlint's behavior.
+func headingRawContent(h *ast.Heading, source []byte, lines []string) string {
+	if h.Lines() == nil || h.Lines().Len() == 0 {
+		return headingText(h, source)
+	}
+	seg := h.Lines().At(0)
+	lineIdx := countLine(source, seg.Start) - 1
+	if lineIdx < 0 || lineIdx >= len(lines) {
+		return headingText(h, source)
+	}
+	line := lines[lineIdx]
+
+	// Strip blockquote prefix(es).
+	for {
+		stripped := strings.TrimLeft(line, " ")
+		if len(stripped) == 0 || stripped[0] != '>' {
+			break
+		}
+		line = stripped[1:]
+		if len(line) > 0 && line[0] == ' ' {
+			line = line[1:]
+		}
+	}
+
+	// Strip leading ATX markers (up to 3 spaces + # characters + one space).
+	j := 0
+	for j < len(line) && line[j] == ' ' && j < 3 {
+		j++
+	}
+	for j < len(line) && line[j] == '#' {
+		j++
+	}
+	if j < len(line) && line[j] == ' ' {
+		j++
+	}
+	content := line[j:]
+	// Strip optional closing ATX markers.
+	content = strings.TrimRight(content, " #")
+	return strings.TrimSpace(content)
+}
+
 func (r MD024) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 
@@ -37,7 +80,7 @@ func (r MD024) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
-		text := strings.TrimSpace(headingText(h, doc.Source))
+		text := headingRawContent(h, doc.Source, doc.Lines)
 		if seen[text] {
 			line := 1
 			if h.Lines() != nil && h.Lines().Len() > 0 {
@@ -48,7 +91,7 @@ func (r MD024) Check(doc *lint.Document) []lint.Violation {
 				Rule:    r.ID(),
 				Line:    line,
 				Column:  1,
-				Message: fmt.Sprintf("Multiple headings with the same content [Context: \"%s\"]", headingText(h, doc.Source)),
+				Message: fmt.Sprintf("Multiple headings with the same content [Context: \"%s\"]", headingRawContent(h, doc.Source, doc.Lines)),
 			})
 		}
 		seen[text] = true
@@ -72,7 +115,7 @@ func (r MD024) checkSiblings(doc *lint.Document) []lint.Violation {
 			if !ok {
 				continue
 			}
-			text := strings.TrimSpace(headingText(h, doc.Source))
+			text := headingRawContent(h, doc.Source, doc.Lines)
 			if seen[text] {
 				line := 1
 				if h.Lines() != nil && h.Lines().Len() > 0 {
@@ -83,7 +126,7 @@ func (r MD024) checkSiblings(doc *lint.Document) []lint.Violation {
 					Rule:    r.ID(),
 					Line:    line,
 					Column:  1,
-					Message: fmt.Sprintf("Multiple headings with the same content [Context: \"%s\"]", headingText(h, doc.Source)),
+					Message: fmt.Sprintf("Multiple headings with the same content [Context: \"%s\"]", headingRawContent(h, doc.Source, doc.Lines)),
 				})
 			}
 			seen[text] = true

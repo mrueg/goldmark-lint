@@ -187,6 +187,17 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 			// Parse the actual number from the source line (1-based lineNum).
 			if lineNum >= 1 && lineNum <= len(doc.Lines) {
 				line := doc.Lines[lineNum-1]
+				// Strip blockquote prefixes before parsing.
+				for {
+					stripped := strings.TrimLeft(line, " ")
+					if len(stripped) == 0 || stripped[0] != '>' {
+						break
+					}
+					line = stripped[1:]
+					if len(line) > 0 && line[0] == ' ' {
+						line = line[1:]
+					}
+				}
 				if m := orderedItemRE.FindStringSubmatch(line); m != nil {
 					if n, err := strconv.Atoi(m[2]); err == nil {
 						num = n
