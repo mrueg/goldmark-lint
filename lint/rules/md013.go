@@ -3,6 +3,7 @@ package rules
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/mrueg/goldmark-lint/lint"
 )
@@ -151,12 +152,12 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 		default:
 			limit = defaultLimit
 		}
-		if len(line) > limit {
+		if utf8.RuneCountInString(line) > limit {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
 				Line:    i + 1,
 				Column:  limit + 1,
-				Message: fmt.Sprintf("Line length [Expected: %d; Actual: %d]", limit, len(line)),
+				Message: fmt.Sprintf("Line length [Expected: %d; Actual: %d]", limit, utf8.RuneCountInString(line)),
 			})
 		}
 	}
