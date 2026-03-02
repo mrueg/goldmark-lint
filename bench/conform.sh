@@ -7,7 +7,6 @@
 # Requirements:
 #   - git, go, jq
 #   - markdownlint-cli2 (npm install -g markdownlint-cli2)
-#   - markdownlint-cli2-formatter-json (npm install -g markdownlint-cli2-formatter-json)
 #
 # Usage:
 #   ./bench/conform.sh
@@ -77,9 +76,7 @@ info "Built: ${GOLDMARK_BIN}"
 # ---------------------------------------------------------------------------
 GOLDMARK_OUT=$(mktemp)
 MDLINT_OUT=$(mktemp)
-MDLINT_TMPDIR=$(mktemp -d)
-MDLINT_CFG="${MDLINT_TMPDIR}/markdownlint-cli2.json"
-trap 'rm -f "${GOLDMARK_OUT}" "${MDLINT_OUT}"; rm -rf "${MDLINT_TMPDIR}"' EXIT
+trap 'rm -f "${GOLDMARK_OUT}" "${MDLINT_OUT}"' EXIT
 
 cd "${RFCS_DIR}"
 
@@ -88,27 +85,19 @@ info "Running goldmark-lint…"
 "${GOLDMARK_BIN}" --no-cache --output-format json '**/*.md' >"${GOLDMARK_OUT}" 2>/dev/null || true
 
 info "Running markdownlint-cli2…"
-# markdownlint-cli2 does not support --json; use a temporary config file that
-# enables the JSON output formatter and writes results to MDLINT_OUT.
-cat > "${MDLINT_CFG}" <<EOF
-{
-  "outputFormatters": [
-    ["markdownlint-cli2-formatter-json", { "name": "${MDLINT_OUT}" }]
-  ]
-}
-EOF
-markdownlint-cli2 --config "${MDLINT_CFG}" '**/*.md' >/dev/null 2>/dev/null || true
+# markdownlint-cli2 writes violation lines to stderr; capture them for parsing.
+markdownlint-cli2 '**/*.md' 2>"${MDLINT_OUT}" >/dev/null || true
 
 # ---------------------------------------------------------------------------
-# Extract per-rule violation counts using jq.
+# Extract per-rule violation counts.
 #
 # goldmark-lint JSON format:
 #   A flat array of objects; each has "ruleNames": ["MDxxx", ...].
 #   Primary rule ID is ruleNames[0].
 #
-# markdownlint-cli2 JSON format (markdownlint-cli2-formatter-json):
-#   An array of {fileName, results: [{ruleNames: ["MDxxx", ...], ...}, ...]}.
-#   Primary rule ID is results[].ruleNames[0].
+# markdownlint-cli2 text format (default stderr output):
+#   One violation per line: <file>:<line> error MDxxx/<alias> <description>
+#   Primary rule ID is the MDxxx token before the slash.
 # ---------------------------------------------------------------------------
 
 # extract_gm_rules emits one rule ID per line from goldmark-lint JSON output.
@@ -116,9 +105,9 @@ extract_gm_rules() {
   jq -r '.[].ruleNames[0]' "$1"
 }
 
-# extract_ml_rules emits one rule ID per line from markdownlint-cli2 JSON output.
+# extract_ml_rules emits one rule ID per line from markdownlint-cli2 text output.
 extract_ml_rules() {
-  jq -r '.[].results[].ruleNames[0]' "$1"
+  grep -o 'MD[0-9]*/' "$1" | tr -d '/'
 }
 
 declare -A GM_RULE ML_RULE
