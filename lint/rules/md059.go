@@ -1,10 +1,10 @@
 package rules
 
 import (
-	"regexp"
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/yuin/goldmark/ast"
 )
 
 // MD059 checks that link text is descriptive (not generic).
@@ -24,32 +24,38 @@ func (r MD059) prohibited() []string {
 	return r.ProhibitedTexts
 }
 
-// md059LinkTextRE matches inline link text: [text](url).
-var md059LinkTextRE = regexp.MustCompile(`\[([^\]]+)\]\(`)
-
 func (r MD059) Check(doc *lint.Document) []lint.Violation {
-	mask := fencedCodeBlockMask(doc.Lines)
 	prohibited := r.prohibited()
 	var violations []lint.Violation
 
-	for i, line := range doc.Lines {
-		if mask[i] {
-			continue
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-		for _, m := range md059LinkTextRE.FindAllStringSubmatch(line, -1) {
-			text := strings.TrimSpace(m[1])
-			for _, p := range prohibited {
-				if strings.EqualFold(text, p) {
-					violations = append(violations, lint.Violation{
-						Rule:    r.ID(),
-						Line:    i + 1,
-						Column:  1,
-						Message: "Link text should be descriptive [Text: " + text + "]",
-					})
-					break
-				}
+		link, ok := n.(*ast.Link)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+		// Collect text from direct Text children.
+		var sb strings.Builder
+		for c := link.FirstChild(); c != nil; c = c.NextSibling() {
+			if t, ok := c.(*ast.Text); ok {
+				sb.Write(doc.Source[t.Segment.Start:t.Segment.Stop])
 			}
 		}
-	}
+		text := strings.TrimSpace(sb.String())
+		for _, p := range prohibited {
+			if strings.EqualFold(text, p) {
+				violations = append(violations, lint.Violation{
+					Rule:    r.ID(),
+					Line:    inlineNodeLine(link, doc.Source),
+					Column:  1,
+					Message: "Link text should be descriptive [Text: " + text + "]",
+				})
+				break
+			}
+		}
+		return ast.WalkContinue, nil
+	})
 	return violations
 }

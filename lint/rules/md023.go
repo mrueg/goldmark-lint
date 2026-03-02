@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/yuin/goldmark/ast"
 )
 
 // MD023 checks that headings start at the beginning of the line.
@@ -19,40 +20,30 @@ var md023atxRE = regexp.MustCompile(`^ {1,3}#{1,6}( |$)`)
 
 func (r MD023) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
-	mask := fencedCodeBlockMask(doc.Lines)
-	n := len(doc.Lines)
 
-	for i, line := range doc.Lines {
-		if mask[i] {
-			continue
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-		// ATX heading with leading spaces.
-		if md023atxRE.MatchString(line) {
+		h, ok := n.(*ast.Heading)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+		lineNum := headingSourceLine(h, doc.Source)
+		if lineNum == 0 {
+			return ast.WalkContinue, nil
+		}
+		line := doc.Lines[lineNum-1]
+		if strings.HasPrefix(line, " ") {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
-				Line:    i + 1,
+				Line:    lineNum,
 				Column:  1,
 				Message: "Headings must start at the beginning of the line",
 			})
-			continue
 		}
-		// Setext heading: non-blank text line with leading spaces followed by underline.
-		if i+1 < n && !mask[i+1] {
-			curTrimmed := strings.TrimLeft(line, " ")
-			nextTrimmed := strings.TrimSpace(doc.Lines[i+1])
-			isSetextUnderline := len(nextTrimmed) > 0 &&
-				(strings.Trim(nextTrimmed, "=") == "" || strings.Trim(nextTrimmed, "-") == "")
-			if isSetextUnderline && strings.HasPrefix(line, " ") &&
-				len(curTrimmed) > 0 && curTrimmed[0] != '#' {
-				violations = append(violations, lint.Violation{
-					Rule:    r.ID(),
-					Line:    i + 1,
-					Column:  1,
-					Message: "Headings must start at the beginning of the line",
-				})
-			}
-		}
-	}
+		return ast.WalkContinue, nil
+	})
 	return violations
 }
 
