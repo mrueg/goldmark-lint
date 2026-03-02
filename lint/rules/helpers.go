@@ -116,15 +116,21 @@ func headingSourceLine(h *ast.Heading, source []byte) int {
 
 // fencedCodeBlockMask returns a bool slice with true for each line that is
 // inside (not on the fence delimiters of) a fenced code block.
+// Per CommonMark spec, a fenced code block may be indented by at most 3 spaces.
 func fencedCodeBlockMask(lines []string) []bool {
 	mask := make([]bool, len(lines))
 	inFence := false
 	fenceChar := byte(0)
 	fenceLen := 0
 	for i, line := range lines {
-		trimmed := strings.TrimLeft(line, " ")
+		// Count leading spaces; fences require at most 3 spaces of indentation.
+		indent := 0
+		for indent < len(line) && line[indent] == ' ' {
+			indent++
+		}
+		trimmed := line[indent:]
 		if !inFence {
-			if len(trimmed) >= 3 && (trimmed[0] == '`' || trimmed[0] == '~') {
+			if indent <= 3 && len(trimmed) >= 3 && (trimmed[0] == '`' || trimmed[0] == '~') {
 				fc := trimmed[0]
 				j := 0
 				for j < len(trimmed) && trimmed[j] == fc {
@@ -242,9 +248,14 @@ func fencedCodeBlockLanguages(lines []string) map[int]string {
 	fenceLen := 0
 	currentLang := ""
 	for i, line := range lines {
-		trimmed := strings.TrimLeft(line, " ")
+		// Count leading spaces; fences require at most 3 spaces of indentation.
+		indent := 0
+		for indent < len(line) && line[indent] == ' ' {
+			indent++
+		}
+		trimmed := line[indent:]
 		if !inFence {
-			if len(trimmed) >= 3 && (trimmed[0] == '`' || trimmed[0] == '~') {
+			if indent <= 3 && len(trimmed) >= 3 && (trimmed[0] == '`' || trimmed[0] == '~') {
 				fc := trimmed[0]
 				j := 0
 				for j < len(trimmed) && trimmed[j] == fc {
@@ -316,4 +327,28 @@ func isIndentedCodeLine(line string) bool {
 		return true
 	}
 	return strings.HasPrefix(line, "    ")
+}
+
+// htmlBlockLineMask returns a bool slice with true for each line that is
+// inside an HTML block (and therefore should not be treated as markdown).
+// It uses the goldmark AST to accurately detect HTML blocks.
+func htmlBlockLineMask(doc *lint.Document) []bool {
+	mask := make([]bool, len(doc.Lines))
+	ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		if n.Kind() != ast.KindHTMLBlock {
+			return ast.WalkContinue, nil
+		}
+		for i := 0; i < n.Lines().Len(); i++ {
+			seg := n.Lines().At(i)
+			lineIdx := countLine(doc.Source, seg.Start) - 1
+			if lineIdx >= 0 && lineIdx < len(mask) {
+				mask[lineIdx] = true
+			}
+		}
+		return ast.WalkContinue, nil
+	})
+	return mask
 }

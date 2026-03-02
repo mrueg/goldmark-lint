@@ -514,6 +514,15 @@ func TestMD018_Fix(t *testing.T) {
 	}
 }
 
+func TestMD018_HTMLBlockNoFalsePositive(t *testing.T) {
+	// #text inside an HTML block (no blank lines) must not be flagged.
+	src := "# Title\n\n<details>\n<summary>Click</summary>\n#anchor\n</details>\n\n## After\n"
+	v := lintString(t, rules.MD018{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for #text inside HTML block, got %v", v)
+	}
+}
+
 func TestMD019_Valid(t *testing.T) {
 	src := "# Heading\n"
 	v := lintString(t, rules.MD019{}, src)
@@ -1166,6 +1175,17 @@ func TestMD048_Fix(t *testing.T) {
 	want := "```go\ncode\n~~~\n"
 	if got != want {
 		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD048_IndentedCodeBlockNoFalsePositive(t *testing.T) {
+	// A 4-space-indented line containing ``` is an indented code block, not a fence.
+	// When the document's first real fence uses tildes, the indented ``` line must
+	// not be treated as a backtick fence opener (which would cause a spurious MD048).
+	src := "# Title\n\n~~~go\ncode\n~~~\n\nParagraph.\n\n    ```go\n    code\n    ```\n"
+	v := lintString(t, rules.MD048{Style: "consistent"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for indented code block with backticks, got %v", v)
 	}
 }
 

@@ -18,8 +18,17 @@ func (r MD031) Aliases() []string   { return []string{"blanks-around-fences"} }
 func (r MD031) Description() string { return "Fenced code blocks should be surrounded by blank lines" }
 
 // detectFence returns (isFence, fenceChar, fenceLen) for a line.
+// Per CommonMark spec, a fenced code block may be indented by at most 3 spaces.
 func detectFence(line string) (bool, byte, int) {
-	trimmed := strings.TrimLeft(line, " ")
+	// Count leading spaces (at most 3 allowed for a valid fence).
+	indent := 0
+	for indent < len(line) && line[indent] == ' ' {
+		indent++
+	}
+	if indent > 3 {
+		return false, 0, 0
+	}
+	trimmed := line[indent:]
 	if len(trimmed) < 3 {
 		return false, 0, 0
 	}
