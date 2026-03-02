@@ -228,7 +228,30 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 			num := -1
 			if segStart, found := listItemFirstSeg(li); found {
 				lineNum = countLine(doc.Source, segStart)
+				// First try fast backward scan from the segment start.
 				num = listItemNumFromSeg(doc.Source, segStart)
+			}
+			// Fallback: parse the number from the raw source line using regex.
+			// This handles cases where segStart is inside a blockquote
+			// (e.g. "> 1. item") and the backward scan can't find the number.
+			if num < 0 && lineNum >= 1 && lineNum <= len(doc.Lines) {
+				line := doc.Lines[lineNum-1]
+				// Strip blockquote prefixes before matching.
+				for {
+					stripped := strings.TrimLeft(line, " ")
+					if len(stripped) == 0 || stripped[0] != '>' {
+						break
+					}
+					line = stripped[1:]
+					if len(line) > 0 && line[0] == ' ' {
+						line = line[1:]
+					}
+				}
+				if m := orderedItemRE.FindStringSubmatch(line); m != nil {
+					if n2, err := strconv.Atoi(m[2]); err == nil {
+						num = n2
+					}
+				}
 			}
 			if lineNum <= 0 || num < 0 {
 				// Cannot determine line or number; skip to avoid false positives.
