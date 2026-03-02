@@ -139,12 +139,22 @@ func (r MD029) Fix(source []byte) []byte {
 }
 
 // listItemFirstSeg returns the first text segment of a list item by recursively
-// searching the AST subtree. Returns (segStart, ok).
+// searching the AST subtree, but NOT descending into sub-lists. This ensures we
+// get the segment of the item's own content (not nested list content).
+// Returns (segStart, ok).
 func listItemFirstSeg(li ast.Node) (int, bool) {
 	if li.Lines() != nil && li.Lines().Len() > 0 {
 		return li.Lines().At(0).Start, true
 	}
 	for c := li.FirstChild(); c != nil; c = c.NextSibling() {
+		// Skip sub-lists to avoid mixing up their item numbers with ours.
+		if _, isList := c.(*ast.List); isList {
+			continue
+		}
+		if c.Lines() != nil && c.Lines().Len() > 0 {
+			return c.Lines().At(0).Start, true
+		}
+		// Recurse into non-list block children (e.g., blockquotes containing the item).
 		if s, ok := listItemFirstSeg(c); ok {
 			return s, true
 		}
@@ -213,17 +223,15 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 			if !ok2 {
 				continue
 			}
-			// Find the first content segment of this list item (recursing into
-			// block children such as blockquotes).
-			segStart, found := listItemFirstSeg(li)
-			if !found {
-				// Cannot determine position; skip this item to avoid false positives.
-				continue
+			// Find the source line for this list item.
+			lineNum := -1
+			num := -1
+			if segStart, found := listItemFirstSeg(li); found {
+				lineNum = countLine(doc.Source, segStart)
+				num = listItemNumFromSeg(doc.Source, segStart)
 			}
-			lineNum := countLine(doc.Source, segStart)
-			num := listItemNumFromSeg(doc.Source, segStart)
-			if num < 0 {
-				// Cannot determine the item number; skip to avoid false positives.
+			if lineNum <= 0 || num < 0 {
+				// Cannot determine line or number; skip to avoid false positives.
 				continue
 			}
 			items = append(items, item{lineNum, num})
