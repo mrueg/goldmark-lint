@@ -49,6 +49,7 @@ type Document struct {
 	Lines             []string
 	AST               ast.Node
 	FrontMatterFields map[string]string // key-value pairs from YAML front matter, if any
+	FrontMatterLines  int               // number of lines occupied by front matter (0 if none)
 	// LinkRefs maps a normalised link label to its destination URL as parsed by
 	// goldmark. It covers all link reference definitions in the document and is
 	// derived from the goldmark parser context rather than a hand-rolled regex,
@@ -118,6 +119,13 @@ func (l *Linter) Fix(source []byte) []byte {
 func (l *Linter) Lint(source []byte) []Violation {
 	end := l.fmEnd(source)
 	fmFields := parseFrontMatterFieldsAt(source, end)
+	// Count the number of lines consumed by the front matter block.
+	fmLines := 0
+	for _, b := range source[:end] {
+		if b == '\n' {
+			fmLines++
+		}
+	}
 	source = stripFrontMatterAt(source, end)
 
 	pctx := parser.NewContext()
@@ -138,6 +146,7 @@ func (l *Linter) Lint(source []byte) []Violation {
 		Lines:             lines,
 		AST:               node,
 		FrontMatterFields: fmFields,
+		FrontMatterLines:  fmLines,
 		LinkRefs:          linkRefs,
 	}
 

@@ -57,14 +57,18 @@ func (r MD010) Check(doc *lint.Document) []lint.Violation {
 				}
 			}
 		}
-		col := strings.Index(line, "\t")
-		if col >= 0 {
-			violations = append(violations, lint.Violation{
-				Rule:    r.ID(),
-				Line:    i + 1,
-				Column:  col + 1,
-				Message: "Hard tabs",
-			})
+		// Report the first tab in each consecutive run of tabs.
+		// Markdownlint reports the first tab of a run but not subsequent
+		// consecutive tabs (e.g. "\t\t\tcode" → one violation at column 1).
+		for j := 0; j < len(line); j++ {
+			if line[j] == '\t' && (j == 0 || line[j-1] != '\t') {
+				violations = append(violations, lint.Violation{
+					Rule:    r.ID(),
+					Line:    i + 1,
+					Column:  j + 1,
+					Message: "Hard tabs",
+				})
+			}
 		}
 	}
 	return violations

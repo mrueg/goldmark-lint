@@ -47,8 +47,18 @@ func (r MD012) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	consecutive := 0
 	mask := fencedCodeBlockMask(doc.Lines)
+
+	// Build a mask for indented code block lines using the goldmark AST.
+	// Blank lines inside indented code blocks should not trigger MD012.
+	indentMask := indentedCodeBlockMask(doc)
+
 	for i, line := range doc.Lines {
-		if mask[i] {
+		// Skip front-matter lines (they were stripped to blank lines by stripFrontMatterAt).
+		if i < doc.FrontMatterLines {
+			consecutive = 0
+			continue
+		}
+		if mask[i] || indentMask[i] {
 			// Reset consecutive blank count inside code blocks (treat as non-blank).
 			consecutive = 0
 			continue

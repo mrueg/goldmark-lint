@@ -138,6 +138,22 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 		lineURLLens = urlLengthsPerLine(doc)
 	}
 
+	// Build a set of "link only" line numbers: lines whose only non-whitespace
+	// content is links or images (no bare text outside link/image nodes).
+	// Markdownlint exempts such lines because they cannot be split at the URL.
+	// Also build the set of link reference definition line indices (0-based).
+	var linkOnlyLines map[int]bool
+	var linkRefDefLines map[int]bool
+	if !r.Stern {
+		linkOnlyLines = md013LinkOnlyLines(doc)
+		linkRefDefLines = make(map[int]bool)
+		for i, line := range doc.Lines {
+			if label := linkRefLabel(line); label != "" {
+				linkRefDefLines[i] = true
+			}
+		}
+	}
+
 	var violations []lint.Violation
 	for i, line := range doc.Lines {
 		var limit int
@@ -171,6 +187,16 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 			effectiveLen = trailingWordTrimmedLen(line)
 		}
 		if effectiveLen > limit {
+			// Skip link reference definition lines (e.g. "[label]: url").
+			if !r.Stern && linkRefDefLines[i] {
+				continue
+			}
+			// Skip "link only" lines: lines whose non-whitespace content consists
+			// entirely of links/images, with no bare text outside them.
+			// Such lines mirror markdownlint's linkOnlyLineNumbers exemption.
+			if !r.Stern && linkOnlyLines[i+1] {
+				continue
+			}
 			// URL exemption: skip lines that exceed the limit only due to a URL.
 			// lineURLLens[i+1] returns nil for lines without URLs, and
 			// lineExemptByURL handles nil slices by returning false.
@@ -207,10 +233,20 @@ func urlLengthsPerLine(doc *lint.Document) map[int][]int {
 		switch node := n.(type) {
 		case *ast.Link:
 			lineNum := inlineLinkLine(node, doc.Source)
-			addURL(lineNum, utf8.RuneCount(node.Destination))
+			dest := node.Destination
+			// Only apply the URL exemption for inline links where the URL actually
+			// appears on the source line. Reference links resolve their URL from a
+			// definition elsewhere; attributing that URL length to the using line
+			// would incorrectly exempt lines that only contain a short reference label.
+			if lineNum >= 1 && lineNum <= len(doc.Lines) && strings.Contains(doc.Lines[lineNum-1], string(dest)) {
+				addURL(lineNum, utf8.RuneCount(dest))
+			}
 		case *ast.Image:
 			lineNum := inlineLinkLine(node, doc.Source)
-			addURL(lineNum, utf8.RuneCount(node.Destination))
+			dest := node.Destination
+			if lineNum >= 1 && lineNum <= len(doc.Lines) && strings.Contains(doc.Lines[lineNum-1], string(dest)) {
+				addURL(lineNum, utf8.RuneCount(dest))
+			}
 		case *ast.AutoLink:
 			lineNum := autoLinkSourceLine(node, doc.Source)
 			addURL(lineNum, utf8.RuneCount(node.URL(doc.Source)))
@@ -356,10 +392,13 @@ func lineExemptByURL(urlLens []int, lineLen, limit int) bool {
 // so that a line whose only violation is a long final word is not flagged
 // (the last word cannot be wrapped to the next line).
 func trailingWordTrimmedLen(line string) int {
-	// Find the start of the trailing non-whitespace run.
-	runes := []rune(line)
+	// Trim trailing whitespace first, matching markdownlint's behaviour.
+	// A line that ends with whitespace does not have a "trailing word" to trim,
+	// so its effective length is the trimmed length.
+	trimmed := strings.TrimRight(line, " \t")
+	runes := []rune(trimmed)
 	n := len(runes)
-	// Walk backwards to find the last whitespace boundary.
+	// Find the start of the trailing non-whitespace run.
 	end := n
 	for end > 0 && runes[end-1] != ' ' && runes[end-1] != '\t' {
 		end--
@@ -368,4 +407,54 @@ func trailingWordTrimmedLen(line string) int {
 	// replace the trailing non-whitespace run with a single '#' (1 rune).
 	// When end == 0, the entire line is one word; the effective length is 1.
 	return end + 1
+}
+
+// md013LinkOnlyLines returns a set of 1-based line numbers for lines whose
+// non-whitespace content consists entirely of links or images, with no bare
+// text nodes outside link/image containers at the immediate paragraph/block level.
+// Markdownlint exempts such lines because the URL is the unavoidable cause of
+// the length (the line cannot be reformatted to fit within the limit).
+func md013LinkOnlyLines(doc *lint.Document) map[int]bool {
+	// linkLines: 1-based line numbers that contain at least one link or image.
+	linkLines := make(map[int]bool)
+	// paragraphDataLines: 1-based line numbers that have a Text node whose
+	// DIRECT parent is NOT a link or image (i.e. bare text in the paragraph).
+	paragraphDataLines := make(map[int]bool)
+
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		switch n.Kind() {
+		case ast.KindLink, ast.KindImage:
+			lineNum := inlineLinkLine(n, doc.Source)
+			if lineNum > 0 {
+				linkLines[lineNum] = true
+			}
+		case ast.KindText:
+			// If this Text node is a direct child of a link or image, it is the
+			// link/image label text – not bare paragraph content.
+			p := n.Parent()
+			if p != nil && (p.Kind() == ast.KindLink || p.Kind() == ast.KindImage) {
+				break
+			}
+			t, ok := n.(*ast.Text)
+			if !ok {
+				break
+			}
+			lineNum := countLine(doc.Source, t.Segment.Start)
+			if lineNum > 0 {
+				paragraphDataLines[lineNum] = true
+			}
+		}
+		return ast.WalkContinue, nil
+	})
+
+	result := make(map[int]bool)
+	for lineNum := range linkLines {
+		if !paragraphDataLines[lineNum] {
+			result[lineNum] = true
+		}
+	}
+	return result
 }

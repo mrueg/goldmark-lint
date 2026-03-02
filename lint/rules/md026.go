@@ -40,31 +40,37 @@ func (r MD026) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
-		text := headingText(h, doc.Source)
-		if len(text) == 0 {
+		if headingText(h, doc.Source) == "" {
 			return ast.WalkContinue, nil
 		}
 
-		// Strip inline code-span content: markdownlint ignores text inside
-		// backtick code spans when checking for trailing punctuation.
-		// Only check punctuation in the non-code portions of the heading.
-		text = headingTextStripCode(h, doc.Source)
-		text = strings.TrimRight(text, " \t")
-		if len(text) == 0 {
+		// Determine the line number of the (last) heading content line.
+		// For ATX headings h.Lines() contains the heading source line (with '#').
+		// For setext headings h.Lines() contains the content lines (not the underline).
+		// Use the LAST line to capture the trailing character of the heading.
+		line := 1
+		if h.Lines() != nil && h.Lines().Len() > 0 {
+			lastSeg := h.Lines().At(h.Lines().Len() - 1)
+			line = countLine(doc.Source, lastSeg.Start)
+		}
+		if line < 1 || line > len(doc.Lines) {
 			return ast.WalkContinue, nil
 		}
 
-		runes := []rune(text)
+		// Check the last non-whitespace character of the raw heading source line.
+		// This matches markdownlint's behaviour: headings that end with a backtick
+		// code span (last raw char is '`') or a Markdown link (last raw char is ')')
+		// are not flagged, because those characters are not in the punctuation set.
+		rawLine := strings.TrimRight(doc.Lines[line-1], " \t\r\n")
+		if rawLine == "" {
+			return ast.WalkContinue, nil
+		}
+		runes := []rune(rawLine)
 		lastRune := runes[len(runes)-1]
 		if !strings.ContainsRune(punct, lastRune) {
 			return ast.WalkContinue, nil
 		}
 
-		line := 1
-		if h.Lines() != nil && h.Lines().Len() > 0 {
-			seg := h.Lines().At(0)
-			line = countLine(doc.Source, seg.Start)
-		}
 		violations = append(violations, lint.Violation{
 			Rule:    r.ID(),
 			Line:    line,
