@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/yuin/goldmark/ast"
 )
 
 // MD049 checks that emphasis markers use a consistent style (asterisk or underscore).
@@ -34,62 +35,54 @@ func (r MD049) Check(doc *lint.Document) []lint.Violation {
 	}
 
 	var violations []lint.Violation
-	mask := fencedCodeBlockMask(doc.Lines)
 	firstStyle := ""
 
-	for i, line := range doc.Lines {
-		if mask[i] {
-			continue
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-		cleaned := blankCodeSpans(line)
-
-		hasStar := md049StarRE.MatchString(cleaned)
-		hasUnder := md049UnderRE.MatchString(cleaned)
-
-		if !hasStar && !hasUnder {
-			continue
+		emph, ok := n.(*ast.Emphasis)
+		if !ok || emph.Level != 1 {
+			return ast.WalkContinue, nil
 		}
 
-		// Determine actual style on this line.
-		for _, actual := range emphasisStylesOnLine(cleaned) {
-			expected := style
-			if style == "consistent" {
-				if firstStyle == "" {
-					firstStyle = actual
-				}
-				expected = firstStyle
-			}
-			if actual != expected {
-				violations = append(violations, lint.Violation{
-					Rule:    r.ID(),
-					Line:    i + 1,
-					Column:  1,
-					Message: fmt.Sprintf("Emphasis style [Expected: %s; Actual: %s]", expected, actual),
-				})
-				break
-			}
+		pos := emphasisStartPos(emph)
+		if pos < 0 || pos >= len(doc.Source) {
+			return ast.WalkContinue, nil
 		}
-		// Update firstStyle from this line if consistent and not yet set.
-		if style == "consistent" && firstStyle == "" {
-			styles := emphasisStylesOnLine(cleaned)
-			if len(styles) > 0 {
-				firstStyle = styles[0]
-			}
+
+		var actual string
+		switch doc.Source[pos] {
+		case '*':
+			actual = "asterisk"
+		case '_':
+			actual = "underscore"
+		default:
+			return ast.WalkContinue, nil
 		}
-	}
+
+		expected := style
+		if style == "consistent" {
+			if firstStyle == "" {
+				firstStyle = actual
+			}
+			expected = firstStyle
+		}
+
+		if actual == expected {
+			return ast.WalkContinue, nil
+		}
+
+		violations = append(violations, lint.Violation{
+			Rule:    r.ID(),
+			Line:    inlineNodeLine(emph, doc.Source),
+			Column:  1,
+			Message: fmt.Sprintf("Emphasis style [Expected: %s; Actual: %s]", expected, actual),
+		})
+		return ast.WalkContinue, nil
+	})
+
 	return violations
-}
-
-// emphasisStylesOnLine returns the emphasis styles used on this line ("asterisk", "underscore").
-func emphasisStylesOnLine(line string) []string {
-	var styles []string
-	if md049StarRE.MatchString(line) {
-		styles = append(styles, "asterisk")
-	}
-	if md049UnderRE.MatchString(line) {
-		styles = append(styles, "underscore")
-	}
-	return styles
 }
 
 func (r MD049) Fix(source []byte) []byte {
@@ -190,4 +183,17 @@ func applyReplacementsFromCleaned(line, cleaned string, re *regexp.Regexp, repla
 		result = append(result[:start], append([]byte(newSeg), result[end:]...)...)
 	}
 	return string(result)
+}
+
+// emphasisStylesOnLine returns the emphasis styles used on this line ("asterisk", "underscore").
+// Used by the Fix method to determine the first emphasis style in the document.
+func emphasisStylesOnLine(line string) []string {
+	var styles []string
+	if md049StarRE.MatchString(line) {
+		styles = append(styles, "asterisk")
+	}
+	if md049UnderRE.MatchString(line) {
+		styles = append(styles, "underscore")
+	}
+	return styles
 }

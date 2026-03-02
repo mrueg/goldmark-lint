@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/yuin/goldmark/ast"
 )
 
 // MD026 checks for trailing punctuation in headings.
@@ -26,55 +27,44 @@ func (r MD026) punct() string {
 	return r.Punctuation
 }
 
-// md026openATXRE is reused from md019/md018 patterns – the open ATX heading prefix.
-// We detect open ATX headings that don't match closedATXRE.
-
 func (r MD026) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
-	mask := fencedCodeBlockMask(doc.Lines)
 	punct := r.punct()
-	n := len(doc.Lines)
 
-	for i, line := range doc.Lines {
-		if mask[i] {
-			continue
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-		var text string
-
-		// Closed ATX heading: ## Heading ##
-		if m := closedATXRE.FindStringSubmatch(line); m != nil {
-			text = strings.TrimSpace(m[3])
-		} else if isOpenATXHeading(line) {
-			// Open ATX heading: # Heading
-			idx := strings.Index(line, " ")
-			if idx >= 0 {
-				text = strings.TrimSpace(line[idx:])
-			}
-		} else if i+1 < n && !mask[i+1] {
-			// Setext heading: non-blank text line followed by underline.
-			nextTrimmed := strings.TrimSpace(doc.Lines[i+1])
-			isSetextUnderline := len(nextTrimmed) > 0 &&
-				(strings.Trim(nextTrimmed, "=") == "" || strings.Trim(nextTrimmed, "-") == "")
-			curTrimmed := strings.TrimLeft(line, " ")
-			if isSetextUnderline && len(curTrimmed) > 0 && curTrimmed[0] != '#' {
-				text = strings.TrimSpace(line)
-			}
+		h, ok := n.(*ast.Heading)
+		if !ok {
+			return ast.WalkContinue, nil
 		}
 
+		text := headingText(h, doc.Source)
 		if len(text) == 0 {
-			continue
+			return ast.WalkContinue, nil
 		}
+
 		runes := []rune(text)
 		lastRune := runes[len(runes)-1]
-		if strings.ContainsRune(punct, lastRune) {
-			violations = append(violations, lint.Violation{
-				Rule:    r.ID(),
-				Line:    i + 1,
-				Column:  1,
-				Message: fmt.Sprintf("Trailing punctuation in heading [Punctuation: '%c']", lastRune),
-			})
+		if !strings.ContainsRune(punct, lastRune) {
+			return ast.WalkContinue, nil
 		}
-	}
+
+		line := 1
+		if h.Lines() != nil && h.Lines().Len() > 0 {
+			seg := h.Lines().At(0)
+			line = countLine(doc.Source, seg.Start)
+		}
+		violations = append(violations, lint.Violation{
+			Rule:    r.ID(),
+			Line:    line,
+			Column:  1,
+			Message: fmt.Sprintf("Trailing punctuation in heading [Punctuation: '%c']", lastRune),
+		})
+		return ast.WalkContinue, nil
+	})
+
 	return violations
 }
 

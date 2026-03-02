@@ -69,6 +69,42 @@ func headingText(n ast.Node, source []byte) string {
 	return string(text)
 }
 
+// fencedCodeBlockLine returns the 1-based line number of the opening fence of a
+// FencedCodeBlock node. It tries Info segment first, then first content line minus
+// one, and falls back to 1 for empty blocks with no info string.
+func fencedCodeBlockLine(n *ast.FencedCodeBlock, source []byte) int {
+	if n.Info != nil {
+		return countLine(source, n.Info.Segment.Start)
+	}
+	if n.Lines() != nil && n.Lines().Len() > 0 {
+		line := countLine(source, n.Lines().At(0).Start)
+		if line > 1 {
+			return line - 1
+		}
+	}
+	return 1
+}
+
+// emphasisStartPos returns the byte position in source of the opening marker of
+// the given Emphasis node. It walks to the first Text descendant, accumulating
+// nesting levels, then subtracts the total level from the text position.
+func emphasisStartPos(emph *ast.Emphasis) int {
+	totalLevel := emph.Level
+	var node ast.Node = emph.FirstChild()
+	for node != nil {
+		switch n := node.(type) {
+		case *ast.Text:
+			return n.Segment.Start - totalLevel
+		case *ast.Emphasis:
+			totalLevel += n.Level
+			node = n.FirstChild()
+		default:
+			return -1
+		}
+	}
+	return -1
+}
+
 // fencedCodeBlockMask returns a bool slice with true for each line that is
 // inside (not on the fence delimiters of) a fenced code block.
 func fencedCodeBlockMask(lines []string) []bool {
