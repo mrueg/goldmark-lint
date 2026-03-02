@@ -19,7 +19,69 @@ func (r MD027) ID() string          { return "MD027" }
 func (r MD027) Aliases() []string   { return []string{"no-multiple-space-blockquote"} }
 func (r MD027) Description() string { return "Multiple spaces after blockquote symbol" }
 
-// md027BQLevelRE matches a single blockquote level at the start of a string:
+// md027FencedCodeMask returns a bool mask marking lines that are inside fenced
+// code blocks, including fenced code blocks inside blockquotes. It strips any
+// leading blockquote markers ("> ") before checking for fence delimiters.
+func md027FencedCodeMask(lines []string) []bool {
+	mask := make([]bool, len(lines))
+	inFence := false
+	fenceChar := byte(0)
+	fenceLen := 0
+	for i, line := range lines {
+		// Strip up to one level of blockquote prefix so that fenced blocks
+		// inside blockquotes are correctly detected.
+		stripped := line
+		for {
+			s := strings.TrimLeft(stripped, " ")
+			if len(s) > 0 && s[0] == '>' {
+				s = s[1:]
+				if len(s) > 0 && s[0] == ' ' {
+					s = s[1:]
+				}
+				stripped = s
+			} else {
+				break
+			}
+		}
+		// Strip up to 3 leading spaces (CommonMark fence indentation).
+		indent := 0
+		for indent < len(stripped) && indent < 3 && stripped[indent] == ' ' {
+			indent++
+		}
+		trimmed := stripped[indent:]
+		if !inFence {
+			if len(trimmed) >= 3 && (trimmed[0] == '`' || trimmed[0] == '~') {
+				fc := trimmed[0]
+				j := 0
+				for j < len(trimmed) && trimmed[j] == fc {
+					j++
+				}
+				if j >= 3 {
+					inFence = true
+					fenceChar = fc
+					fenceLen = j
+				}
+			}
+			mask[i] = false
+		} else {
+			if len(trimmed) >= fenceLen && trimmed[0] == fenceChar {
+				j := 0
+				for j < len(trimmed) && trimmed[j] == fenceChar {
+					j++
+				}
+				if j >= fenceLen && strings.TrimSpace(trimmed[j:]) == "" {
+					inFence = false
+					mask[i] = false
+					continue
+				}
+			}
+			mask[i] = true
+		}
+	}
+	return mask
+}
+
+
 // optional leading spaces (0–3), a '>' character, and a capturing group of trailing spaces.
 var md027BQLevelRE = regexp.MustCompile(`^( {0,3}>)( *)`)
 
@@ -126,7 +188,7 @@ func md027ListInBQMask(doc *lint.Document) []bool {
 func (r MD027) Check(doc *lint.Document) []lint.Violation {
 	checkListItems := r.ListItems == nil || *r.ListItems
 	var violations []lint.Violation
-	mask := fencedCodeBlockMask(doc.Lines)
+	mask := md027FencedCodeMask(doc.Lines)
 	listInBQ := md027ListInBQMask(doc)
 	for i, line := range doc.Lines {
 		if mask[i] {
