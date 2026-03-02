@@ -42,19 +42,26 @@ func (r MD037) Check(doc *lint.Document) []lint.Violation {
 		}
 		// Check for space immediately before closing marker by examining
 		// the last text segment of the emphasis content.
+		// Only perform this check if the last direct child is a Text node;
+		// if the emphasis ends with a code span, link, or other non-text node,
+		// the space between that node and the closing marker is not flagged.
 		var lastStop int
+		var lastChild ast.Node
 		for c := emph.FirstChild(); c != nil; c = c.NextSibling() {
+			lastChild = c
 			if t, ok2 := c.(*ast.Text); ok2 && t.Segment.Stop > lastStop {
 				lastStop = t.Segment.Stop
 			}
 		}
-		if lastStop > 0 && lastStop <= len(doc.Source) && doc.Source[lastStop-1] == ' ' {
-			violations = append(violations, lint.Violation{
-				Rule:    r.ID(),
-				Line:    countLine(doc.Source, pos),
-				Column:  1,
-				Message: "Spaces inside emphasis markers",
-			})
+		if _, ok := lastChild.(*ast.Text); ok {
+			if lastStop > 0 && lastStop <= len(doc.Source) && doc.Source[lastStop-1] == ' ' {
+				violations = append(violations, lint.Violation{
+					Rule:    r.ID(),
+					Line:    countLine(doc.Source, pos),
+					Column:  1,
+					Message: "Spaces inside emphasis markers",
+				})
+			}
 		}
 		return ast.WalkContinue, nil
 	})

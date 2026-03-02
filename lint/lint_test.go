@@ -209,6 +209,15 @@ func TestMD025_Invalid(t *testing.T) {
 	}
 }
 
+func TestMD025_ContentBeforeFirstHeading(t *testing.T) {
+	// Content before the first H1: markdownlint does not report violations.
+	src := "Some preamble text.\n\n# First\n\n# Second\n"
+	v := lintString(t, rules.MD025{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations when content precedes first H1, got %d: %v", len(v), v)
+	}
+}
+
 func TestMD041_Valid(t *testing.T) {
 	src := "# First line heading\n"
 	v := lintString(t, rules.MD041{}, src)
@@ -714,6 +723,16 @@ func TestMD037_ValidMultiWord(t *testing.T) {
 	}
 }
 
+func TestMD037_EmphasisWithCodeSpanAtEnd(t *testing.T) {
+	// Emphasis ending with a code span should NOT be flagged: the space between
+	// the text and the code span does not constitute a space before the closing marker.
+	src := "See *foo `bar`* for details.\n"
+	v := lintString(t, rules.MD037{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for emphasis ending with code span, got %d: %v", len(v), v)
+	}
+}
+
 func TestMD037_Invalid(t *testing.T) {
 	// In CommonMark, "* emphasized *" is NOT parsed as emphasis (the opening *
 	// is followed by a space, making it non-left-flanking). Goldmark's AST-based
@@ -848,6 +867,24 @@ func TestMD045_Invalid(t *testing.T) {
 	v := lintString(t, rules.MD045{}, src)
 	if len(v) != 1 {
 		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD045_HTMLImgNoAlt(t *testing.T) {
+	// Inline HTML <img> without alt attribute should be flagged.
+	src := "Some text <img src=\"image.png\"> more text\n"
+	v := lintString(t, rules.MD045{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for <img> without alt, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD045_HTMLImgWithAlt(t *testing.T) {
+	// Inline HTML <img> with alt attribute should not be flagged.
+	src := "Some text <img src=\"image.png\" alt=\"desc\"> more text\n"
+	v := lintString(t, rules.MD045{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for <img> with alt, got %v", v)
 	}
 }
 
@@ -1371,6 +1408,7 @@ func TestMD059_Invalid(t *testing.T) {
 }
 
 func TestMD060_Valid(t *testing.T) {
+	// Aligned table (all pipes at the same columns): "any" style → no violations.
 	src := "| Col1 | Col2 |\n| ---- | ---- |\n| A    | B    |\n"
 	v := lintString(t, rules.MD060{Style: "any"}, src)
 	if len(v) != 0 {
@@ -1387,12 +1425,23 @@ func TestMD060_Invalid(t *testing.T) {
 	}
 }
 
-func TestMD060_Default_Consistent(t *testing.T) {
-	// Default style is "consistent": header compact, data tight → 1 violation.
+func TestMD060_Default_Any(t *testing.T) {
+	// Default style is "any": data row not aligned with header → aligned violations.
 	src := "| Col1 | Col2 |\n| ---- | ---- |\n|A|B|\n"
 	v := lintString(t, rules.MD060{}, src)
-	if len(v) != 1 {
-		t.Errorf("expected 1 violation with default consistent style, got %d: %v", len(v), v)
+	// Data row |A|B| has pipes at cols 0,2,4 while header has pipes at 0,7,14.
+	// Aligned check fails (2 misaligned pipes); aligned has fewer errors than compact (4).
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations with default any style, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD060_Any_AlignedTable_NoViolations(t *testing.T) {
+	// Compact table (all pipes aligned): "any" style → no violations.
+	src := "| Col1 | Col2 |\n| ---- | ---- |\n| A    | B    |\n"
+	v := lintString(t, rules.MD060{Style: "any"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for aligned table, got %v", v)
 	}
 }
 

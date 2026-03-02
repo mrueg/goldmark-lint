@@ -34,6 +34,32 @@ func (r MD025) Check(doc *lint.Document) []lint.Violation {
 		count = 1
 	}
 
+	// Only report violations when the document has a "primary" top-level heading,
+	// meaning the first matching heading appears before any other block content.
+	// This matches markdownlint's behaviour: if there is non-heading block content
+	// before the first target-level heading the rule is silent.
+	if count == 0 {
+		hasContentBefore := false
+		firstFound := false
+		for child := doc.AST.FirstChild(); child != nil; child = child.NextSibling() {
+			h, isHeading := child.(*ast.Heading)
+			if isHeading && h.Level == level {
+				firstFound = true
+				break
+			}
+			// HTML blocks (e.g. comments) are treated as non-content like markdownlint.
+			if _, isHTML := child.(*ast.HTMLBlock); isHTML {
+				continue
+			}
+			if child.Type() == ast.TypeBlock {
+				hasContentBefore = true
+			}
+		}
+		if !firstFound || hasContentBefore {
+			return nil
+		}
+	}
+
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
