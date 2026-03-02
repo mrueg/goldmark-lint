@@ -401,7 +401,7 @@ func isIndentedCodeLine(line string) bool {
 // It uses the goldmark AST to accurately detect HTML blocks.
 func htmlBlockLineMask(doc *lint.Document) []bool {
 	mask := make([]bool, len(doc.Lines))
-	ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
 		}

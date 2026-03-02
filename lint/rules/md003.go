@@ -38,16 +38,18 @@ func headingStyleOf(h *ast.Heading, source []byte) string {
 	// Skip any leading spaces and blockquote markers ("> ") so that headings
 	// inside blockquotes like "> # Heading" are correctly identified as ATX.
 	cur := pos
+outer:
 	for cur < len(source) {
-		if source[cur] == ' ' {
+		switch source[cur] {
+		case ' ':
 			cur++
-		} else if source[cur] == '>' {
+		case '>':
 			cur++
 			if cur < len(source) && source[cur] == ' ' {
 				cur++
 			}
-		} else {
-			break
+		default:
+			break outer
 		}
 	}
 	if cur >= len(source) || source[cur] != '#' {
@@ -135,10 +137,7 @@ func (r MD003) Check(doc *lint.Document) []lint.Violation {
 			}
 		}
 
-		// For comparison: atx_closed headings also satisfy an "atx" expectation
-		// (they are ATX headings with an optional closing sequence).
-		matches := actual == expected ||
-			(expected == "atx" && actual == "atx_closed")
+		matches := actual == expected
 		if !matches {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
