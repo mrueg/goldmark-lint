@@ -46,8 +46,8 @@ homebrew_casks:
     commit_author:
       name: Manuel Rüger
       email: manuel@rueg.eu
-    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
-    directory: Formula
+    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
+    directory: Casks
     hooks:
       post:
         install: |
