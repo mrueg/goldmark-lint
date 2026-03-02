@@ -90,7 +90,7 @@ func fencedCodeBlockLine(n *ast.FencedCodeBlock, source []byte) int {
 // nesting levels, then subtracts the total level from the text position.
 func emphasisStartPos(emph *ast.Emphasis) int {
 	totalLevel := emph.Level
-	var node ast.Node = emph.FirstChild()
+	node := emph.FirstChild()
 	for node != nil {
 		switch n := node.(type) {
 		case *ast.Text:
