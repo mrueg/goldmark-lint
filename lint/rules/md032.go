@@ -124,6 +124,14 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 		if _, parentIsItem := list.Parent().(*ast.ListItem); parentIsItem {
 			return ast.WalkContinue, nil
 		}
+		// Skip lists inside blockquotes: the blank-line check operates on raw
+		// source lines and does not understand blockquote context. Markdownlint
+		// does not enforce blank lines around lists that are inside blockquotes.
+		for p := list.Parent(); p != nil; p = p.Parent() {
+			if _, inBQ := p.(*ast.Blockquote); inBQ {
+				return ast.WalkContinue, nil
+			}
+		}
 
 		firstItem, _ := list.FirstChild().(*ast.ListItem)
 		if firstItem == nil {

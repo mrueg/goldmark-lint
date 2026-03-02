@@ -214,7 +214,8 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 		// Determine what style is used in this list.
 		allOne := true
 		allZero := true
-		sequential := true
+		sequential := true   // sequential from 1
+		seqFromFirst := true // sequential from first item's number
 		for i, it := range items {
 			if it.number != 1 {
 				allOne = false
@@ -225,7 +226,13 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 			if it.number != i+1 {
 				sequential = false
 			}
+			if i > 0 && it.number != items[i-1].number+1 {
+				seqFromFirst = false
+			}
 		}
+		// Note: for a single-item list, seqFromFirst is always true (no consecutive
+		// pairs to compare). A single-item ordered list is considered valid regardless
+		// of its starting number, matching markdownlint behavior.
 
 		switch style {
 		case "one":
@@ -269,21 +276,17 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 				}
 			}
 		case "one_or_ordered":
-			// Determine style from first two items (like markdownlint).
-			incrementing := false
-			expected := 1
-			if len(items) >= 2 {
-				first := items[0].number
-				second := items[1].number
-				if second != 1 || first == 0 {
-					incrementing = true
-					if first == 0 {
-						expected = 0
-					}
-				}
+			// Valid if all items use 1, or items are sequential (incrementing by 1)
+			// from any starting number (including non-1 starts like 3. 4. 5. ...).
+			if allOne || seqFromFirst {
+				break
 			}
-			if incrementing {
-				// Ordered style: expect sequential from `expected`.
+			// Invalid: determine expected style based on first item.
+			// If first item is 1 or 0, expect ordered from that start.
+			// Otherwise, expect all items to be 1.
+			first := items[0].number
+			if first == 1 || first == 0 {
+				expected := first
 				for _, it := range items {
 					if it.number != expected {
 						violations = append(violations, lint.Violation{
@@ -296,7 +299,7 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 					expected++
 				}
 			} else {
-				// One style: all must be 1.
+				// List starts at non-1 and isn't sequential: all should be 1.
 				for _, it := range items {
 					if it.number != 1 {
 						violations = append(violations, lint.Violation{
