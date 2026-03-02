@@ -48,14 +48,14 @@ require_cmd markdownlint-cli2
 # ---------------------------------------------------------------------------
 if [[ ! -d "${RFCS_DIR}/.git" ]]; then
   info "Cloning rust-lang/rfcs corpus (shallow)…"
-  git clone --filter=blob:none --no-checkout "${RFCS_REPO}" "${RFCS_DIR}"
-  git -C "${RFCS_DIR}" checkout "${RFCS_COMMIT}"
+  git clone -q --filter=blob:none --no-checkout "${RFCS_REPO}" "${RFCS_DIR}"
+  git -c advice.detachedHead=false -C "${RFCS_DIR}" checkout -q "${RFCS_COMMIT}"
 else
   current=$(git -C "${RFCS_DIR}" rev-parse HEAD)
   if [[ "${current}" != "${RFCS_COMMIT}" ]]; then
     info "Updating rfcs corpus to ${RFCS_COMMIT}…"
-    git -C "${RFCS_DIR}" fetch origin "${RFCS_COMMIT}"
-    git -C "${RFCS_DIR}" checkout "${RFCS_COMMIT}"
+    git -C "${RFCS_DIR}" fetch -q origin "${RFCS_COMMIT}"
+    git -c advice.detachedHead=false -C "${RFCS_DIR}" checkout -q "${RFCS_COMMIT}"
   else
     info "rfcs corpus already at ${RFCS_COMMIT}."
   fi
