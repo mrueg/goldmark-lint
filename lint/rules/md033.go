@@ -2,6 +2,8 @@ package rules
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
 	"github.com/yuin/goldmark/ast"
@@ -19,6 +21,10 @@ type MD033 struct {
 func (r MD033) ID() string          { return "MD033" }
 func (r MD033) Aliases() []string   { return []string{"no-inline-html"} }
 func (r MD033) Description() string { return "Inline HTML" }
+
+// htmlOpenTagRE matches opening HTML tags (not closing tags like </div>).
+// Used to scan HTML block content for individual opening tags.
+var htmlOpenTagRE = regexp.MustCompile(`<([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^>]*)?/?>`)
 
 func (r MD033) isAllowed(tag string) bool {
 	for _, allowed := range r.AllowedElements {
@@ -65,17 +71,39 @@ func (r MD033) Check(doc *lint.Document) []lint.Violation {
 			if node.HTMLBlockType == ast.HTMLBlockType2 {
 				return ast.WalkContinue, nil
 			}
-			line := 1
-			if node.Lines() != nil && node.Lines().Len() > 0 {
-				seg := node.Lines().At(0)
-				line = countLine(doc.Source, seg.Start)
+			// Scan each line of the HTML block for opening tags.
+			// Markdownlint reports each opening tag individually on its source line
+			// and skips closing tags. This matches the behaviour of reporting
+			// each <dt>, <dd>, etc. separately while not flagging </details>.
+			if node.Lines() != nil {
+				for i := 0; i < node.Lines().Len(); i++ {
+					seg := node.Lines().At(i)
+					lineNum := countLine(doc.Source, seg.Start)
+					lineContent := strings.TrimRight(string(seg.Value(doc.Source)), "\r\n")
+					// Skip HTML comment lines.
+					if strings.HasPrefix(strings.TrimSpace(lineContent), "<!--") {
+						continue
+					}
+					for _, m := range htmlOpenTagRE.FindAllStringSubmatch(lineContent, -1) {
+						tag := strings.ToLower(m[1])
+						if r.isAllowed(tag) {
+							continue
+						}
+						if len(r.TableAllowedElements) > 0 && tableMask != nil {
+							lineIdx := lineNum - 1
+							if lineIdx >= 0 && lineIdx < len(tableMask) && tableMask[lineIdx] && r.isTableAllowed(tag) {
+								continue
+							}
+						}
+						violations = append(violations, lint.Violation{
+							Rule:    r.ID(),
+							Line:    lineNum,
+							Column:  1,
+							Message: fmt.Sprintf("Inline HTML [Element: %s]", tag),
+						})
+					}
+				}
 			}
-			violations = append(violations, lint.Violation{
-				Rule:    r.ID(),
-				Line:    line,
-				Column:  1,
-				Message: "Inline HTML [Element: block HTML]",
-			})
 
 		case *ast.RawHTML:
 			lineNum := 1

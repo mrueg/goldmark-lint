@@ -105,13 +105,14 @@ func (r MD038) Check(doc *lint.Document) []lint.Violation {
 		firstContent := firstText.Segment.Value(doc.Source)
 		lastContent := lastText.Segment.Value(doc.Source)
 
-		// Check for leading space: in content or stripped by goldmark (symmetric stripping).
-		hasLeadingSpace := (len(firstContent) > 0 && firstContent[0] == ' ') ||
-			(firstText.Segment.Start > 0 && firstText.Segment.Start <= len(doc.Source) && doc.Source[firstText.Segment.Start-1] == ' ')
+		// Check for leading space: only check actual content, not stripped bytes.
+		// CommonMark symmetrically strips one space from both ends of code span content
+		// when the raw content starts AND ends with a space. Goldmark applies this before
+		// populating the segment, so we must rely solely on the segment content itself.
+		hasLeadingSpace := len(firstContent) > 0 && firstContent[0] == ' '
 
-		// Check for trailing space: in content or stripped by goldmark.
-		hasTrailingSpace := (len(lastContent) > 0 && lastContent[len(lastContent)-1] == ' ') ||
-			(lastText.Segment.Stop < len(doc.Source) && doc.Source[lastText.Segment.Stop] == ' ')
+		// Check for trailing space: only check actual content.
+		hasTrailingSpace := len(lastContent) > 0 && lastContent[len(lastContent)-1] == ' '
 
 		if !hasLeadingSpace && !hasTrailingSpace {
 			return ast.WalkContinue, nil

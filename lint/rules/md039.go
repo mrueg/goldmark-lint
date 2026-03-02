@@ -62,31 +62,33 @@ func (r MD039) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
-		// Check first text child for leading space.
-		first := link.FirstChild()
-		if first == nil {
-			return ast.WalkContinue, nil
-		}
-		firstText, ok := first.(*ast.Text)
-		if !ok {
-			return ast.WalkContinue, nil
-		}
-
-		// Find last text child.
+		// Check first and last text children for leading/trailing spaces.
+		// The first link child may be a non-Text node (e.g. a CodeSpan), in which case
+		// the first Text child is not the first child of the link. We need to distinguish:
+		// - leading space: first child is Text AND starts with ' '
+		// - trailing space: last Text child ends with ' '
+		var firstText *ast.Text
 		var lastText *ast.Text
 		for c := link.FirstChild(); c != nil; c = c.NextSibling() {
 			if t, ok := c.(*ast.Text); ok {
+				if firstText == nil {
+					firstText = t
+				}
 				lastText = t
 			}
 		}
-		if lastText == nil {
+		if firstText == nil || lastText == nil {
 			return ast.WalkContinue, nil
 		}
 
 		firstContent := firstText.Segment.Value(doc.Source)
 		lastContent := lastText.Segment.Value(doc.Source)
 
-		hasLeadingSpace := len(firstContent) > 0 && firstContent[0] == ' '
+		// Leading space: only if the first child of the link is the Text node
+		// (i.e. the link text starts with a space).
+		hasLeadingSpace := link.FirstChild() == firstText &&
+			len(firstContent) > 0 && firstContent[0] == ' '
+		// Trailing space: the last text child of the link ends with a space.
 		hasTrailingSpace := len(lastContent) > 0 && lastContent[len(lastContent)-1] == ' '
 
 		if !hasLeadingSpace && !hasTrailingSpace {

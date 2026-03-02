@@ -783,7 +783,8 @@ func TestMD038_Valid(t *testing.T) {
 }
 
 func TestMD038_Invalid(t *testing.T) {
-	src := "Use ` code ` here.\n"
+	// `code ` has trailing space only — not stripped by CommonMark (asymmetric).
+	src := "Use `code ` here.\n"
 	v := lintString(t, rules.MD038{}, src)
 	if len(v) != 1 {
 		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
@@ -791,7 +792,7 @@ func TestMD038_Invalid(t *testing.T) {
 }
 
 func TestMD038_Fix(t *testing.T) {
-	src := "Use ` code ` here.\n"
+	src := "Use `code ` here.\n"
 	got := fixString(t, rules.MD038{}, src)
 	want := "Use `code` here.\n"
 	if got != want {
