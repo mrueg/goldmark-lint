@@ -139,7 +139,8 @@ func (r MD031) Check(doc *lint.Document) []lint.Violation {
 		}
 
 		// Check blank line before opening fence (not required at document start).
-		if openIdx > 0 && !isBlankOrBlockquoteBlank(lines[openIdx-1]) {
+		// HTML comment lines (<!-- ... -->) are treated as acceptable separators.
+		if openIdx > 0 && !isBlankOrBlockquoteBlank(lines[openIdx-1]) && !strings.HasPrefix(strings.TrimSpace(lines[openIdx-1]), "<!--") {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
 				Line:    openLineNum,
@@ -149,7 +150,8 @@ func (r MD031) Check(doc *lint.Document) []lint.Violation {
 		}
 
 		// Check blank line after closing fence (not required at document end).
-		if closeIdx >= 0 && closeIdx < n-1 && !isBlankOrBlockquoteBlank(lines[closeIdx+1]) {
+		// HTML comment lines (<!-- ... -->) are treated as acceptable separators.
+		if closeIdx >= 0 && closeIdx < n-1 && !isBlankOrBlockquoteBlank(lines[closeIdx+1]) && !strings.HasPrefix(strings.TrimSpace(lines[closeIdx+1]), "<!--") {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
 				Line:    closeIdx + 1,

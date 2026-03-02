@@ -81,7 +81,6 @@ func md027FencedCodeMask(lines []string) []bool {
 	return mask
 }
 
-
 // optional leading spaces (0–3), a '>' character, and a capturing group of trailing spaces.
 var md027BQLevelRE = regexp.MustCompile(`^( {0,3}>)( *)`)
 
@@ -157,6 +156,7 @@ func md027ListInBQMask(doc *lint.Document) []bool {
 		inList := false
 		inBQ := false
 		listFoundBeforeBQ := false
+		listDepth := 0 // how many List ancestors are between node and the BQ
 		for p := n.Parent(); p != nil; p = p.Parent() {
 			if _, ok := p.(*ast.List); ok {
 				if !inList {
@@ -165,14 +165,27 @@ func md027ListInBQMask(doc *lint.Document) []bool {
 						listFoundBeforeBQ = true
 					}
 				}
+				if !inBQ {
+					listDepth++
+				}
 			}
 			if _, ok := p.(*ast.Blockquote); ok {
 				inBQ = true
 			}
 		}
-		// Mask only when Blockquote is the outer container (List found first).
+		// Mask lines when Blockquote is the outer container (List found first).
+		// For list items DIRECTLY inside the blockquote (listDepth == 1), skip
+		// the first line (seg 0): it shares its physical source line with the
+		// list-item marker (e.g. ">  1. text") and may be a genuine MD027
+		// violation. Only continuation lines (seg > 0) need masking.
+		// For NESTED list items (listDepth > 1), mask ALL lines including seg 0:
+		// the extra indentation spaces are structural (for nesting), not errors.
 		if inList && inBQ && listFoundBeforeBQ {
-			for i := 0; i < n.Lines().Len(); i++ {
+			startSeg := 0
+			if listDepth == 1 {
+				startSeg = 1
+			}
+			for i := startSeg; i < n.Lines().Len(); i++ {
 				seg := n.Lines().At(i)
 				lineNum := countLine(doc.Source, seg.Start) - 1
 				if lineNum >= 0 && lineNum < len(mask) {

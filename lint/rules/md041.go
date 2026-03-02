@@ -35,7 +35,12 @@ func (r MD041) Check(doc *lint.Document) []lint.Violation {
 	}
 
 	// If the front matter contains a title, the requirement is satisfied.
-	if frontMatterHasTitle(doc, r.FrontMatterTitle) {
+	// Default front_matter_title is "title" (matching markdownlint's default).
+	fmTitle := r.FrontMatterTitle
+	if fmTitle == "" {
+		fmTitle = "title"
+	}
+	if frontMatterHasTitle(doc, fmTitle) {
 		return nil
 	}
 
