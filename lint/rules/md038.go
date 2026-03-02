@@ -117,6 +117,20 @@ func (r MD038) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
+		// Only flag leading space if there is non-whitespace content after it.
+		// This avoids false positives for space-only code spans like ` ` or `   `.
+		if hasLeadingSpace && strings.TrimLeft(string(firstContent), " ") == "" {
+			hasLeadingSpace = false
+		}
+		// Only flag trailing space if there is non-whitespace content before it.
+		if hasTrailingSpace && strings.TrimRight(string(lastContent), " ") == "" {
+			hasTrailingSpace = false
+		}
+
+		if !hasLeadingSpace && !hasTrailingSpace {
+			return ast.WalkContinue, nil
+		}
+
 		line := countLine(doc.Source, firstText.Segment.Start)
 		violations = append(violations, lint.Violation{
 			Rule:    r.ID(),

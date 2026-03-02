@@ -61,6 +61,17 @@ func (r MD036) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
+		// The emphasis must consist of exactly one plain text child (no code spans,
+		// nested emphasis, line breaks, etc.). This matches markdownlint's requirement
+		// that the emphasis text token has exactly one "data" child.
+		emphChild := emph.FirstChild()
+		if emphChild == nil || emphChild.NextSibling() != nil {
+			return ast.WalkContinue, nil
+		}
+		if _, ok := emphChild.(*ast.Text); !ok {
+			return ast.WalkContinue, nil
+		}
+
 		// Get the text content of the emphasis node.
 		text := headingText(emph, doc.Source)
 		if text == "" {
