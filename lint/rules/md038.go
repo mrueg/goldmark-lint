@@ -107,7 +107,7 @@ func (r MD038) Check(doc *lint.Document) []lint.Violation {
 
 		// Check for leading space: in content or stripped by goldmark (symmetric stripping).
 		hasLeadingSpace := (len(firstContent) > 0 && firstContent[0] == ' ') ||
-			(firstText.Segment.Start > 0 && doc.Source[firstText.Segment.Start-1] == ' ')
+			(firstText.Segment.Start > 0 && firstText.Segment.Start <= len(doc.Source) && doc.Source[firstText.Segment.Start-1] == ' ')
 
 		// Check for trailing space: in content or stripped by goldmark.
 		hasTrailingSpace := (len(lastContent) > 0 && lastContent[len(lastContent)-1] == ' ') ||
