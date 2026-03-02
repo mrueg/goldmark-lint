@@ -523,6 +523,15 @@ func TestMD018_HTMLBlockNoFalsePositive(t *testing.T) {
 	}
 }
 
+func TestMD018_ListContinuationNoFalsePositive(t *testing.T) {
+	// A multi-line link label like "[issue\n  #8636](url)" in a list item must not be flagged.
+	src := "- See [issue\n  #8636](https://example.com).\n"
+	v := lintString(t, rules.MD018{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for link label continuation in list item, got %v", v)
+	}
+}
+
 func TestMD019_Valid(t *testing.T) {
 	src := "# Heading\n"
 	v := lintString(t, rules.MD019{}, src)
