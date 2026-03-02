@@ -52,10 +52,29 @@ func isBlockLevelBreaker(line string) bool {
 		return true // ATX heading
 	case '>':
 		return true // block quote
+	case '<':
+		return true // HTML block
 	}
 	// Fenced code block
 	if strings.HasPrefix(line, "```") || strings.HasPrefix(line, "~~~") {
 		return true
+	}
+	// Thematic break or setext heading underline (---, ===, ***, ___)
+	trimmed := strings.TrimSpace(line)
+	if len(trimmed) >= 3 {
+		r := rune(trimmed[0])
+		if r == '-' || r == '=' || r == '*' || r == '_' {
+			allSame := true
+			for _, c := range trimmed {
+				if c != r {
+					allSame = false
+					break
+				}
+			}
+			if allSame {
+				return true
+			}
+		}
 	}
 	// List item marker
 	if listItemRE.MatchString(line) {
@@ -210,7 +229,7 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 		// In CommonMark, plain text can be "lazily continued" into the last list
 		// item paragraph, so it does not produce a violation. Only block-level
 		// elements that cannot be lazily continued (headings, blockquotes, code
-		// fences, list markers) trigger an after violation.
+		// fences, thematic breaks, list markers) trigger an after violation.
 		afterViolation := -1
 		offset := lastItem.Offset
 		for i := lastItemLineIdx + 1; i < n; i++ {
@@ -219,7 +238,7 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 				break
 			}
 			if md032LeadingSpaces(line) >= offset {
-				continue // continuation of the last list item
+				continue // continuation/indented content of the last list item
 			}
 			// Only flag if this line is a block-level marker (cannot be a lazy
 			// continuation of a paragraph inside the last list item).

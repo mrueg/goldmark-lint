@@ -52,7 +52,15 @@ func (r MD052) Check(doc *lint.Document) []lint.Violation {
 	ignored := r.ignoredLabels()
 
 	// Collect defined labels.
+	// Use goldmark's parsed link references for accurate label detection.
+	// This handles multi-line definitions, title-on-next-line, angle-bracket
+	// destinations, etc. — all cases that the regex may miss.
 	defined := make(map[string]bool)
+	for label := range doc.LinkRefs {
+		defined[strings.ToLower(label)] = true
+	}
+	// Also scan lines for definitions that goldmark might not export (e.g.
+	// definitions in blockquotes), using the regex as a supplement.
 	for i, line := range doc.Lines {
 		if mask[i] {
 			continue

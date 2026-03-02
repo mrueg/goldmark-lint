@@ -100,22 +100,42 @@ func fencedCodeBlockLine(n *ast.FencedCodeBlock, source []byte) int {
 
 // emphasisStartPos returns the byte position in source of the opening marker of
 // the given Emphasis node. It walks to the first Text descendant, accumulating
-// nesting levels, then subtracts the total level from the text position.
+// nesting levels and inline-wrapper prefix characters, then subtracts the total
+// from the first text segment start.
 func emphasisStartPos(emph *ast.Emphasis) int {
-	totalLevel := emph.Level
-	node := emph.FirstChild()
-	for node != nil {
-		switch n := node.(type) {
-		case *ast.Text:
-			return n.Segment.Start - totalLevel
-		case *ast.Emphasis:
-			totalLevel += n.Level
-			node = n.FirstChild()
-		default:
-			return -1
-		}
+	pos, ok := firstTextStartInInline(emph.FirstChild(), emph.Level)
+	if ok {
+		return pos
 	}
 	return -1
+}
+
+// firstTextStartInInline recursively finds the first *ast.Text in an inline
+// subtree and returns (start_of_emphasis_marker, true) by subtracting
+// accumulated prefix character counts.
+func firstTextStartInInline(n ast.Node, prefixChars int) (int, bool) {
+	if n == nil {
+		return 0, false
+	}
+	switch node := n.(type) {
+	case *ast.Text:
+		p := node.Segment.Start - prefixChars
+		if p >= 0 {
+			return p, true
+		}
+		return 0, false
+	case *ast.Emphasis:
+		return firstTextStartInInline(node.FirstChild(), prefixChars+node.Level)
+	case *ast.Link:
+		// Link starts with '['; account for that extra char.
+		return firstTextStartInInline(node.FirstChild(), prefixChars+1)
+	case *ast.Image:
+		// Image starts with '!['; account for those 2 extra chars.
+		return firstTextStartInInline(node.FirstChild(), prefixChars+2)
+	default:
+		// For any other inline node (CodeSpan, etc.), try its first child.
+		return firstTextStartInInline(n.FirstChild(), prefixChars)
+	}
 }
 
 // headingSourceLine returns the 1-based line number of a heading node in source
@@ -200,6 +220,25 @@ func isTableDelimiterRow(line string) bool {
 func isTableRow(line string) bool {
 	return strings.Contains(line, "|")
 }
+
+// lastTextStopInInline returns the highest Segment.Stop value found among all
+// *ast.Text descendants of n, searching recursively. Returns 0 if none found.
+func lastTextStopInInline(n ast.Node) int {
+	var best int
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		if t, ok := c.(*ast.Text); ok {
+			if t.Segment.Stop > best {
+				best = t.Segment.Stop
+			}
+		} else {
+			if v := lastTextStopInInline(c); v > best {
+				best = v
+			}
+		}
+	}
+	return best
+}
+
 
 // headingAnchor converts heading text to a GitHub-style anchor.
 func headingAnchor(text string) string {
