@@ -45,6 +45,11 @@ func (r MD019) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 		line := doc.Lines[lineNum-1]
+		// Closed ATX headings (e.g. "##  Heading  ##") are handled by MD021;
+		// MD019 should only flag open ATX headings.
+		if closedATXRE.MatchString(line) {
+			return ast.WalkContinue, nil
+		}
 		if md019RE.MatchString(line) {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),

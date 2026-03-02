@@ -17,10 +17,16 @@ func (r MD037) Description() string { return "Spaces inside emphasis markers" }
 // md037 regexes detect emphasis markers with a space immediately after the
 // opening marker or immediately before the closing marker.
 // We match pairs so we don't flag lone asterisks (e.g. list items).
+// Each pattern has three alternatives:
+//   - spaces on both sides: e.g. ** text **
+//   - space after opening only: e.g. ** text**
+//   - space before closing only: e.g. **text ** (closing marker must be followed
+//     by a non-word, non-marker char or end of line to avoid matching an opening
+//     marker that is preceded by normal text, such as "This is **bold**")
 var (
-	md037DoubleStarRE = regexp.MustCompile(`\*\* [^\n*]* \*\*|\*\* [^\n*]*[^\n* ](?:\*\*)|(?:[^ \n*][^\n*]*) \*\*`)
+	md037DoubleStarRE = regexp.MustCompile(`\*\* [^\n*]* \*\*|\*\* [^\n*]*[^\n* ](?:\*\*)|(?:[^ \n*][^\n*]*) \*\*(?:[^*\w]|$)`)
 	md037SingleStarRE = regexp.MustCompile(`(?:^|[^*])\* [^\n*]* \*(?:[^*]|$)`)
-	md037DoubleUndRE  = regexp.MustCompile(`__ [^\n_]* __|__ [^\n_]*[^\n_ ](?:__)|(?:[^ \n_][^\n_]*) __`)
+	md037DoubleUndRE  = regexp.MustCompile(`__ [^\n_]* __|__ [^\n_]*[^\n_ ](?:__)|(?:[^ \n_][^\n_]*) __(?:[^_\w]|$)`)
 	md037SingleUndRE  = regexp.MustCompile(`(?:^|[^_])_ [^\n_]* _(?:[^_]|$)`)
 )
 

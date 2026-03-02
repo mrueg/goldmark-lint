@@ -149,10 +149,31 @@ func TestMD013_Valid(t *testing.T) {
 }
 
 func TestMD013_Invalid(t *testing.T) {
-	src := strings.Repeat("a", 81) + "\n"
+	// Use a wrappable line (contains spaces) that exceeds the limit.
+	// The "trimmed" length (before the last word) must also exceed the limit.
+	src := strings.Repeat("a", 80) + " extra\n"
 	v := lintString(t, rules.MD013{LineLength: 80}, src)
 	if len(v) != 1 {
 		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD013_NonWrappableExempt(t *testing.T) {
+	// A single-word line (no spaces) should NOT be flagged in non-strict mode,
+	// matching markdownlint-cli2 behaviour (the last word cannot be wrapped).
+	src := strings.Repeat("a", 81) + "\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for non-wrappable line, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD013_StrictFlagsNonWrappable(t *testing.T) {
+	// In strict mode, even non-wrappable single-word lines are flagged.
+	src := strings.Repeat("a", 81) + "\n"
+	v := lintString(t, rules.MD013{LineLength: 80, Strict: true}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation in strict mode for 81-char line, got %d: %v", len(v), v)
 	}
 }
 
@@ -404,8 +425,9 @@ func TestMD033_Valid(t *testing.T) {
 func TestMD033_Invalid(t *testing.T) {
 	src := "# Heading\n\nParagraph with <b>bold</b> text.\n"
 	v := lintString(t, rules.MD033{}, src)
-	if len(v) == 0 {
-		t.Errorf("expected violations, got none")
+	// Only the opening <b> tag should be reported, not the closing </b>.
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation (opening tag only), got %d: %v", len(v), v)
 	}
 }
 
@@ -488,6 +510,15 @@ func TestMD019_Valid(t *testing.T) {
 	v := lintString(t, rules.MD019{}, src)
 	if len(v) != 0 {
 		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD019_ValidClosedATX(t *testing.T) {
+	// Closed ATX headings with extra spaces are handled by MD021, not MD019.
+	src := "##  Heading  ##\n"
+	v := lintString(t, rules.MD019{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no MD019 violations for closed ATX heading, got %v", v)
 	}
 }
 
@@ -674,6 +705,15 @@ func TestMD037_Valid(t *testing.T) {
 	}
 }
 
+func TestMD037_ValidMultiWord(t *testing.T) {
+	// Multi-word strong emphasis should NOT be flagged (no spaces inside markers).
+	src := "This is **strongly emphasized** text.\n"
+	v := lintString(t, rules.MD037{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for multi-word **...**, got %v", v)
+	}
+}
+
 func TestMD037_Invalid(t *testing.T) {
 	src := "This is * emphasized * text.\n"
 	v := lintString(t, rules.MD037{}, src)
@@ -762,6 +802,15 @@ func TestMD042_Valid(t *testing.T) {
 	v := lintString(t, rules.MD042{}, src)
 	if len(v) != 0 {
 		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD042_ValidCodeSpanText(t *testing.T) {
+	// A link whose text is a code span should NOT be flagged as empty.
+	src := "[`code`](https://example.com)\n"
+	v := lintString(t, rules.MD042{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for code span link text, got %v", v)
 	}
 }
 
@@ -1721,7 +1770,8 @@ func TestMD010_SpacesPerTab(t *testing.T) {
 
 func TestMD013_HeadingLineLength(t *testing.T) {
 	heading := "# " + strings.Repeat("a", 79) + "\n"
-	body := strings.Repeat("b", 81) + "\n"
+	// Body line must be wrappable (contain spaces) so the trimmed length exceeds limit.
+	body := strings.Repeat("b", 80) + " extra\n"
 	src := heading + "\n" + body
 
 	// With headings limit=100 and default=80: heading line is short enough, body is too long.
@@ -2022,8 +2072,9 @@ func TestMD013_Strict(t *testing.T) {
 }
 
 func TestMD013_Unicode(t *testing.T) {
-	// A line with 81 multi-byte Unicode characters should trigger a violation.
-	src := strings.Repeat("é", 81) + "\n"
+	// A wrappable line with 81 multi-byte Unicode characters should trigger a violation.
+	// Use 80 chars before a space + 1 extra char so the trimmed length (81) exceeds 80.
+	src := strings.Repeat("é", 80) + " é\n"
 	v := lintString(t, rules.MD013{LineLength: 80}, src)
 	if len(v) != 1 {
 		t.Errorf("expected 1 violation for 81 unicode chars, got %d: %v", len(v), v)

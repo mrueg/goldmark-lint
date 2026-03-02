@@ -60,12 +60,18 @@ func (r MD042) Check(doc *lint.Document) []lint.Violation {
 		// Check for empty link text
 		hasText := false
 		for c := link.FirstChild(); c != nil; c = c.NextSibling() {
-			if t, ok := c.(*ast.Text); ok {
-				seg := t.Segment
+			switch ct := c.(type) {
+			case *ast.Text:
+				seg := ct.Segment
 				if seg.Start < seg.Stop {
 					hasText = true
-					break
 				}
+			default:
+				// Any non-text child (code span, emphasis, image, etc.) counts as text.
+				hasText = true
+			}
+			if hasText {
+				break
 			}
 		}
 		if !hasText {
