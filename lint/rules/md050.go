@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/yuin/goldmark/ast"
 )
 
 // MD050 checks that strong markers use a consistent style (asterisk or underscore).
@@ -31,47 +32,53 @@ func (r MD050) Check(doc *lint.Document) []lint.Violation {
 	}
 
 	var violations []lint.Violation
-	mask := fencedCodeBlockMask(doc.Lines)
 	firstStyle := ""
 
-	for i, line := range doc.Lines {
-		if mask[i] {
-			continue
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-		cleaned := blankCodeSpans(line)
-
-		hasStar := md050StarRE.MatchString(cleaned)
-		hasUnder := md050UnderRE.MatchString(cleaned)
-
-		if !hasStar && !hasUnder {
-			continue
+		emph, ok := n.(*ast.Emphasis)
+		if !ok || emph.Level != 2 {
+			return ast.WalkContinue, nil
 		}
 
-		for _, actual := range strongStylesOnLine(cleaned) {
-			expected := style
-			if style == "consistent" {
-				if firstStyle == "" {
-					firstStyle = actual
-				}
-				expected = firstStyle
-			}
-			if actual != expected {
-				violations = append(violations, lint.Violation{
-					Rule:    r.ID(),
-					Line:    i + 1,
-					Column:  1,
-					Message: fmt.Sprintf("Strong style [Expected: %s; Actual: %s]", expected, actual),
-				})
-				break
-			}
+		pos := emphasisStartPos(emph)
+		if pos < 0 || pos >= len(doc.Source) {
+			return ast.WalkContinue, nil
 		}
-		if style == "consistent" && firstStyle == "" {
-			styles := strongStylesOnLine(cleaned)
-			if len(styles) > 0 {
-				firstStyle = styles[0]
-			}
+
+		var actual string
+		switch doc.Source[pos] {
+		case '*':
+			actual = "asterisk"
+		case '_':
+			actual = "underscore"
+		default:
+			return ast.WalkContinue, nil
 		}
-	}
+
+		expected := style
+		if style == "consistent" {
+			if firstStyle == "" {
+				firstStyle = actual
+			}
+			expected = firstStyle
+		}
+
+		if actual == expected {
+			return ast.WalkContinue, nil
+		}
+
+		violations = append(violations, lint.Violation{
+			Rule:    r.ID(),
+			Line:    inlineNodeLine(emph, doc.Source),
+			Column:  1,
+			Message: fmt.Sprintf("Strong style [Expected: %s; Actual: %s]", expected, actual),
+		})
+		return ast.WalkContinue, nil
+	})
+
 	return violations
 }
 

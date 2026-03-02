@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/yuin/goldmark/ast"
 )
 
 // MD039 checks for spaces inside link text.
@@ -37,19 +38,55 @@ func (r MD039) Fix(source []byte) []byte {
 
 func (r MD039) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
-	mask := fencedCodeBlockMask(doc.Lines)
-	for i, line := range doc.Lines {
-		if mask[i] {
-			continue
+
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-		if md039RE.MatchString(line) {
-			violations = append(violations, lint.Violation{
-				Rule:    r.ID(),
-				Line:    i + 1,
-				Column:  1,
-				Message: "Spaces inside link text",
-			})
+		link, ok := n.(*ast.Link)
+		if !ok {
+			return ast.WalkContinue, nil
 		}
-	}
+
+		// Check first text child for leading space.
+		first := link.FirstChild()
+		if first == nil {
+			return ast.WalkContinue, nil
+		}
+		firstText, ok := first.(*ast.Text)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+
+		// Find last text child.
+		var lastText *ast.Text
+		for c := link.FirstChild(); c != nil; c = c.NextSibling() {
+			if t, ok := c.(*ast.Text); ok {
+				lastText = t
+			}
+		}
+		if lastText == nil {
+			return ast.WalkContinue, nil
+		}
+
+		firstContent := firstText.Segment.Value(doc.Source)
+		lastContent := lastText.Segment.Value(doc.Source)
+
+		hasLeadingSpace := len(firstContent) > 0 && firstContent[0] == ' '
+		hasTrailingSpace := len(lastContent) > 0 && lastContent[len(lastContent)-1] == ' '
+
+		if !hasLeadingSpace && !hasTrailingSpace {
+			return ast.WalkContinue, nil
+		}
+
+		violations = append(violations, lint.Violation{
+			Rule:    r.ID(),
+			Line:    inlineNodeLine(link, doc.Source),
+			Column:  1,
+			Message: "Spaces inside link text",
+		})
+		return ast.WalkContinue, nil
+	})
+
 	return violations
 }

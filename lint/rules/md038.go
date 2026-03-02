@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/yuin/goldmark/ast"
 )
 
 // MD038 checks for spaces inside code span elements.
@@ -12,46 +13,6 @@ type MD038 struct{}
 func (r MD038) ID() string          { return "MD038" }
 func (r MD038) Aliases() []string   { return []string{"no-space-in-code"} }
 func (r MD038) Description() string { return "Spaces inside code span elements" }
-
-// findCodeSpanViolations returns true if the line has a code span with leading
-// or trailing space in its content.
-func findCodeSpanViolations(line string) bool {
-	i := 0
-	for i < len(line) {
-		if line[i] != '`' {
-			i++
-			continue
-		}
-		start := i
-		for i < len(line) && line[i] == '`' {
-			i++
-		}
-		tickLen := i - start
-		// Find matching closing backtick sequence
-		contentStart := i
-		end := i
-		for end < len(line) {
-			if line[end] == '`' {
-				k := end
-				for k < len(line) && line[k] == '`' {
-					k++
-				}
-				if k-end == tickLen {
-					content := line[contentStart:end]
-					if len(content) > 0 && (content[0] == ' ' || content[len(content)-1] == ' ') {
-						return true
-					}
-					i = k
-					break
-				}
-				end = k
-			} else {
-				end++
-			}
-		}
-	}
-	return false
-}
 
 // fixCodeSpanSpaces removes leading/trailing spaces from code span content.
 func fixCodeSpanSpaces(line string) string {
@@ -110,19 +71,61 @@ func (r MD038) Fix(source []byte) []byte {
 
 func (r MD038) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
-	mask := fencedCodeBlockMask(doc.Lines)
-	for i, line := range doc.Lines {
-		if mask[i] {
-			continue
+
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-		if findCodeSpanViolations(line) {
-			violations = append(violations, lint.Violation{
-				Rule:    r.ID(),
-				Line:    i + 1,
-				Column:  1,
-				Message: "Spaces inside code span elements",
-			})
+		cs, ok := n.(*ast.CodeSpan)
+		if !ok {
+			return ast.WalkContinue, nil
 		}
-	}
+
+		// CodeSpan children are Text nodes (one per source line).
+		first := cs.FirstChild()
+		if first == nil {
+			return ast.WalkContinue, nil
+		}
+		firstText, ok := first.(*ast.Text)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+
+		// Find last text child.
+		var lastText *ast.Text
+		for c := cs.FirstChild(); c != nil; c = c.NextSibling() {
+			if t, ok := c.(*ast.Text); ok {
+				lastText = t
+			}
+		}
+		if lastText == nil {
+			return ast.WalkContinue, nil
+		}
+
+		firstContent := firstText.Segment.Value(doc.Source)
+		lastContent := lastText.Segment.Value(doc.Source)
+
+		// Check for leading space: in content or stripped by goldmark (symmetric stripping).
+		hasLeadingSpace := (len(firstContent) > 0 && firstContent[0] == ' ') ||
+			(firstText.Segment.Start > 0 && doc.Source[firstText.Segment.Start-1] == ' ')
+
+		// Check for trailing space: in content or stripped by goldmark.
+		hasTrailingSpace := (len(lastContent) > 0 && lastContent[len(lastContent)-1] == ' ') ||
+			(lastText.Segment.Stop < len(doc.Source) && doc.Source[lastText.Segment.Stop] == ' ')
+
+		if !hasLeadingSpace && !hasTrailingSpace {
+			return ast.WalkContinue, nil
+		}
+
+		line := countLine(doc.Source, firstText.Segment.Start)
+		violations = append(violations, lint.Violation{
+			Rule:    r.ID(),
+			Line:    line,
+			Column:  1,
+			Message: "Spaces inside code span elements",
+		})
+		return ast.WalkContinue, nil
+	})
+
 	return violations
 }
