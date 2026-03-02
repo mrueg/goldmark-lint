@@ -626,6 +626,46 @@ func TestMD032_FencedCodeBlock_NoFix(t *testing.T) {
 	}
 }
 
+func TestMD032_MultilineListItem_NoViolation(t *testing.T) {
+	// A list item with a continuation line must not generate false violations
+	// when it is already surrounded by blank lines.
+	src := "Text\n\n- item 1\n  continuation\n- item 2\n\nMore text\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for valid multiline list, got %v", v)
+	}
+}
+
+func TestMD032_MultilineListItem_Violation(t *testing.T) {
+	// A list with a multiline item missing blank lines should produce exactly
+	// two violations (one before the list, one after) – not four.
+	src := "Text\n- item 1\n  continuation\n- item 2\nMore text\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations for multiline list without blank lines, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD032_MultilineListItem_Fix(t *testing.T) {
+	// Fix must not insert blank lines between a list item and its continuation.
+	src := "Text\n- item 1\n  continuation\n- item 2\nMore text\n"
+	got := fixString(t, rules.MD032{}, src)
+	want := "Text\n\n- item 1\n  continuation\n- item 2\n\nMore text\n"
+	if got != want {
+		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD032_SingleItem_NoDoubleViolation(t *testing.T) {
+	// A single-item list missing blank lines both before and after must produce
+	// exactly one violation, not two (matching markdownlint behaviour).
+	src := "Text\n- item 1\nMore text\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for single-item list without blank lines, got %d: %v", len(v), v)
+	}
+}
+
 func TestMD037_Valid(t *testing.T) {
 	src := "This is *emphasized* text.\n"
 	v := lintString(t, rules.MD037{}, src)
