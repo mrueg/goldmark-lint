@@ -19,10 +19,13 @@ func (r MD049) Aliases() []string   { return []string{"emphasis-style"} }
 func (r MD049) Description() string { return "Emphasis style should be consistent" }
 
 // md049StarRE matches single-asterisk emphasis *text* (not **).
-var md049StarRE = regexp.MustCompile(`(?:^|[^*])(\*(?:[^*\n]+)\*)(?:[^*]|$)`)
+// The first character inside the emphasis must not be whitespace (per CommonMark:
+// a left-flanking delimiter run cannot be followed by Unicode whitespace).
+var md049StarRE = regexp.MustCompile(`(?:^|[^*])(\*(?:[^ \t*\n][^*\n]*)\*)(?:[^*]|$)`)
 
 // md049UnderRE matches single-underscore emphasis _text_ (not __).
-var md049UnderRE = regexp.MustCompile(`(?:^|[^_])(_(?:[^_\n]+)_)(?:[^_]|$)`)
+// The first character inside the emphasis must not be whitespace.
+var md049UnderRE = regexp.MustCompile(`(?:^|[^_])(_(?:[^ \t_\n][^_\n]*)_)(?:[^_]|$)`)
 
 func (r MD049) Check(doc *lint.Document) []lint.Violation {
 	style := r.Style
@@ -140,10 +143,11 @@ func (r MD049) Fix(source []byte) []byte {
 
 // md049ReplaceUnderscore replaces _text_ (not __text__) with *text*.
 // It is code-span-aware: replacements are only applied outside of code spans.
+// The first character inside the emphasis must not be whitespace (per CommonMark).
 func md049ReplaceUnderscore(line string) string {
 	cleaned := blankCodeSpans(line)
-	re := regexp.MustCompile(`(?:^|([^_]))(_(?:[^_\n]+)_)(?:[^_]|$)`)
-	innerRE := regexp.MustCompile(`_([^_\n]+)_`)
+	re := regexp.MustCompile(`(?:^|([^_]))(_(?:[^ \t_\n][^_\n]*)_)(?:[^_]|$)`)
+	innerRE := regexp.MustCompile(`_([^ \t_\n][^_\n]*)_`)
 	return applyReplacementsFromCleaned(line, cleaned, re, func(seg string) string {
 		sub := innerRE.FindStringSubmatch(seg)
 		if sub == nil {
@@ -155,10 +159,12 @@ func md049ReplaceUnderscore(line string) string {
 
 // md049ReplaceAsterisk replaces *text* (not **text**) with _text_.
 // It is code-span-aware: replacements are only applied outside of code spans.
+// The first character inside the emphasis must not be whitespace (per CommonMark),
+// which prevents list bullet markers (* item) from being misidentified as emphasis.
 func md049ReplaceAsterisk(line string) string {
 	cleaned := blankCodeSpans(line)
-	re := regexp.MustCompile(`(?:^|([^*]))(\*(?:[^*\n]+)\*)(?:[^*]|$)`)
-	innerRE := regexp.MustCompile(`\*([^*\n]+)\*`)
+	re := regexp.MustCompile(`(?:^|([^*]))(\*(?:[^ \t*\n][^*\n]*)\*)(?:[^*]|$)`)
+	innerRE := regexp.MustCompile(`\*([^ \t*\n][^*\n]*)\*`)
 	return applyReplacementsFromCleaned(line, cleaned, re, func(seg string) string {
 		sub := innerRE.FindStringSubmatch(seg)
 		if sub == nil {

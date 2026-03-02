@@ -24,17 +24,22 @@ func isListItemLine(line string) bool {
 func (r MD032) Fix(source []byte) []byte {
 	lines := strings.Split(string(source), "\n")
 	n := len(lines)
+	mask := fencedCodeBlockMask(lines)
 	var result []string
 
 	for i, line := range lines {
+		if mask[i] {
+			result = append(result, line)
+			continue
+		}
 		if isListItemLine(line) {
-			prevIsList := i > 0 && isListItemLine(lines[i-1])
+			prevIsList := i > 0 && !mask[i-1] && isListItemLine(lines[i-1])
 			// Insert blank line before first item in a list
 			if !prevIsList && i > 0 && strings.TrimSpace(lines[i-1]) != "" {
 				result = append(result, "")
 			}
 			result = append(result, line)
-			nextIsList := i < n-1 && isListItemLine(lines[i+1])
+			nextIsList := i < n-1 && !mask[i+1] && isListItemLine(lines[i+1])
 			// Insert blank line after last item in a list
 			if !nextIsList && i < n-1 && strings.TrimSpace(lines[i+1]) != "" {
 				result = append(result, "")
@@ -50,12 +55,16 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	lines := doc.Lines
 	n := len(lines)
+	mask := fencedCodeBlockMask(lines)
 
 	for i, line := range lines {
+		if mask[i] {
+			continue
+		}
 		if !isListItemLine(line) {
 			continue
 		}
-		prevIsList := i > 0 && isListItemLine(lines[i-1])
+		prevIsList := i > 0 && !mask[i-1] && isListItemLine(lines[i-1])
 		// Check blank line before first item
 		if !prevIsList && i > 0 && strings.TrimSpace(lines[i-1]) != "" {
 			violations = append(violations, lint.Violation{
@@ -65,7 +74,7 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 				Message: "Lists should be surrounded by blank lines",
 			})
 		}
-		nextIsList := i < n-1 && isListItemLine(lines[i+1])
+		nextIsList := i < n-1 && !mask[i+1] && isListItemLine(lines[i+1])
 		// Check blank line after last item
 		if !nextIsList && i < n-1 && strings.TrimSpace(lines[i+1]) != "" {
 			violations = append(violations, lint.Violation{

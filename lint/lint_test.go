@@ -608,6 +608,24 @@ func TestMD032_Fix(t *testing.T) {
 	}
 }
 
+func TestMD032_FencedCodeBlock_NoViolation(t *testing.T) {
+	// List-like lines inside a fenced code block must not trigger violations.
+	src := "Text\n\n```yaml\nargs:\n- --resources=pods\n- --node=$(NODE_NAME)\nenv:\n- name: NODE_NAME\n```\n\nMore text\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for list items inside fenced code block, got %v", v)
+	}
+}
+
+func TestMD032_FencedCodeBlock_NoFix(t *testing.T) {
+	// Fix must not insert blank lines inside a fenced code block.
+	src := "Text\n\n```yaml\nargs:\n- --resources=pods\n- --node=$(NODE_NAME)\nenv:\n- name: NODE_NAME\n```\n\nMore text\n"
+	got := fixString(t, rules.MD032{}, src)
+	if got != src {
+		t.Errorf("Fix() modified content inside fenced code block:\n got  %q\n want %q", got, src)
+	}
+}
+
 func TestMD037_Valid(t *testing.T) {
 	src := "This is *emphasized* text.\n"
 	v := lintString(t, rules.MD037{}, src)
@@ -1058,6 +1076,26 @@ func TestMD049_Check_ListItemWithCodeSpan(t *testing.T) {
 	// The Check function must not report a false violation for a list item
 	// whose marker * pairs visually with a * inside a code span.
 	src := "* [FEATURE] Add `kube_networkpolicy_*` metrics #893\n"
+	v := lintString(t, rules.MD049{Style: "underscore"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
+func TestMD049_Fix_ListItemWithEscapedAsterisk(t *testing.T) {
+	// A list item whose bullet * pairs with a \* escaped asterisk in the text
+	// must not be modified by the Fix function.
+	src := `* [CHANGE]       Fix empty string for "owner_\*" dimensions #1923 @pawcykca` + "\n"
+	got := fixString(t, rules.MD049{Style: "underscore"}, src)
+	if got != src {
+		t.Errorf("Fix() modified list item with escaped asterisk:\n got  %q\n want %q", got, src)
+	}
+}
+
+func TestMD049_Check_ListItemWithEscapedAsterisk(t *testing.T) {
+	// The Check function must not report a false violation for a list item
+	// whose bullet * pairs with a \* escaped asterisk in the text.
+	src := `* [CHANGE]       Fix empty string for "owner_\*" dimensions #1923 @pawcykca` + "\n"
 	v := lintString(t, rules.MD049{Style: "underscore"}, src)
 	if len(v) != 0 {
 		t.Errorf("expected no violations, got %v", v)
