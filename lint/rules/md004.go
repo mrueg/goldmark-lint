@@ -46,21 +46,28 @@ func (r MD004) Check(doc *lint.Document) []lint.Violation {
 				expectedMarker := sublistMarkers[depth%len(sublistMarkers)]
 				depth++
 				if list.Marker != expectedMarker {
-					line := 1
-					if item := list.FirstChild(); item != nil {
-						if li, ok2 := item.(*ast.ListItem); ok2 {
-							if li.Lines() != nil && li.Lines().Len() > 0 {
-								seg := li.Lines().At(0)
-								line = countLine(doc.Source, seg.Start)
+					for child := list.FirstChild(); child != nil; child = child.NextSibling() {
+						li, ok2 := child.(*ast.ListItem)
+						if !ok2 {
+							continue
+						}
+						lineNum := 1
+						if li.Lines() != nil && li.Lines().Len() > 0 {
+							seg := li.Lines().At(0)
+							lineNum = countLine(doc.Source, seg.Start)
+						} else if fc := li.FirstChild(); fc != nil {
+							if fc.Lines() != nil && fc.Lines().Len() > 0 {
+								seg := fc.Lines().At(0)
+								lineNum = countLine(doc.Source, seg.Start)
 							}
 						}
+						violations = append(violations, lint.Violation{
+							Rule:    r.ID(),
+							Line:    lineNum,
+							Column:  1,
+							Message: fmt.Sprintf("Unordered list style [Expected: %c; Actual: %c]", expectedMarker, list.Marker),
+						})
 					}
-					violations = append(violations, lint.Violation{
-						Rule:    r.ID(),
-						Line:    line,
-						Column:  1,
-						Message: fmt.Sprintf("Unordered list style [Expected: %c; Actual: %c]", expectedMarker, list.Marker),
-					})
 				}
 			} else {
 				depth--
@@ -90,22 +97,29 @@ func (r MD004) Check(doc *lint.Document) []lint.Violation {
 		}
 
 		if expected != 0 && marker != expected {
-			// Find the line of the first list item.
-			line := 1
-			if item := list.FirstChild(); item != nil {
-				if li, ok2 := item.(*ast.ListItem); ok2 {
-					if li.Lines() != nil && li.Lines().Len() > 0 {
-						seg := li.Lines().At(0)
-						line = countLine(doc.Source, seg.Start)
+			// Instead of one violation for the whole list, report one per item.
+			for child := list.FirstChild(); child != nil; child = child.NextSibling() {
+				li, ok2 := child.(*ast.ListItem)
+				if !ok2 {
+					continue
+				}
+				lineNum := 1
+				if li.Lines() != nil && li.Lines().Len() > 0 {
+					seg := li.Lines().At(0)
+					lineNum = countLine(doc.Source, seg.Start)
+				} else if fc := li.FirstChild(); fc != nil {
+					if fc.Lines() != nil && fc.Lines().Len() > 0 {
+						seg := fc.Lines().At(0)
+						lineNum = countLine(doc.Source, seg.Start)
 					}
 				}
+				violations = append(violations, lint.Violation{
+					Rule:    r.ID(),
+					Line:    lineNum,
+					Column:  1,
+					Message: fmt.Sprintf("Unordered list style [Expected: %c; Actual: %c]", expected, marker),
+				})
 			}
-			violations = append(violations, lint.Violation{
-				Rule:    r.ID(),
-				Line:    line,
-				Column:  1,
-				Message: fmt.Sprintf("Unordered list style [Expected: %c; Actual: %c]", expected, marker),
-			})
 		}
 		return ast.WalkContinue, nil
 	})

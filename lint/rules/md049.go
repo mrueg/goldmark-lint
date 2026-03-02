@@ -73,12 +73,34 @@ func (r MD049) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
+		// Report opening marker violation.
 		violations = append(violations, lint.Violation{
 			Rule:    r.ID(),
 			Line:    inlineNodeLine(emph, doc.Source),
 			Column:  1,
 			Message: fmt.Sprintf("Emphasis style [Expected: %s; Actual: %s]", expected, actual),
 		})
+		// Report closing marker violation (markdownlint reports both opening and closing).
+		var lastTextStop int
+		for c := emph.FirstChild(); c != nil; c = c.NextSibling() {
+			if t, ok2 := c.(*ast.Text); ok2 && t.Segment.Stop > lastTextStop {
+				lastTextStop = t.Segment.Stop
+			}
+		}
+		if lastTextStop > 0 && lastTextStop < len(doc.Source) {
+			closingLine := countLine(doc.Source, lastTextStop)
+			// Calculate column relative to the start of the line.
+			lineStart := lastTextStop
+			for lineStart > 0 && doc.Source[lineStart-1] != '\n' {
+				lineStart--
+			}
+			violations = append(violations, lint.Violation{
+				Rule:    r.ID(),
+				Line:    closingLine,
+				Column:  lastTextStop - lineStart + 1,
+				Message: fmt.Sprintf("Emphasis style [Expected: %s; Actual: %s]", expected, actual),
+			})
+		}
 		return ast.WalkContinue, nil
 	})
 

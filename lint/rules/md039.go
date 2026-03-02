@@ -48,6 +48,20 @@ func (r MD039) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
+		// Only check inline links (not reference links).
+		// For inline links, source[lastTextStop] == ']' and source[lastTextStop+1] == '('.
+		var lastTextStop int
+		for c := link.FirstChild(); c != nil; c = c.NextSibling() {
+			if t, ok2 := c.(*ast.Text); ok2 && t.Segment.Stop > lastTextStop {
+				lastTextStop = t.Segment.Stop
+			}
+		}
+		isInline := lastTextStop > 0 && lastTextStop < len(doc.Source)-1 &&
+			doc.Source[lastTextStop] == ']' && doc.Source[lastTextStop+1] == '('
+		if !isInline {
+			return ast.WalkContinue, nil
+		}
+
 		// Check first text child for leading space.
 		first := link.FirstChild()
 		if first == nil {

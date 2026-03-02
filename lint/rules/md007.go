@@ -42,7 +42,20 @@ func (r MD007) Check(doc *lint.Document) []lint.Violation {
 
 	var violations []lint.Violation
 
-	for i, line := range doc.Lines {
+	for i, rawLine := range doc.Lines {
+		// Strip blockquote prefix(es) so list items inside blockquotes are also checked.
+		line := rawLine
+		for {
+			stripped := strings.TrimLeft(line, " ")
+			if len(stripped) == 0 || stripped[0] != '>' {
+				break
+			}
+			line = stripped[1:]
+			if len(line) > 0 && line[0] == ' ' {
+				line = line[1:]
+			}
+		}
+
 		// Count leading spaces.
 		trimmed := strings.TrimLeft(line, " ")
 		spaces := len(line) - len(trimmed)

@@ -40,6 +40,19 @@ func (r MD036) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
+		// Only check top-level paragraphs (not inside lists, list items, etc.)
+		// to match markdownlint behavior.
+		parent := para.Parent()
+		for parent != nil {
+			if _, isListItem := parent.(*ast.ListItem); isListItem {
+				return ast.WalkContinue, nil
+			}
+			if _, isList := parent.(*ast.List); isList {
+				return ast.WalkContinue, nil
+			}
+			parent = parent.Parent()
+		}
+
 		// The paragraph must consist of a single emphasis node (no other children).
 		first := para.FirstChild()
 		if first == nil || first.NextSibling() != nil {
