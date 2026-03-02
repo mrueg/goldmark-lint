@@ -35,7 +35,9 @@ func (r MD011) Check(doc *lint.Document) []lint.Violation {
 		if mask[i] {
 			continue
 		}
-		if reversedLinkRE.MatchString(line) {
+		// Count each occurrence, not just whether the line has a match.
+		count := len(reversedLinkRE.FindAllString(line, -1))
+		for range count {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
 				Line:    i + 1,
