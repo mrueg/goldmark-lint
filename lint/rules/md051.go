@@ -96,7 +96,10 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 		if extMask[i] {
 			continue
 		}
-		for _, m := range md051FragRE.FindAllStringSubmatch(line, -1) {
+		// Blank out inline code spans before scanning to avoid false positives
+		// from patterns like `[text](#frag)` inside code spans.
+		checkLine := blankCodeSpans(line)
+		for _, m := range md051FragRE.FindAllStringSubmatch(checkLine, -1) {
 			fragment := m[2]
 			// Always allow #top.
 			if fragment == "top" {

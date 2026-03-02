@@ -81,6 +81,11 @@ func tableAlignedViolations(lines []string, t [2]int, ruleID string) []lint.Viol
 
 	var violations []lint.Violation
 	for row := t[0] + 1; row <= t[1]; row++ {
+		// Skip delimiter rows: their pipe positions are determined by cell widths,
+		// not by visual alignment, so they don't need to match header pipe positions.
+		if isTableDelimiterRow(lines[row]) {
+			continue
+		}
 		remaining := make(map[int]bool, len(headerSet))
 		for p := range headerSet {
 			remaining[p] = true
@@ -148,11 +153,11 @@ func rowCompactTightViolations(line, ruleID string, lineNum int) (compact, tight
 			for j := p - 1; j >= 0 && line[j] == ' '; j-- {
 				leftSpaces++
 			}
-			switch {
-			case leftSpaces == 0:
+			switch leftSpaces {
+			case 0:
 				compact = append(compact, lint.Violation{Rule: ruleID, Line: lineNum, Column: p + 1,
 					Message: `Table column style [Expected: compact; Actual: missing space to left of pipe]`})
-			case leftSpaces == 1:
+			case 1:
 				tight = append(tight, lint.Violation{Rule: ruleID, Line: lineNum, Column: p + 1,
 					Message: `Table column style [Expected: tight; Actual: space to left of pipe]`})
 			default:
@@ -174,11 +179,11 @@ func rowCompactTightViolations(line, ruleID string, lineNum int) (compact, tight
 				continue
 			}
 			rightSpaces := j - (p + 1)
-			switch {
-			case rightSpaces == 0:
+			switch rightSpaces {
+			case 0:
 				compact = append(compact, lint.Violation{Rule: ruleID, Line: lineNum, Column: p + 1,
 					Message: `Table column style [Expected: compact; Actual: missing space to right of pipe]`})
-			case rightSpaces == 1:
+			case 1:
 				tight = append(tight, lint.Violation{Rule: ruleID, Line: lineNum, Column: p + 1,
 					Message: `Table column style [Expected: tight; Actual: space to right of pipe]`})
 			default:

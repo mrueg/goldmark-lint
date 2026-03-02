@@ -24,6 +24,9 @@ func (r MD027) Description() string { return "Multiple spaces after blockquote s
 // indentation (4+ extra spaces after the required one = 5+ total).
 var md027RE = regexp.MustCompile(`^( {0,3}>+)( {2,})`)
 
+// md027ListItemContentRE matches a list item at the start of a string.
+var md027ListItemContentRE = regexp.MustCompile(`^(?:[-*+]|\d+[.)]) `)
+
 // md027ListItemRE matches a list item continuation prefix (spaces before blockquote).
 var md027ListItemRE = regexp.MustCompile(`^ {2,}`)
 
@@ -40,16 +43,26 @@ func (r MD027) Check(doc *lint.Document) []lint.Violation {
 			continue
 		}
 		m := md027RE.FindStringSubmatch(line)
-		// Only flag 2-4 extra spaces (2-4 total after >).
-		// 5+ spaces = code block indentation inside blockquote; skip those.
-		if m != nil && len(m[2]) < 5 {
-			violations = append(violations, lint.Violation{
-				Rule:    r.ID(),
-				Line:    i + 1,
-				Column:  1,
-				Message: "Multiple spaces after blockquote symbol",
-			})
+		if m == nil {
+			continue
 		}
+		spaces := m[2]
+		// 5+ spaces after > = indented code block inside blockquote; skip.
+		if len(spaces) >= 5 {
+			continue
+		}
+		// If the content after the spaces is a list item marker, skip.
+		// Extra spaces are part of the list indentation, not a MD027 violation.
+		rest := line[len(m[1])+len(spaces):]
+		if md027ListItemContentRE.MatchString(rest) {
+			continue
+		}
+		violations = append(violations, lint.Violation{
+			Rule:    r.ID(),
+			Line:    i + 1,
+			Column:  1,
+			Message: "Multiple spaces after blockquote symbol",
+		})
 	}
 	return violations
 }
@@ -60,10 +73,20 @@ func (r MD027) Fix(source []byte) []byte {
 	for i, line := range lines {
 		if !mask[i] {
 			m := md027RE.FindStringSubmatch(line)
-			// Only fix 2-4 extra spaces; skip code-block-level indentation (5+).
-			if m != nil && len(m[2]) < 5 {
-				lines[i] = m[1] + " " + line[len(m[0]):]
+			if m == nil {
+				continue
 			}
+			spaces := m[2]
+			// 5+ spaces = code block level; skip.
+			if len(spaces) >= 5 {
+				continue
+			}
+			// Skip if content after spaces is a list item.
+			rest := line[len(m[1])+len(spaces):]
+			if md027ListItemContentRE.MatchString(rest) {
+				continue
+			}
+			lines[i] = m[1] + " " + rest
 		}
 	}
 	return []byte(strings.Join(lines, "\n"))
