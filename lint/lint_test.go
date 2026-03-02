@@ -818,6 +818,16 @@ func TestMD038_Fix(t *testing.T) {
 	}
 }
 
+func TestMD038_MultipleSpansOnSameLine_OneViolation(t *testing.T) {
+	// Two code spans with trailing spaces on the same line should produce only
+	// one violation (markdownlint deduplicates by line).
+	src := "text `: ` and `, ` more\n"
+	v := lintString(t, rules.MD038{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for two code spans with spaces on same line, got %d: %v", len(v), v)
+	}
+}
+
 func TestMD039_Valid(t *testing.T) {
 	src := "See [text](url) here.\n"
 	v := lintString(t, rules.MD039{}, src)
@@ -1354,6 +1364,17 @@ func TestMD052_HTMLBlock_NoViolation(t *testing.T) {
 	v := lintString(t, rules.MD052{}, src)
 	if len(v) != 0 {
 		t.Errorf("expected no violations for ref in HTML block, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD052_CodeSpanLabel_NoViolation(t *testing.T) {
+	// Collapsed reference [`genawaiter`][] where definition [`genawaiter`]: url exists
+	// should not be flagged. The code-span in the label is blanked by blankCodeSpans,
+	// so we must register both raw and blanked forms of the definition label.
+	src := "Use [`genawaiter`][] here.\n\n[`genawaiter`]: https://example.com\n"
+	v := lintString(t, rules.MD052{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for code-span label with definition, got %d: %v", len(v), v)
 	}
 }
 

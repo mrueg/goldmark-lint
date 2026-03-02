@@ -71,6 +71,8 @@ func (r MD038) Fix(source []byte) []byte {
 
 func (r MD038) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
+	// Deduplicate: report at most one violation per line (markdownlint behaviour).
+	reportedLines := make(map[int]bool)
 
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
@@ -133,6 +135,10 @@ func (r MD038) Check(doc *lint.Document) []lint.Violation {
 		}
 
 		line := countLine(doc.Source, firstText.Segment.Start)
+		if reportedLines[line] {
+			return ast.WalkContinue, nil
+		}
+		reportedLines[line] = true
 		violations = append(violations, lint.Violation{
 			Rule:    r.ID(),
 			Line:    line,
