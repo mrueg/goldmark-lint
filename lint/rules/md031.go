@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/yuin/goldmark/ast"
 )
 
 // MD031 checks that fenced code blocks are surrounded by blank lines.
@@ -96,79 +97,69 @@ func (r MD031) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	lines := doc.Lines
 	n := len(lines)
-	inFence := false
-	fenceChar := byte(0)
-	fenceLen := 0
 
-	for i, line := range lines {
-		isFence, fc, fl := detectFence(line)
-		if !inFence {
-			if isFence {
-				inFence = true
-				fenceChar = fc
-				fenceLen = fl
-				// Check blank line before (not required if at document start)
-				if i > 0 && strings.TrimSpace(lines[i-1]) != "" {
-					// If list_items=false, skip when the fence is inside a list item.
-					if !checkListItems && isInsideListItem(lines, i) {
-						continue
-					}
-					violations = append(violations, lint.Violation{
-						Rule:    r.ID(),
-						Line:    i + 1,
-						Column:  1,
-						Message: "Fenced code blocks should be surrounded by blank lines",
-					})
+	_ = ast.Walk(doc.AST, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		cb, ok := node.(*ast.FencedCodeBlock)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+
+		// If list_items=false, skip fenced code blocks inside list items.
+		if !checkListItems {
+			for p := node.Parent(); p != nil; p = p.Parent() {
+				if _, isLI := p.(*ast.ListItem); isLI {
+					return ast.WalkContinue, nil
 				}
 			}
+		}
+
+		// Determine the opening fence line number (1-based).
+		openLineNum := fencedCodeBlockLine(cb, doc.Source)
+		if openLineNum <= 0 {
+			return ast.WalkContinue, nil
+		}
+		openIdx := openLineNum - 1 // 0-based
+
+		// Determine the closing fence line number.
+		// The closing fence is on the line after the last content line.
+		var closeIdx int
+		if cb.Lines() != nil && cb.Lines().Len() > 0 {
+			lastSeg := cb.Lines().At(cb.Lines().Len() - 1)
+			// countLine counts newlines before pos; for the end of the last
+			// content line (which includes the trailing newline), this gives
+			// the line number of the closing fence.
+			closeLineNum := countLine(doc.Source, lastSeg.Stop)
+			closeIdx = closeLineNum - 1
 		} else {
-			trimmed := strings.TrimLeft(line, " ")
-			j := 0
-			for j < len(trimmed) && trimmed[j] == fenceChar {
-				j++
-			}
-			if j >= fenceLen && strings.TrimSpace(trimmed[j:]) == "" && len(trimmed) > 0 && trimmed[0] == fenceChar {
-				inFence = false
-				// Check blank line after (not required if at document end)
-				if i < n-1 && strings.TrimSpace(lines[i+1]) != "" {
-					if !checkListItems && isInsideListItem(lines, i) {
-						continue
-					}
-					violations = append(violations, lint.Violation{
-						Rule:    r.ID(),
-						Line:    i + 1,
-						Column:  1,
-						Message: "Fenced code blocks should be surrounded by blank lines",
-					})
-				}
-			}
+			// Empty code block: closing fence is immediately after opening fence.
+			closeIdx = openIdx + 1
 		}
-	}
-	return violations
-}
 
-// isInsideListItem reports whether the line at index i appears to be inside a list item
-// by walking backwards through preceding lines to find a list item marker.
-func isInsideListItem(lines []string, i int) bool {
-	for k := i - 1; k >= 0; k-- {
-		line := lines[k]
-		if strings.TrimSpace(line) == "" {
-			continue // skip blank lines
+		// Check blank line before opening fence (not required at document start).
+		if openIdx > 0 && !isBlankOrBlockquoteBlank(lines[openIdx-1]) {
+			violations = append(violations, lint.Violation{
+				Rule:    r.ID(),
+				Line:    openLineNum,
+				Column:  1,
+				Message: "Fenced code blocks should be surrounded by blank lines",
+			})
 		}
-		trimmed := strings.TrimLeft(line, " ")
-		// Unordered list marker
-		if len(trimmed) >= 2 && (trimmed[0] == '-' || trimmed[0] == '*' || trimmed[0] == '+') && trimmed[1] == ' ' {
-			return true
+
+		// Check blank line after closing fence (not required at document end).
+		if closeIdx >= 0 && closeIdx < n-1 && !isBlankOrBlockquoteBlank(lines[closeIdx+1]) {
+			violations = append(violations, lint.Violation{
+				Rule:    r.ID(),
+				Line:    closeIdx + 1,
+				Column:  1,
+				Message: "Fenced code blocks should be surrounded by blank lines",
+			})
 		}
-		// Ordered list marker (starts with digit)
-		if len(trimmed) >= 2 && trimmed[0] >= '0' && trimmed[0] <= '9' {
-			return true
-		}
-		// Non-empty non-indented line that is not a list marker: not in a list item.
-		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
-			return false
-		}
-		// Indented non-empty line (list item continuation): keep looking.
-	}
-	return false
+
+		return ast.WalkContinue, nil
+	})
+
+	return violations
 }

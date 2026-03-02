@@ -138,6 +138,50 @@ func (r MD029) Fix(source []byte) []byte {
 	return []byte(strings.Join(lines, "\n"))
 }
 
+// listItemFirstSeg returns the first text segment of a list item by recursively
+// searching the AST subtree. Returns (segStart, ok).
+func listItemFirstSeg(li ast.Node) (int, bool) {
+	if li.Lines() != nil && li.Lines().Len() > 0 {
+		return li.Lines().At(0).Start, true
+	}
+	for c := li.FirstChild(); c != nil; c = c.NextSibling() {
+		if s, ok := listItemFirstSeg(c); ok {
+			return s, true
+		}
+	}
+	return 0, false
+}
+
+// listItemNumFromSeg extracts the ordered list item number by scanning backward
+// in the source from segStart to find the "N." or "N)" marker on the same line.
+// Returns -1 if the number cannot be determined.
+func listItemNumFromSeg(source []byte, segStart int) int {
+	// Step back past the mandatory space after the separator.
+	i := segStart - 1
+	if i < 0 || source[i] != ' ' {
+		return -1
+	}
+	i--
+	// Skip the separator ('.' or ')').
+	if i < 0 || (source[i] != '.' && source[i] != ')') {
+		return -1
+	}
+	i--
+	// Collect digit(s).
+	end := i + 1 // exclusive end of digit run
+	for i >= 0 && source[i] >= '0' && source[i] <= '9' {
+		i--
+	}
+	if end == i+1 {
+		return -1 // no digits found
+	}
+	n, err := strconv.Atoi(string(source[i+1 : end]))
+	if err != nil {
+		return -1
+	}
+	return n
+}
+
 // Check validates ordered list item numbering style.
 func (r MD029) Check(doc *lint.Document) []lint.Violation {
 	style := r.Style
@@ -169,40 +213,18 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 			if !ok2 {
 				continue
 			}
-			// Find the source line for this list item.
-			lineNum := 1
-			num := -1
-			if li.Lines() != nil && li.Lines().Len() > 0 {
-				seg := li.Lines().At(0)
-				lineNum = countLine(doc.Source, seg.Start)
-			} else {
-				// For list items with block children, look at the first child's lines.
-				if fc := li.FirstChild(); fc != nil {
-					if fc.Lines() != nil && fc.Lines().Len() > 0 {
-						seg := fc.Lines().At(0)
-						lineNum = countLine(doc.Source, seg.Start)
-					}
-				}
+			// Find the first content segment of this list item (recursing into
+			// block children such as blockquotes).
+			segStart, found := listItemFirstSeg(li)
+			if !found {
+				// Cannot determine position; skip this item to avoid false positives.
+				continue
 			}
-			// Parse the actual number from the source line (1-based lineNum).
-			if lineNum >= 1 && lineNum <= len(doc.Lines) {
-				line := doc.Lines[lineNum-1]
-				// Strip blockquote prefixes before parsing.
-				for {
-					stripped := strings.TrimLeft(line, " ")
-					if len(stripped) == 0 || stripped[0] != '>' {
-						break
-					}
-					line = stripped[1:]
-					if len(line) > 0 && line[0] == ' ' {
-						line = line[1:]
-					}
-				}
-				if m := orderedItemRE.FindStringSubmatch(line); m != nil {
-					if n, err := strconv.Atoi(m[2]); err == nil {
-						num = n
-					}
-				}
+			lineNum := countLine(doc.Source, segStart)
+			num := listItemNumFromSeg(doc.Source, segStart)
+			if num < 0 {
+				// Cannot determine the item number; skip to avoid false positives.
+				continue
 			}
 			items = append(items, item{lineNum, num})
 		}
