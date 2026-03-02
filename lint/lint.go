@@ -9,6 +9,7 @@ import (
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/text"
 )
 
@@ -114,7 +115,7 @@ func (l *Linter) Lint(source []byte) []Violation {
 	source = stripFrontMatterAt(source, end)
 
 	reader := text.NewReader(source)
-	md := goldmark.New()
+	md := goldmark.New(goldmark.WithExtensions(extension.Table, extension.Strikethrough, extension.TaskList))
 	node := md.Parser().Parse(reader)
 
 	lines := splitLines(source)

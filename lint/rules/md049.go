@@ -139,25 +139,49 @@ func (r MD049) Fix(source []byte) []byte {
 }
 
 // md049ReplaceUnderscore replaces _text_ (not __text__) with *text*.
+// It is code-span-aware: replacements are only applied outside of code spans.
 func md049ReplaceUnderscore(line string) string {
+	cleaned := blankCodeSpans(line)
 	re := regexp.MustCompile(`(?:^|([^_]))(_(?:[^_\n]+)_)(?:[^_]|$)`)
-	return re.ReplaceAllStringFunc(line, func(m string) string {
-		sub := regexp.MustCompile(`_([^_\n]+)_`).FindStringSubmatch(m)
+	innerRE := regexp.MustCompile(`_([^_\n]+)_`)
+	return applyReplacementsFromCleaned(line, cleaned, re, func(seg string) string {
+		sub := innerRE.FindStringSubmatch(seg)
 		if sub == nil {
-			return m
+			return seg
 		}
-		return strings.Replace(m, sub[0], "*"+sub[1]+"*", 1)
+		return strings.Replace(seg, sub[0], "*"+sub[1]+"*", 1)
 	})
 }
 
 // md049ReplaceAsterisk replaces *text* (not **text**) with _text_.
+// It is code-span-aware: replacements are only applied outside of code spans.
 func md049ReplaceAsterisk(line string) string {
+	cleaned := blankCodeSpans(line)
 	re := regexp.MustCompile(`(?:^|([^*]))(\*(?:[^*\n]+)\*)(?:[^*]|$)`)
-	return re.ReplaceAllStringFunc(line, func(m string) string {
-		sub := regexp.MustCompile(`\*([^*\n]+)\*`).FindStringSubmatch(m)
+	innerRE := regexp.MustCompile(`\*([^*\n]+)\*`)
+	return applyReplacementsFromCleaned(line, cleaned, re, func(seg string) string {
+		sub := innerRE.FindStringSubmatch(seg)
 		if sub == nil {
-			return m
+			return seg
 		}
-		return strings.Replace(m, sub[0], "_"+sub[1]+"_", 1)
+		return strings.Replace(seg, sub[0], "_"+sub[1]+"_", 1)
 	})
+}
+
+// applyReplacementsFromCleaned finds match positions using the cleaned line
+// (code spans blanked) and applies the replace function to those segments of
+// the original line. Processing right-to-left preserves byte offsets.
+func applyReplacementsFromCleaned(line, cleaned string, re *regexp.Regexp, replace func(string) string) string {
+	allMatches := re.FindAllStringIndex(cleaned, -1)
+	if len(allMatches) == 0 {
+		return line
+	}
+	result := []byte(line)
+	for i := len(allMatches) - 1; i >= 0; i-- {
+		start, end := allMatches[i][0], allMatches[i][1]
+		seg := string(result[start:end])
+		newSeg := replace(seg)
+		result = append(result[:start], append([]byte(newSeg), result[end:]...)...)
+	}
+	return string(result)
 }
