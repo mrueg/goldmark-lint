@@ -196,13 +196,10 @@ goldmark-lint --list-rules
 goldmark-lint --summary '**/*.md'
 
 # Lint only Markdown files changed relative to the base branch (CI)
-git diff --name-only origin/main -- '*.md' '**/*.md' | xargs -r goldmark-lint
+goldmark-lint $(git diff --name-only origin/main -- '*.md' '**/*.md')
 
 # Lint only Markdown files with uncommitted changes (local)
-git diff --name-only -- '*.md' '**/*.md' | xargs -r goldmark-lint
-
-# On macOS (BSD xargs has no -r flag), guard against empty input
-files=$(git diff --name-only origin/main -- '*.md' '**/*.md') && [ -n "$files" ] && echo "$files" | xargs goldmark-lint
+goldmark-lint $(git diff --name-only -- '*.md' '**/*.md')
 ```
 
 ## Configuration
