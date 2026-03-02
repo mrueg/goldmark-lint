@@ -1494,6 +1494,24 @@ func TestMD059_Invalid(t *testing.T) {
 	}
 }
 
+func TestMD059_FormattedText_Bold(t *testing.T) {
+	// Generic link text wrapped in bold should also be flagged.
+	src := "[**here**](https://example.com)\n"
+	v := lintString(t, rules.MD059{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for bold generic link text, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD059_FormattedText_Italic(t *testing.T) {
+	// Generic link text wrapped in italic should also be flagged.
+	src := "[*here*](https://example.com)\n"
+	v := lintString(t, rules.MD059{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for italic generic link text, got %d: %v", len(v), v)
+	}
+}
+
 func TestMD060_Valid(t *testing.T) {
 	// Aligned table (all pipes at the same columns): "any" style → no violations.
 	src := "| Col1 | Col2 |\n| ---- | ---- |\n| A    | B    |\n"
