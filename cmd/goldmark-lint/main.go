@@ -38,7 +38,7 @@ Optional parameters:
 - --fix-dry-run      show a diff of changes --fix would make, without modifying files
 - --format           read stdin, apply fixes, write stdout
 - --list-rules       print a table of all rules with their aliases, enabled/disabled state, and options
-- --no-cache         disable reading/writing the .markdownlint-cli2-cache file
+- --no-cache         disable reading/writing the .goldmark-lint-cache file
 - --no-globs         ignore the globs config key at runtime
 - --output-format    output format: default, json, junit, tap, sarif, github (default: default)
 - --summary           print a count-per-rule breakdown after linting

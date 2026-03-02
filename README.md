@@ -148,7 +148,7 @@ Optional parameters:
   --fix-dry-run      show a diff of changes --fix would make, without modifying files
   --format           read stdin, apply fixes, write stdout
   --list-rules       print a table of all rules with their aliases, enabled/disabled state, and options
-  --no-cache         disable reading/writing the .markdownlint-cli2-cache file
+  --no-cache         disable reading/writing the .goldmark-lint-cache file
   --no-globs         ignore the globs config key at runtime
   --output-format    output format: default, json, junit, tap, sarif, github (default: default)
   --summary          print a count-per-rule breakdown after linting
@@ -393,7 +393,7 @@ Omit the rule ID to disable/enable all rules. Rule aliases (e.g.
 - Inline disable comments (`markdownlint-disable`, `markdownlint-disable-next-line`, etc.).
 - Multiple output formats via `--output-format`: default text, JSON, JUnit XML, TAP, SARIF, and GitHub Actions annotations.
 - Colored terminal output: violations and diffs use ANSI colors when writing to a TTY (suppressed by `NO_COLOR`).
-- Result caching via `.markdownlint-cli2-cache` to speed up repeated runs.
+- Result caching via `.goldmark-lint-cache` to speed up repeated runs.
 - Parallel file linting bounded by `GOMAXPROCS` for fast, deterministic output on large repositories.
 - Gitignore integration via the `gitignore` config key.
 - `--list-rules` flag to inspect all rules with their enabled state and current options.

@@ -10,7 +10,7 @@ import (
 	"github.com/mrueg/goldmark-lint/lint"
 )
 
-const cacheFileName = ".markdownlint-cli2-cache"
+const cacheFileName = ".goldmark-lint-cache"
 
 // cacheEntry stores the lint result for a single file indexed by its content hash.
 type cacheEntry struct {
