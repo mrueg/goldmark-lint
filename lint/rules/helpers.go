@@ -105,6 +105,15 @@ func emphasisStartPos(emph *ast.Emphasis) int {
 	return -1
 }
 
+// headingSourceLine returns the 1-based line number of a heading node in source
+// using the first content segment, or 0 if no line information is available.
+func headingSourceLine(h *ast.Heading, source []byte) int {
+	if h.Lines() == nil || h.Lines().Len() == 0 {
+		return 0
+	}
+	return countLine(source, h.Lines().At(0).Start)
+}
+
 // fencedCodeBlockMask returns a bool slice with true for each line that is
 // inside (not on the fence delimiters of) a fenced code block.
 func fencedCodeBlockMask(lines []string) []bool {

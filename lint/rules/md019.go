@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/yuin/goldmark/ast"
 )
 
 // MD019 checks that there is only one space after the hash on ATX style headings.
@@ -31,19 +32,28 @@ func (r MD019) Fix(source []byte) []byte {
 
 func (r MD019) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
-	mask := fencedCodeBlockMask(doc.Lines)
-	for i, line := range doc.Lines {
-		if mask[i] {
-			continue
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
+		h, ok := n.(*ast.Heading)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+		lineNum := headingSourceLine(h, doc.Source)
+		if lineNum == 0 {
+			return ast.WalkContinue, nil
+		}
+		line := doc.Lines[lineNum-1]
 		if md019RE.MatchString(line) {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
-				Line:    i + 1,
+				Line:    lineNum,
 				Column:  1,
 				Message: "Multiple spaces after hash on ATX style heading",
 			})
 		}
-	}
+		return ast.WalkContinue, nil
+	})
 	return violations
 }

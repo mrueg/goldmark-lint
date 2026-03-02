@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/yuin/goldmark/ast"
 )
 
 // MD020 checks that closed ATX style headings have spaces inside the hashes.
@@ -48,24 +49,33 @@ func (r MD020) Fix(source []byte) []byte {
 
 func (r MD020) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
-	mask := fencedCodeBlockMask(doc.Lines)
-	for i, line := range doc.Lines {
-		if mask[i] {
-			continue
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
+		h, ok := n.(*ast.Heading)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+		lineNum := headingSourceLine(h, doc.Source)
+		if lineNum == 0 {
+			return ast.WalkContinue, nil
+		}
+		line := doc.Lines[lineNum-1]
 		m := closedATXRE.FindStringSubmatch(line)
 		if m == nil {
-			continue
+			return ast.WalkContinue, nil
 		}
 		middle := m[3]
 		if !strings.HasPrefix(middle, " ") || !strings.HasSuffix(middle, " ") {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
-				Line:    i + 1,
+				Line:    lineNum,
 				Column:  1,
 				Message: "No space inside hashes on closed ATX style heading",
 			})
 		}
-	}
+		return ast.WalkContinue, nil
+	})
 	return violations
 }
