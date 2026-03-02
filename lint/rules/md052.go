@@ -68,12 +68,22 @@ func (r MD052) Check(doc *lint.Document) []lint.Violation {
 	}
 	// Also scan lines for definitions that goldmark might not export (e.g.
 	// definitions in blockquotes), using the regex as a supplement.
+	// We scan both the raw line (to capture backtick-label definitions like
+	// [`genawaiter`]: url) and the blankCodeSpans version (so that usage lines
+	// processed with blankCodeSpans can find the same blanked-label key).
 	for i, line := range doc.Lines {
 		if skipLine(i) {
 			continue
 		}
 		if m := md052DefRE.FindStringSubmatch(line); m != nil {
 			defined[strings.ToLower(m[1])] = true
+		}
+		// Register the blanked label so that collapsed references like [`label`][]
+		// (where blankCodeSpans turns the label into spaces) can still be matched.
+		if blanked := blankCodeSpans(line); blanked != line {
+			if m := md052DefRE.FindStringSubmatch(blanked); m != nil {
+				defined[strings.ToLower(m[1])] = true
+			}
 		}
 	}
 
