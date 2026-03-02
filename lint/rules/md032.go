@@ -54,6 +54,8 @@ func isBlockLevelBreaker(line string) bool {
 		return true // block quote
 	case '<':
 		return true // HTML block
+	case '|':
+		return true // GFM table row
 	}
 	// Fenced code block
 	if strings.HasPrefix(line, "```") || strings.HasPrefix(line, "~~~") {
@@ -75,6 +77,10 @@ func isBlockLevelBreaker(line string) bool {
 				return true
 			}
 		}
+	}
+	// Link reference definition: [label]: url
+	if md052DefRE.MatchString(line) {
+		return true
 	}
 	// List item marker
 	if listItemRE.MatchString(line) {
@@ -221,7 +227,8 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 		// In CommonMark, plain text can be "lazily continued" into the last list
 		// item paragraph, so it does not produce a violation. Only block-level
 		// elements that cannot be lazily continued (headings, blockquotes, code
-		// fences, thematic breaks, list markers) trigger an after violation.
+		// fences, thematic breaks, list markers, tables, HTML blocks) trigger
+		// an after violation.
 		afterViolation := -1
 		offset := lastItem.Offset
 		for i := lastItemLineIdx + 1; i < n; i++ {

@@ -49,7 +49,14 @@ func (r MD052) ignoredLabels() map[string]bool {
 
 func (r MD052) Check(doc *lint.Document) []lint.Violation {
 	mask := fencedCodeBlockMask(doc.Lines)
+	// Also skip indented code block lines and HTML block lines to avoid false positives.
+	indentedMask := indentedCodeBlockMask(doc)
+	htmlMask := htmlBlockLineMask(doc)
 	ignored := r.ignoredLabels()
+
+	skipLine := func(i int) bool {
+		return mask[i] || indentedMask[i] || htmlMask[i]
+	}
 
 	// Collect defined labels.
 	// Use goldmark's parsed link references for accurate label detection.
@@ -62,7 +69,7 @@ func (r MD052) Check(doc *lint.Document) []lint.Violation {
 	// Also scan lines for definitions that goldmark might not export (e.g.
 	// definitions in blockquotes), using the regex as a supplement.
 	for i, line := range doc.Lines {
-		if mask[i] {
+		if skipLine(i) {
 			continue
 		}
 		if m := md052DefRE.FindStringSubmatch(line); m != nil {
@@ -72,7 +79,7 @@ func (r MD052) Check(doc *lint.Document) []lint.Violation {
 
 	var violations []lint.Violation
 	for i, line := range doc.Lines {
-		if mask[i] {
+		if skipLine(i) {
 			continue
 		}
 		checkLine := blankCodeSpans(line)

@@ -726,6 +726,24 @@ func TestMD032_SingleItem_NoDoubleViolation(t *testing.T) {
 	}
 }
 
+func TestMD032_TableAfterList_Violation(t *testing.T) {
+	// A table immediately after a list without a blank line should be flagged.
+	src := "- item 1\n- item 2\n| a | b |\n| - | - |\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) == 0 {
+		t.Errorf("expected violation for table after list without blank line, got none")
+	}
+}
+
+func TestMD032_LinkRefDefAfterList_Violation(t *testing.T) {
+	// A link reference definition immediately after a list without a blank line should be flagged.
+	src := "- item 1\n- item 2\n[label]: https://example.com\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) == 0 {
+		t.Errorf("expected violation for link ref def after list without blank line, got none")
+	}
+}
+
 func TestMD037_Valid(t *testing.T) {
 	src := "This is *emphasized* text.\n"
 	v := lintString(t, rules.MD037{}, src)
@@ -1321,6 +1339,24 @@ func TestMD052_Invalid(t *testing.T) {
 	}
 }
 
+func TestMD052_IndentedCodeBlock_NoViolation(t *testing.T) {
+	// References inside indented code blocks must not be flagged (false positive).
+	src := "Text\n\n    [foo][UNDEFINED] = something\n\nmore text\n"
+	v := lintString(t, rules.MD052{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for ref in indented code block, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD052_HTMLBlock_NoViolation(t *testing.T) {
+	// References inside HTML blocks must not be flagged (false positive).
+	src := "<div>\n[foo][UNDEFINED]\n</div>\n"
+	v := lintString(t, rules.MD052{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for ref in HTML block, got %d: %v", len(v), v)
+	}
+}
+
 func TestMD053_Valid(t *testing.T) {
 	src := "[link][ref]\n\n[ref]: https://example.com\n"
 	v := lintString(t, rules.MD053{}, src)
@@ -1343,6 +1379,25 @@ func TestMD053_Fix(t *testing.T) {
 	want := "Some text.\n\n"
 	if got != want {
 		t.Errorf("Fix() = %q, want %q", got, want)
+	}
+}
+
+func TestMD053_IndentedCodeBlock_FalseNegative(t *testing.T) {
+	// A label that is only "used" inside an indented code block should still be
+	// reported as unused — the code block usage doesn't count.
+	src := "Some text.\n\n    [defined]\n\n[defined]: https://example.com\n"
+	v := lintString(t, rules.MD053{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for def used only in indented code block, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD034_BareEmail_NoViolation(t *testing.T) {
+	// Bare email addresses should not be flagged by MD034 (only bare URLs).
+	src := "Contact user@example.com for help.\n"
+	v := lintString(t, rules.MD034{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for bare email, got %d: %v", len(v), v)
 	}
 }
 
@@ -1457,14 +1512,13 @@ func TestMD060_Invalid(t *testing.T) {
 	}
 }
 
-func TestMD060_Default_Any(t *testing.T) {
-	// Default style is "any": data row not aligned with header → aligned violations.
+func TestMD060_Default_Consistent(t *testing.T) {
+	// Default style is "consistent": data row not consistent with header → 1 violation.
 	src := "| Col1 | Col2 |\n| ---- | ---- |\n|A|B|\n"
 	v := lintString(t, rules.MD060{}, src)
-	// Data row |A|B| has pipes at cols 0,2,4 while header has pipes at 0,7,14.
-	// Aligned check fails (2 misaligned pipes); aligned has fewer errors than compact (4).
-	if len(v) != 2 {
-		t.Errorf("expected 2 violations with default any style, got %d: %v", len(v), v)
+	// Header row | Col1 | Col2 | is "compact"; data row |A|B| is "tight" → 1 violation.
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation with default consistent style, got %d: %v", len(v), v)
 	}
 }
 

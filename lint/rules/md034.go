@@ -19,9 +19,6 @@ func (r MD034) Description() string { return "Bare URL used" }
 // or common punctuation characters that are unlikely to be part of the URL.
 var bareURLRE = regexp.MustCompile(`https?://[^\s<>()\[\]{}'"` + "`" + `]+`)
 
-// bareEmailRE matches an email address (user@domain.tld).
-var bareEmailRE = regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
-
 // inlineLinkRE matches inline markdown links [text](url) for stripping from scanned content.
 var inlineLinkRE = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
 
@@ -70,13 +67,9 @@ func (r MD034) Check(doc *lint.Document) []lint.Violation {
 		text := string(doc.Source[seg.Start:seg.Stop])
 		lineBase := countLine(doc.Source, seg.Start)
 
-		// Report each URL and email address separately on its own line.
+		// Report each bare URL on its own line.
 		// Use FindAllStringIndex to get precise positions for multi-line text nodes.
 		for _, loc := range bareURLRE.FindAllStringIndex(text, -1) {
-			lineNum := lineBase + strings.Count(text[:loc[0]], "\n")
-			addViolation(lineNum, text[loc[0]:loc[1]])
-		}
-		for _, loc := range bareEmailRE.FindAllStringIndex(text, -1) {
 			lineNum := lineBase + strings.Count(text[:loc[0]], "\n")
 			addViolation(lineNum, text[loc[0]:loc[1]])
 		}
@@ -102,9 +95,6 @@ func (r MD034) Check(doc *lint.Document) []lint.Violation {
 		rest := strings.TrimSpace(trimmed[labelEnd+2:])
 		rest = inlineLinkRE.ReplaceAllString(rest, "")
 		for _, m := range bareURLRE.FindAllString(rest, -1) {
-			addViolation(i+1, m)
-		}
-		for _, m := range bareEmailRE.FindAllString(rest, -1) {
 			addViolation(i+1, m)
 		}
 	}
