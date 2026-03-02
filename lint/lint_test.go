@@ -715,17 +715,21 @@ func TestMD037_ValidMultiWord(t *testing.T) {
 }
 
 func TestMD037_Invalid(t *testing.T) {
+	// In CommonMark, "* emphasized *" is NOT parsed as emphasis (the opening *
+	// is followed by a space, making it non-left-flanking). Goldmark's AST-based
+	// detection correctly produces no violations for this input.
 	src := "This is * emphasized * text.\n"
 	v := lintString(t, rules.MD037{}, src)
-	if len(v) != 1 {
-		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	if len(v) != 0 {
+		t.Errorf("expected 0 violations for non-emphasis asterisks, got %d: %v", len(v), v)
 	}
 }
 
 func TestMD037_Fix(t *testing.T) {
+	// Fix is a no-op since CommonMark emphasis cannot have spaces inside markers.
 	src := "This is * emphasized * text.\n"
 	got := fixString(t, rules.MD037{}, src)
-	want := "This is *emphasized* text.\n"
+	want := src
 	if got != want {
 		t.Errorf("Fix() = %q, want %q", got, want)
 	}
@@ -1380,6 +1384,24 @@ func TestMD060_Invalid(t *testing.T) {
 	v := lintString(t, rules.MD060{Style: "compact"}, src)
 	if len(v) != 1 {
 		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD060_Default_Consistent(t *testing.T) {
+	// Default style is "consistent": header compact, data tight → 1 violation.
+	src := "| Col1 | Col2 |\n| ---- | ---- |\n|A|B|\n"
+	v := lintString(t, rules.MD060{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation with default consistent style, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD060_Consistent_Valid(t *testing.T) {
+	// Consistent style: all rows compact → no violations.
+	src := "| Col1 | Col2 |\n| ---- | ---- |\n| A | B |\n"
+	v := lintString(t, rules.MD060{Style: "consistent"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for consistent compact table, got %v", v)
 	}
 }
 
