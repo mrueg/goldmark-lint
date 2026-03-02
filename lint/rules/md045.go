@@ -24,6 +24,10 @@ var md045AltAttrRE = regexp.MustCompile(`(?i)\balt\s*=`)
 // md045AriaHiddenTrueRE matches aria-hidden="true" in an HTML tag.
 var md045AriaHiddenTrueRE = regexp.MustCompile(`(?i)\baria-hidden\s*=\s*["']?true["']?`)
 
+// md045BlockImgTagRE matches an <img> start tag that may span multiple lines.
+// It captures the img start tag (open until the closing >).
+var md045BlockImgTagRE = regexp.MustCompile(`(?is)<img\b[^>]*>`)
+
 func (r MD045) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 
@@ -67,6 +71,30 @@ func (r MD045) Check(doc *lint.Document) []lint.Violation {
 					Column:  1,
 					Message: "Images should have alternate text (alt text)",
 				})
+			}
+
+		case *ast.HTMLBlock:
+			// Check block-level HTML containing <img> tags without alt text.
+			// Join all lines so that multi-line <img> tags are handled correctly.
+			if node.Lines() == nil || node.Lines().Len() == 0 {
+				return ast.WalkContinue, nil
+			}
+			firstSeg := node.Lines().At(0)
+			lastSeg := node.Lines().At(node.Lines().Len() - 1)
+			blockText := string(doc.Source[firstSeg.Start:lastSeg.Stop])
+			// Find each <img> tag in the block and check for alt/aria-hidden.
+			for _, match := range md045BlockImgTagRE.FindAllStringIndex(blockText, -1) {
+				tag := blockText[match[0]:match[1]]
+				if !md045AltAttrRE.MatchString(tag) && !md045AriaHiddenTrueRE.MatchString(tag) {
+					// Report the line where the <img> starts.
+					lineNum := countLine(doc.Source, firstSeg.Start+match[0])
+					violations = append(violations, lint.Violation{
+						Rule:    r.ID(),
+						Line:    lineNum,
+						Column:  1,
+						Message: "Images should have alternate text (alt text)",
+					})
+				}
 			}
 		}
 

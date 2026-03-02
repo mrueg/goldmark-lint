@@ -201,6 +201,19 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 
 	var violations []lint.Violation
 
+	// lastListEnd tracks, for each parent node and "one_or_ordered" style, the
+	// last-item number, item-count, and list node of the most recent multi-item
+	// consecutive ordered list. This lets us detect continuation fragments: when
+	// the parser splits a sequential list at a link definition, the second
+	// fragment starts at N>1 and follows a previous multi-item list that ended
+	// at N-1, with no heading in between.
+	type listState struct {
+		lastNum int
+		count   int
+		node    ast.Node
+	}
+	lastListEnd := map[ast.Node]listState{}
+
 	// Walk AST ordered lists and check each list independently.
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
@@ -267,16 +280,33 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 		// Determine what style is used in this list.
 		allOne := true
 		allZero := true
-		sequential := true // sequential from 1
-		for i, it := range items {
+		for _, it := range items {
 			if it.number != 1 {
 				allOne = false
 			}
 			if it.number != 0 {
 				allZero = false
 			}
+			if !allOne && !allZero {
+				break
+			}
+		}
+		// sequentialFrom1: items are 1, 2, 3, ... (used for "ordered" style).
+		sequentialFrom1 := true
+		for i, it := range items {
 			if it.number != i+1 {
-				sequential = false
+				sequentialFrom1 = false
+				break
+			}
+		}
+		// sequentialFromFirst: items form a consecutive sequence starting from
+		// items[0], where the starting value is 0 or 1 (used for "one_or_ordered"
+		// style; markdownlint treats 0-based and 1-based sequences as valid).
+		sequentialFromFirst := items[0].number == 0 || items[0].number == 1
+		for i, it := range items {
+			if it.number != items[0].number+i {
+				sequentialFromFirst = false
+				break
 			}
 		}
 
@@ -308,7 +338,7 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 				}
 			}
 		case "ordered":
-			if !sequential {
+			if !sequentialFrom1 {
 				for i, it := range items {
 					expected := i + 1
 					if it.number != expected {
@@ -322,19 +352,67 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 				}
 			}
 		case "one_or_ordered":
-			// Valid if all items use 1, or items are sequential starting from 1
-			// (i.e., 1, 2, 3, ...). A list like 2, 3, 4 that starts at non-1
-			// is invalid even though consecutive items increment by 1.
-			if allOne || sequential {
+			// Valid if all items are the same number, or items form a consecutive
+			// sequence starting at 0 or 1.
+			if allOne || sequentialFromFirst {
+				// Record this valid sequential list so the next fragment (if any)
+				// can be identified as a continuation.
+				if sequentialFromFirst && len(items) > 1 {
+					lastListEnd[list.Parent()] = listState{items[len(items)-1].number, len(items), list}
+				}
 				break
 			}
-			// Invalid: determine expected style based on first item.
-			// If first item is 1 or 0, expect ordered from that start.
-			// Otherwise, expect all items to be 1.
 			first := items[0].number
-			if first == 1 || first == 0 {
-				expected := first
-				for _, it := range items {
+			if first > 1 {
+				// Check if this is a parser-split continuation of a previous
+				// multi-item sequential list at the same parent level.
+				// Conditions: both lists have > 1 items, items are consecutive,
+				// AND there is no heading between the two lists (headings break
+				// list context; link definitions / indented paragraphs do not).
+				parent := list.Parent()
+				if len(items) > 1 {
+					if prev, ok := lastListEnd[parent]; ok &&
+						prev.count > 1 &&
+						first == prev.lastNum+1 {
+						// Check this list is itself consecutive.
+						consecutive := true
+						for i := 1; i < len(items); i++ {
+							if items[i].number != items[i-1].number+1 {
+								consecutive = false
+								break
+							}
+						}
+						// Check there is no heading OR paragraph between prev.node
+						// and this list. Headings break list context; regular paragraphs
+						// indicate a clear list termination. Link definitions, indented
+						// code blocks (CodeBlock/TextBlock), and similar "orphaned"
+						// list-continuation content may appear without terminating the
+						// logical list (depending on the parser).
+						noBreakBetween := consecutive
+						if noBreakBetween {
+							for sib := prev.node.NextSibling(); sib != nil; sib = sib.NextSibling() {
+								if sib == list {
+									break
+								}
+								switch sib.(type) {
+								case *ast.Heading, *ast.Paragraph:
+									noBreakBetween = false
+								}
+								if !noBreakBetween {
+									break
+								}
+							}
+						}
+						if noBreakBetween {
+							// Treat as continuation; update state and skip.
+							lastListEnd[parent] = listState{items[len(items)-1].number, len(items), list}
+							return ast.WalkContinue, nil
+						}
+					}
+				}
+				// List starts at non-0, non-1: expect sequential from 1.
+				for i, it := range items {
+					expected := i + 1
 					if it.number != expected {
 						violations = append(violations, lint.Violation{
 							Rule:    r.ID(),
@@ -343,17 +421,29 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 							Message: fmt.Sprintf("Ordered list item prefix [Expected: %d; Actual: %d]", expected, it.number),
 						})
 					}
-					expected++
 				}
-			} else {
-				// List starts at non-1 and isn't sequential: all should be 1.
+			} else if len(items) >= 2 && items[1].number == first {
+				// First two items are the same: "all same" style; flag deviations.
 				for _, it := range items {
-					if it.number != 1 {
+					if it.number != first {
 						violations = append(violations, lint.Violation{
 							Rule:    r.ID(),
 							Line:    it.line,
 							Column:  1,
-							Message: fmt.Sprintf("Ordered list item prefix [Expected: 1; Actual: %d]", it.number),
+							Message: fmt.Sprintf("Ordered list item prefix [Expected: %d; Actual: %d]", first, it.number),
+						})
+					}
+				}
+			} else {
+				// Sequential from first (0 or 1) but items don't match: flag.
+				for i, it := range items {
+					expected := first + i
+					if it.number != expected {
+						violations = append(violations, lint.Violation{
+							Rule:    r.ID(),
+							Line:    it.line,
+							Column:  1,
+							Message: fmt.Sprintf("Ordered list item prefix [Expected: %d; Actual: %d]", expected, it.number),
 						})
 					}
 				}

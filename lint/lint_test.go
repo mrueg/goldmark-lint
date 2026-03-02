@@ -1997,9 +1997,9 @@ func TestFrontMatter_MD041_Valid(t *testing.T) {
 }
 
 func TestFrontMatter_MD041_Invalid(t *testing.T) {
-	// Document with YAML front matter followed by non-heading content should
-	// still trigger MD041, reported on the correct line.
-	src := "---\ntitle: My Page\n---\n\nNot a heading\n"
+	// Document with YAML front matter (no title field) followed by non-heading
+	// content should still trigger MD041, reported on the correct line.
+	src := "---\ndate: 2024-01-01\n---\n\nNot a heading\n"
 	v := lintString(t, rules.MD041{}, src)
 	if len(v) != 1 {
 		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
@@ -2508,5 +2508,97 @@ func TestMD051_ReferenceDefinition(t *testing.T) {
 	v := lintString(t, rules.MD051{}, src)
 	if len(v) != 1 {
 		t.Errorf("expected 1 violation for reference definition with bad fragment, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD027_ListDepth1_FirstLineFlagged(t *testing.T) {
+	// Ordered list items directly inside a blockquote with extra spaces before
+	// the number should be flagged on the first line.
+	src := "> Para\n>\n>  1. item one\n>  2. item two\n"
+	v := lintString(t, rules.MD027{}, src)
+	if len(v) == 0 {
+		t.Errorf("expected violations for extra space before ordered list items in blockquote, got none")
+	}
+}
+
+func TestMD027_ListDepth2_FirstLineMasked(t *testing.T) {
+	// Sub-list items inside a blockquote with structural indent must NOT be flagged.
+	src := "> * parent\n>   * child one\n>   * child two\n"
+	v := lintString(t, rules.MD027{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for nested sub-list in blockquote, got %v", v)
+	}
+}
+
+func TestMD029_ZeroBasedSequential_Valid(t *testing.T) {
+	// Zero-based sequential list (0, 1, 2, 3) is valid for one_or_ordered.
+	src := "0. item zero\n1. item one\n2. item two\n"
+	v := lintString(t, rules.MD029{Style: "one_or_ordered"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for 0-based sequential list, got %v", v)
+	}
+}
+
+func TestMD029_OneOneThree_AllOneStyle(t *testing.T) {
+	// List starting with two 1s: first two items same → "all one" style.
+	// Items 3, 4, 5, 6 should be flagged as Expected: 1.
+	src := "1. item1\n1. item2\n3. item3\n4. item4\n"
+	v := lintString(t, rules.MD029{Style: "one_or_ordered"}, src)
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations for 1/1/3/4 list (items 3 and 4), got %d: %v", len(v), v)
+	}
+}
+
+func TestMD031_HTMLCommentAfterFence_Valid(t *testing.T) {
+	// HTML comments immediately after a closing fence are acceptable separators.
+	src := "# Test\n\n```\ncode\n```\n<!-- comment -->\n\nNext paragraph.\n"
+	v := lintString(t, rules.MD031{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violation when HTML comment follows closing fence, got %v", v)
+	}
+}
+
+func TestMD031_HTMLCommentBeforeFence_Valid(t *testing.T) {
+	// HTML comments immediately before an opening fence are acceptable separators.
+	src := "# Test\n\nSome text.\n<!-- comment -->\n```\ncode\n```\n\nNext.\n"
+	v := lintString(t, rules.MD031{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violation when HTML comment precedes opening fence, got %v", v)
+	}
+}
+
+func TestMD041_FrontMatterTitleDefault(t *testing.T) {
+	// Default FrontMatterTitle is "title": a front matter title field satisfies MD041.
+	src := "---\ntitle: My Page\n---\n\nNot a heading\n"
+	v := lintString(t, rules.MD041{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violation when front matter has title field (default config), got %v", v)
+	}
+}
+
+func TestMD045_BlockHTMLImgNoAlt(t *testing.T) {
+	// Block-level <img> without alt text should be flagged.
+	src := "# Test\n\n<img src=\"test.png\">\n\nText.\n"
+	v := lintString(t, rules.MD045{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for block-level img without alt, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD045_BlockHTMLImgWithAlt(t *testing.T) {
+	// Block-level <img> with alt text should not be flagged.
+	src := "# Test\n\n<img src=\"test.png\" alt=\"description\">\n\nText.\n"
+	v := lintString(t, rules.MD045{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violation for block-level img with alt, got %v", v)
+	}
+}
+
+func TestMD045_BlockHTMLImgMultilineWithAlt(t *testing.T) {
+	// Multi-line block-level <img> with alt on a different line should not be flagged.
+	src := "# Test\n\n<img src=\"test.png\"\n    alt=\"description\">\n\nText.\n"
+	v := lintString(t, rules.MD045{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violation for multi-line block-level img with alt, got %v", v)
 	}
 }
