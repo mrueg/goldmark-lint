@@ -63,8 +63,22 @@ func (r MD022) Check(doc *lint.Document) []lint.Violation {
 
 		// Determine if this is a setext heading by checking whether the source
 		// line starts with '#' (ATX) or not (setext uses an underline on next line).
-		isATX := lineIdx < len(lines) && len(strings.TrimLeft(lines[lineIdx], " ")) > 0 &&
-			strings.TrimLeft(lines[lineIdx], " ")[0] == '#'
+		// Strip blockquote markers first so that headings inside blockquotes
+		// (e.g. "> ## Title") are correctly identified as ATX.
+		isATX := func() bool {
+			if lineIdx >= len(lines) {
+				return false
+			}
+			line := strings.TrimLeft(lines[lineIdx], " \t")
+			// Strip any blockquote prefix characters.
+			for len(line) > 0 && line[0] == '>' {
+				line = line[1:]
+				if len(line) > 0 && line[0] == ' ' {
+					line = line[1:]
+				}
+			}
+			return len(line) > 0 && line[0] == '#'
+		}()
 
 		// For setext headings the underline is on the following line; check blank
 		// lines below the underline, not the text line.

@@ -396,8 +396,29 @@ func isIndentedCodeLine(line string) bool {
 	return strings.HasPrefix(line, "    ")
 }
 
-// htmlBlockLineMask returns a bool slice with true for each line that is
-// inside an HTML block (and therefore should not be treated as markdown).
+// indentedCodeBlockMask returns a bool slice with true for each line that is
+// part of an indented code block (ast.CodeBlock). Used by MD012 to avoid
+// flagging blank lines inside indented code blocks.
+func indentedCodeBlockMask(doc *lint.Document) []bool {
+	mask := make([]bool, len(doc.Lines))
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		if n.Kind() != ast.KindCodeBlock {
+			return ast.WalkContinue, nil
+		}
+		for i := 0; i < n.Lines().Len(); i++ {
+			seg := n.Lines().At(i)
+			lineIdx := countLine(doc.Source, seg.Start) - 1
+			if lineIdx >= 0 && lineIdx < len(mask) {
+				mask[lineIdx] = true
+			}
+		}
+		return ast.WalkContinue, nil
+	})
+	return mask
+}
 // It uses the goldmark AST to accurately detect HTML blocks.
 func htmlBlockLineMask(doc *lint.Document) []bool {
 	mask := make([]bool, len(doc.Lines))
