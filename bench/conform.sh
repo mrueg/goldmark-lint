@@ -76,17 +76,21 @@ info "Built: ${GOLDMARK_BIN}"
 # ---------------------------------------------------------------------------
 GOLDMARK_OUT=$(mktemp)
 MDLINT_OUT=$(mktemp)
-trap 'rm -f "${GOLDMARK_OUT}" "${MDLINT_OUT}"' EXIT
+# Temp directory that holds a config file enabling all rules for both tools.
+CONFORM_CFG_DIR=$(mktemp -d)
+CONFORM_CONFIG="${CONFORM_CFG_DIR}/.markdownlint.json"
+echo '{"default": true}' >"${CONFORM_CONFIG}"
+trap 'rm -f "${GOLDMARK_OUT}" "${MDLINT_OUT}"; rm -rf "${CONFORM_CFG_DIR}"' EXIT
 
 cd "${RFCS_DIR}"
 
 info "Running goldmark-lint…"
 # goldmark-lint writes JSON violations to stdout; exit code 1 when violations found.
-"${GOLDMARK_BIN}" --no-cache --output-format json '**/*.md' >"${GOLDMARK_OUT}" 2>/dev/null || true
+"${GOLDMARK_BIN}" --no-cache --config "${CONFORM_CONFIG}" --output-format json '**/*.md' >"${GOLDMARK_OUT}" 2>/dev/null || true
 
 info "Running markdownlint-cli2…"
 # markdownlint-cli2 writes violation lines to stderr; capture them for parsing.
-markdownlint-cli2 '**/*.md' 2>"${MDLINT_OUT}" >/dev/null || true
+markdownlint-cli2 --config "${CONFORM_CONFIG}" '**/*.md' 2>"${MDLINT_OUT}" >/dev/null || true
 
 # ---------------------------------------------------------------------------
 # Extract per-rule violation counts.
