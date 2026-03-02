@@ -68,9 +68,32 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 
 	var violations []lint.Violation
 	mask := fencedCodeBlockMask(doc.Lines)
+	// Build an extended mask that also covers indented code block lines.
+	extMask := make([]bool, len(mask))
+	copy(extMask, mask)
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		cb, ok := n.(*ast.CodeBlock)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+		if cb.Lines() == nil {
+			return ast.WalkContinue, nil
+		}
+		for i := 0; i < cb.Lines().Len(); i++ {
+			seg := cb.Lines().At(i)
+			lineNum := countLine(doc.Source, seg.Start) - 1
+			if lineNum >= 0 && lineNum < len(extMask) {
+				extMask[lineNum] = true
+			}
+		}
+		return ast.WalkContinue, nil
+	})
 
 	for i, line := range doc.Lines {
-		if mask[i] {
+		if extMask[i] {
 			continue
 		}
 		for _, m := range md051FragRE.FindAllStringSubmatch(line, -1) {
@@ -105,7 +128,7 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 
 	// Also check reference link definitions with fragment destinations.
 	for i, line := range doc.Lines {
-		if mask[i] {
+		if extMask[i] {
 			continue
 		}
 		m := md051DefFragRE.FindStringSubmatch(line)

@@ -67,8 +67,9 @@ func (r MD052) Check(doc *lint.Document) []lint.Violation {
 		if mask[i] {
 			continue
 		}
+		checkLine := blankCodeSpans(line)
 		// Full references: [text][label] - label is group 1, may be empty (collapsed).
-		for _, m := range md052FullRE.FindAllStringSubmatch(line, -1) {
+		for _, m := range md052FullRE.FindAllStringSubmatch(checkLine, -1) {
 			label := strings.ToLower(m[1])
 			if label == "" {
 				continue // collapsed handled below
@@ -86,7 +87,7 @@ func (r MD052) Check(doc *lint.Document) []lint.Violation {
 			}
 		}
 		// Collapsed references: [label][].
-		for _, m := range md052CollapsedRE.FindAllStringSubmatch(line, -1) {
+		for _, m := range md052CollapsedRE.FindAllStringSubmatch(checkLine, -1) {
 			label := strings.ToLower(m[1])
 			if ignored[label] {
 				continue
@@ -102,7 +103,7 @@ func (r MD052) Check(doc *lint.Document) []lint.Violation {
 		}
 		// Shortcut references: [label].
 		if r.ShortcutSyntax {
-			for _, m := range md052ShortcutRE.FindAllStringSubmatch(line, -1) {
+			for _, m := range md052ShortcutRE.FindAllStringSubmatch(checkLine, -1) {
 				label := strings.ToLower(m[1])
 				if ignored[label] {
 					continue

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/yuin/goldmark/ast"
 )
 
 // MD007 checks that unordered list items are indented correctly.
@@ -42,8 +43,58 @@ func (r MD007) Check(doc *lint.Document) []lint.Violation {
 
 	var violations []lint.Violation
 
-	for i, rawLine := range doc.Lines {
-		// Strip blockquote prefix(es) so list items inside blockquotes are also checked.
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		li, ok := n.(*ast.ListItem)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+
+		// Only check items in unordered lists.
+		parentList, ok2 := li.Parent().(*ast.List)
+		if !ok2 || parentList.IsOrdered() {
+			return ast.WalkContinue, nil
+		}
+
+		// Calculate nesting level: count unordered-list ancestors above parentList.
+		// If any ordered list is encountered, skip this item (not checked by markdownlint).
+		nesting := 0
+		current := ast.Node(parentList)
+		skip := false
+		for {
+			p := current.Parent()
+			if p == nil {
+				break
+			}
+			if list, ok3 := p.(*ast.List); ok3 {
+				if list.IsOrdered() {
+					skip = true
+					break
+				}
+				nesting++
+			}
+			current = p
+		}
+		if skip {
+			return ast.WalkContinue, nil
+		}
+
+		// Get the source line for this list item.
+		lineNum := 0
+		if fc := li.FirstChild(); fc != nil {
+			if fc.Lines() != nil && fc.Lines().Len() > 0 {
+				seg := fc.Lines().At(0)
+				lineNum = countLine(doc.Source, seg.Start)
+			}
+		}
+		if lineNum < 1 || lineNum > len(doc.Lines) {
+			return ast.WalkContinue, nil
+		}
+		rawLine := doc.Lines[lineNum-1]
+
+		// Strip blockquote prefix(es) to get the indentation within the blockquote.
 		line := rawLine
 		for {
 			stripped := strings.TrimLeft(line, " ")
@@ -60,43 +111,27 @@ func (r MD007) Check(doc *lint.Document) []lint.Violation {
 		trimmed := strings.TrimLeft(line, " ")
 		spaces := len(line) - len(trimmed)
 
-		// Must be followed by an unordered marker and a space.
-		if len(trimmed) < 2 {
-			continue
-		}
-		if strings.IndexByte(unorderedListMarkers, trimmed[0]) == -1 || trimmed[1] != ' ' {
-			continue
+		// Must be a list item line.
+		if len(trimmed) < 2 || strings.IndexByte(unorderedListMarkers, trimmed[0]) == -1 || trimmed[1] != ' ' {
+			return ast.WalkContinue, nil
 		}
 
-		// Determine the expected indent for this line.
-		// The first level should have startIndent spaces; subsequent levels add indent.
-		// Since we can't easily determine the nesting level without AST traversal,
-		// we use the following heuristic: the expected indent is a multiple of indent
-		// plus startIndent, and the actual spaces must equal one of those values.
-		//
-		// Valid indents: startIndent, startIndent+indent, startIndent+2*indent, ...
-		if startIndent == 0 {
-			// Default: must be multiple of indent.
-			if spaces%indent != 0 {
-				violations = append(violations, lint.Violation{
-					Rule:    r.ID(),
-					Line:    i + 1,
-					Column:  spaces + 1,
-					Message: fmt.Sprintf("Unordered list indentation [Expected: multiple of %d; Actual: %d]", indent, spaces),
-				})
-			}
-		} else {
-			// First level: startIndent; subsequent: startIndent + n*indent.
-			if spaces < startIndent || (spaces-startIndent)%indent != 0 {
-				violations = append(violations, lint.Violation{
-					Rule:    r.ID(),
-					Line:    i + 1,
-					Column:  spaces + 1,
-					Message: fmt.Sprintf("Unordered list indentation [Expected: %d or %d+n*%d; Actual: %d]", startIndent, startIndent, indent, spaces),
-				})
-			}
+		// Calculate expected indent.
+		expectedIndent := nesting * indent
+		if r.StartIndented {
+			expectedIndent = startIndent + nesting*indent
 		}
-	}
+
+		if spaces != expectedIndent {
+			violations = append(violations, lint.Violation{
+				Rule:    r.ID(),
+				Line:    lineNum,
+				Column:  spaces + 1,
+				Message: fmt.Sprintf("Unordered list indentation [Expected: %d; Actual: %d]", expectedIndent, spaces),
+			})
+		}
+		return ast.WalkContinue, nil
+	})
 
 	return violations
 }

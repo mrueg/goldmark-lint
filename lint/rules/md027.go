@@ -20,7 +20,7 @@ func (r MD027) Description() string { return "Multiple spaces after blockquote s
 
 // md027RE matches a blockquote line where 2+ spaces follow the '>' markers.
 // Group 1: optional leading spaces + one or more '>' characters.
-var md027RE = regexp.MustCompile(`^( {0,3}>+) {2,}`)
+var md027RE = regexp.MustCompile(`^( {0,3}>+) {2,4}`)
 
 // md027ListItemRE matches a list item continuation prefix (spaces before blockquote).
 var md027ListItemRE = regexp.MustCompile(`^ {2,}`)

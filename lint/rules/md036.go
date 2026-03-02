@@ -44,10 +44,8 @@ func (r MD036) Check(doc *lint.Document) []lint.Violation {
 		// to match markdownlint behavior.
 		parent := para.Parent()
 		for parent != nil {
-			if _, isListItem := parent.(*ast.ListItem); isListItem {
-				return ast.WalkContinue, nil
-			}
-			if _, isList := parent.(*ast.List); isList {
+			switch parent.(type) {
+			case *ast.ListItem, *ast.List, *ast.Blockquote:
 				return ast.WalkContinue, nil
 			}
 			parent = parent.Parent()
