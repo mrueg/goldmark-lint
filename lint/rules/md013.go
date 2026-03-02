@@ -2,10 +2,12 @@ package rules
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/yuin/goldmark/ast"
 )
 
 // MD013 checks for lines that are too long.
@@ -130,6 +132,12 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 		}
 	}
 
+	// Build a per-line URL length map for the URL exemption (when not in stern mode).
+	var lineURLLens map[int][]int
+	if !r.Stern {
+		lineURLLens = urlLengthsPerLine(doc)
+	}
+
 	var violations []lint.Violation
 	for i, line := range doc.Lines {
 		var limit int
@@ -152,14 +160,115 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 		default:
 			limit = defaultLimit
 		}
-		if utf8.RuneCountInString(line) > limit {
+		lineLen := utf8.RuneCountInString(line)
+		if lineLen > limit {
+			// URL exemption: skip lines that exceed the limit only due to a URL.
+			// lineURLLens[i+1] returns nil for lines without URLs, and
+			// lineExemptByURL handles nil slices by returning false.
+			if !r.Stern && lineExemptByURL(lineURLLens[i+1], lineLen, limit) {
+				continue
+			}
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
 				Line:    i + 1,
 				Column:  limit + 1,
-				Message: fmt.Sprintf("Line length [Expected: %d; Actual: %d]", limit, utf8.RuneCountInString(line)),
+				Message: fmt.Sprintf("Line length [Expected: %d; Actual: %d]", limit, lineLen),
 			})
 		}
 	}
 	return violations
+}
+
+// linkDefURLRE matches a link reference definition and captures the URL.
+// Example: [label]: https://example.com
+var linkDefURLRE = regexp.MustCompile(`^\s*\[[^\]]+\]:\s+(\S+)`)
+
+// urlLengthsPerLine returns a map from 1-based line number to a slice of URL
+// rune lengths found on that line. It uses the document's AST to find inline
+// links and images, and a regex for link reference definitions.
+func urlLengthsPerLine(doc *lint.Document) map[int][]int {
+	result := make(map[int][]int)
+	addURL := func(lineNum, urlLen int) {
+		if lineNum > 0 && urlLen > 0 {
+			result[lineNum] = append(result[lineNum], urlLen)
+		}
+	}
+
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		switch node := n.(type) {
+		case *ast.Link:
+			lineNum := inlineLinkLine(node, doc.Source)
+			addURL(lineNum, utf8.RuneCount(node.Destination))
+		case *ast.Image:
+			lineNum := inlineLinkLine(node, doc.Source)
+			addURL(lineNum, utf8.RuneCount(node.Destination))
+		case *ast.AutoLink:
+			lineNum := autoLinkSourceLine(node, doc.Source)
+			addURL(lineNum, utf8.RuneCount(node.URL(doc.Source)))
+		}
+		return ast.WalkContinue, nil
+	})
+
+	// Link reference definitions are not exposed as link nodes in the AST.
+	for i, line := range doc.Lines {
+		if m := linkDefURLRE.FindStringSubmatch(line); m != nil {
+			addURL(i+1, utf8.RuneCountInString(m[1]))
+		}
+	}
+
+	return result
+}
+
+// inlineLinkLine returns the 1-based line number for a Link or Image node by
+// inspecting its child Text nodes. Falls back to the nearest parent block line.
+func inlineLinkLine(n ast.Node, source []byte) int {
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		if t, ok := c.(*ast.Text); ok {
+			return countLine(source, t.Segment.Start)
+		}
+	}
+	return blockFirstLine(n, source)
+}
+
+// autoLinkSourceLine returns the 1-based line number for an AutoLink node.
+// It checks adjacent Text siblings first (next sibling is preferred because
+// it marks the end of the current line), then falls back to the parent block.
+func autoLinkSourceLine(n ast.Node, source []byte) int {
+	if next := n.NextSibling(); next != nil {
+		if t, ok := next.(*ast.Text); ok {
+			return countLine(source, t.Segment.Start)
+		}
+	}
+	if prev := n.PreviousSibling(); prev != nil {
+		if t, ok := prev.(*ast.Text); ok {
+			return countLine(source, t.Segment.Start)
+		}
+	}
+	return blockFirstLine(n, source)
+}
+
+// blockFirstLine returns the 1-based line number of the first line of the
+// nearest ancestor block node that has line information.
+func blockFirstLine(n ast.Node, source []byte) int {
+	for p := n.Parent(); p != nil; p = p.Parent() {
+		if p.Lines() != nil && p.Lines().Len() > 0 {
+			return countLine(source, p.Lines().At(0).Start)
+		}
+	}
+	return 0
+}
+
+// lineExemptByURL reports whether a line that exceeds limit is exempt because
+// removing any single URL from its length would make it fit within limit.
+// Returns false for nil or empty urlLens (no URL on the line).
+func lineExemptByURL(urlLens []int, lineLen, limit int) bool {
+	for _, ul := range urlLens {
+		if lineLen-ul <= limit {
+			return true
+		}
+	}
+	return false
 }

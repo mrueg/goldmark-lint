@@ -1996,6 +1996,56 @@ func TestMD013_Unicode(t *testing.T) {
 	}
 }
 
+func TestMD013_URLExemption_InlineLink(t *testing.T) {
+	// A line that exceeds the limit only because of an inline link URL should
+	// be exempt (stern=false, the default).
+	src := "[link text](https://www.example.com/very/long/path/that/exceeds/eighty/characters/total)\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for line long only due to URL, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD013_URLExemption_AutoLink(t *testing.T) {
+	// A line with an autolink URL that causes it to exceed the limit should be exempt.
+	src := "<https://www.example.com/another/very/long/url/that/is/also/too/long/for/the/limit>\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for autolink line, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD013_URLExemption_LinkDefinition(t *testing.T) {
+	// A link reference definition line that is long only due to the URL should be exempt.
+	src := "[ref]: https://www.example.com/reference/link/that/is/also/quite/long/and/exceeds/limit\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for link definition line, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD013_URLExemption_Stern(t *testing.T) {
+	// With stern=true, URLs do not exempt a line from the length check.
+	src := "[link text](https://www.example.com/very/long/path/that/exceeds/eighty/characters/total)\n"
+	v := lintString(t, rules.MD013{LineLength: 80, Stern: true}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation with stern=true, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD013_URLExemption_LongLineWithText(t *testing.T) {
+	// A line that is long even after removing the URL should still be reported.
+	// "See this really long description text at " (42 chars) + URL (50 chars) = 92 chars
+	// Without URL: 42 chars <= 80, so it IS exempt.
+	// Need a line where text alone exceeds the limit.
+	prefix := strings.Repeat("a", 81)
+	src := prefix + " [x](https://url)\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation when line is long even without URL, got %d: %v", len(v), v)
+	}
+}
+
 func TestMD022_LinesAboveArray(t *testing.T) {
 	// Per-level: h1 needs 0 blank lines above (since it's first), h2 needs 2.
 	src := "# Heading 1\n\n\n## Heading 2\n\nText\n"
