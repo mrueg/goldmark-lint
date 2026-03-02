@@ -258,16 +258,41 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 				}
 			}
 		case "one_or_ordered":
-			if !allOne && !sequential {
-				// Neither all-one nor sequential: report items that don't fit either.
-				for i, it := range items {
-					expected := i + 1
-					if it.number != 1 && it.number != expected {
+			// Determine style from first two items (like markdownlint).
+			incrementing := false
+			expected := 1
+			if len(items) >= 2 {
+				first := items[0].number
+				second := items[1].number
+				if second != 1 || first == 0 {
+					incrementing = true
+					if first == 0 {
+						expected = 0
+					}
+				}
+			}
+			if incrementing {
+				// Ordered style: expect sequential from `expected`.
+				for _, it := range items {
+					if it.number != expected {
 						violations = append(violations, lint.Violation{
 							Rule:    r.ID(),
 							Line:    it.line,
 							Column:  1,
-							Message: fmt.Sprintf("Ordered list item prefix [Expected: %d or 1; Actual: %d]", expected, it.number),
+							Message: fmt.Sprintf("Ordered list item prefix [Expected: %d; Actual: %d]", expected, it.number),
+						})
+					}
+					expected++
+				}
+			} else {
+				// One style: all must be 1.
+				for _, it := range items {
+					if it.number != 1 {
+						violations = append(violations, lint.Violation{
+							Rule:    r.ID(),
+							Line:    it.line,
+							Column:  1,
+							Message: fmt.Sprintf("Ordered list item prefix [Expected: 1; Actual: %d]", it.number),
 						})
 					}
 				}

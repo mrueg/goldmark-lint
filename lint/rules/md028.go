@@ -23,28 +23,36 @@ func (r MD028) Check(doc *lint.Document) []lint.Violation {
 	mask := fencedCodeBlockMask(doc.Lines)
 	n := len(doc.Lines)
 
-	for i := 1; i < n-1; i++ {
-		if mask[i] {
+	i := 0
+	for i < n {
+		if mask[i] || !isBlockquoteLine(doc.Lines[i]) {
+			i++
 			continue
 		}
-		// Only check blank lines.
-		if strings.TrimSpace(doc.Lines[i]) != "" {
-			continue
+		// Find end of this contiguous blockquote run.
+		end := i
+		for end+1 < n && !mask[end+1] && isBlockquoteLine(doc.Lines[end+1]) {
+			end++
 		}
-		// The line before must be a blockquote line (non-blank).
-		if !isBlockquoteLine(doc.Lines[i-1]) {
-			continue
+		// Collect blank lines immediately after this blockquote run.
+		j := end + 1
+		var blanks []int
+		for j < n && !mask[j] && strings.TrimSpace(doc.Lines[j]) == "" {
+			blanks = append(blanks, j)
+			j++
 		}
-		// The line after must be a blockquote line.
-		if !isBlockquoteLine(doc.Lines[i+1]) {
-			continue
+		// If we immediately hit another blockquote, report each blank line.
+		if len(blanks) > 0 && j < n && !mask[j] && isBlockquoteLine(doc.Lines[j]) {
+			for _, bl := range blanks {
+				violations = append(violations, lint.Violation{
+					Rule:    r.ID(),
+					Line:    bl + 1,
+					Column:  1,
+					Message: "Blank line inside blockquote",
+				})
+			}
 		}
-		violations = append(violations, lint.Violation{
-			Rule:    r.ID(),
-			Line:    i + 1,
-			Column:  1,
-			Message: "Blank line inside blockquote",
-		})
+		i = end + 1
 	}
 	return violations
 }

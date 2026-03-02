@@ -31,7 +31,7 @@ func (r MD009) Fix(source []byte) []byte {
 	}
 	lines := strings.Split(string(source), "\n")
 	codeMask := fencedCodeBlockMask(lines)
-	checkCodeBlocks := r.CodeBlocks == nil || *r.CodeBlocks
+	checkCodeBlocks := r.CodeBlocks != nil && *r.CodeBlocks
 	for i, line := range lines {
 		if !checkCodeBlocks && codeMask[i] {
 			continue
@@ -53,7 +53,7 @@ func (r MD009) Check(doc *lint.Document) []lint.Violation {
 	if brSpaces == 0 {
 		brSpaces = 2
 	}
-	checkCodeBlocks := r.CodeBlocks == nil || *r.CodeBlocks
+	checkCodeBlocks := r.CodeBlocks != nil && *r.CodeBlocks
 	codeMask := fencedCodeBlockMask(doc.Lines)
 
 	var violations []lint.Violation

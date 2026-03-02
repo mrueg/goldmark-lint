@@ -1178,8 +1178,8 @@ func TestMD049_Valid(t *testing.T) {
 func TestMD049_Invalid(t *testing.T) {
 	src := "Use _underscore_ emphasis.\n"
 	v := lintString(t, rules.MD049{Style: "asterisk"}, src)
-	if len(v) != 1 {
-		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations, got %d: %v", len(v), v)
 	}
 }
 
@@ -1243,8 +1243,8 @@ func TestMD050_Valid(t *testing.T) {
 func TestMD050_Invalid(t *testing.T) {
 	src := "Use __underscore__ strong.\n"
 	v := lintString(t, rules.MD050{Style: "asterisk"}, src)
-	if len(v) != 1 {
-		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations, got %d: %v", len(v), v)
 	}
 }
 
@@ -2337,5 +2337,145 @@ func TestMD041_AllowPreamble_Invalid(t *testing.T) {
 	v := lintString(t, rules.MD041{AllowPreamble: true}, src)
 	if len(v) == 0 {
 		t.Errorf("expected violations when allow_preamble=true but no heading exists, got none")
+	}
+}
+
+// Tests for the rule changes.
+
+func TestMD004_MultiItemViolations(t *testing.T) {
+	// Per-item reporting: 3 items in a wrong-style list should give 3 violations.
+	src := "* item1\n* item2\n* item3\n"
+	v := lintString(t, rules.MD004{Style: "dash"}, src)
+	if len(v) != 3 {
+		t.Errorf("expected 3 violations (one per item), got %d: %v", len(v), v)
+	}
+}
+
+func TestMD005_PerListTracking(t *testing.T) {
+	// Two separate lists at depth 1 with different indents should NOT cause violations
+	// because each list tracks its own expected indent independently.
+	src := "- item1\n- item2\n\n  - sub1\n  - sub2\n"
+	v := lintString(t, rules.MD005{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for per-list indent tracking, got %v", v)
+	}
+}
+
+func TestMD007_BlockquoteListItems(t *testing.T) {
+	// List items inside blockquotes should also be checked.
+	src := "> - item1\n>    - bad indent\n"
+	v := lintString(t, rules.MD007{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for blockquote list indent, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD009_CodeBlocksDefaultFalse(t *testing.T) {
+	// By default (code_blocks nil), trailing spaces inside code blocks are NOT checked.
+	src := "```\ncode with trailing   \n```\n"
+	v := lintString(t, rules.MD009{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations in code block by default, got %v", v)
+	}
+}
+
+func TestMD024_CaseSensitive(t *testing.T) {
+	// Case-sensitive comparison: "Duplicate" and "duplicate" are different.
+	src := "# Duplicate\n\n## duplicate\n"
+	v := lintString(t, rules.MD024{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for different-case headings, got %v", v)
+	}
+}
+
+func TestMD024_SiblingsOnly_CaseSensitive(t *testing.T) {
+	// siblings_only + case-sensitive: "Heading" and "heading" are different.
+	src := "# Heading\n\n## heading\n"
+	v := lintString(t, rules.MD024{SiblingsOnly: true}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for different-case sibling headings, got %v", v)
+	}
+}
+
+func TestMD028_MultipleBlankLines(t *testing.T) {
+	// Multiple blank lines between consecutive blockquotes should each be reported.
+	src := "> Line 1\n\n\n> Line 2\n"
+	v := lintString(t, rules.MD028{}, src)
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations for 2 blank lines between blockquotes, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD029_OneOrOrdered_Sequential(t *testing.T) {
+	// Sequential list (1, 2, 3) is valid for one_or_ordered.
+	src := "1. item1\n2. item2\n3. item3\n"
+	v := lintString(t, rules.MD029{Style: "one_or_ordered"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for sequential list, got %v", v)
+	}
+}
+
+func TestMD029_OneOrOrdered_AllOne(t *testing.T) {
+	// All-ones list (1, 1, 1) is valid for one_or_ordered.
+	src := "1. item1\n1. item2\n1. item3\n"
+	v := lintString(t, rules.MD029{Style: "one_or_ordered"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for all-ones list, got %v", v)
+	}
+}
+
+func TestMD029_OneOrOrdered_Mixed(t *testing.T) {
+	// A list with first item 1 and second item 1 is "one" style: all must be 1.
+	// If we have 1, 1, 2 it's not valid (2nd is 1 so not incrementing, but 3rd != 1).
+	src := "1. item1\n1. item2\n2. item3\n"
+	v := lintString(t, rules.MD029{Style: "one_or_ordered"}, src)
+	if len(v) == 0 {
+		t.Errorf("expected violations for mixed one/ordered list, got none")
+	}
+}
+
+func TestMD036_ListItemEmphasis(t *testing.T) {
+	// Emphasis used as heading inside a list item should NOT trigger MD036.
+	src := "- **Bold item**\n"
+	v := lintString(t, rules.MD036{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for emphasis inside list item, got %v", v)
+	}
+}
+
+func TestMD039_ReferenceLink(t *testing.T) {
+	// Reference links should NOT be flagged by MD039.
+	src := "See [ text ][ref] here.\n\n[ref]: https://example.com\n"
+	v := lintString(t, rules.MD039{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for reference link with spaces, got %v", v)
+	}
+}
+
+func TestMD046_ListItemContinuation(t *testing.T) {
+	// List item continuation paragraphs indented 4+ spaces must NOT be flagged
+	// as indented code blocks.
+	src := "- Item one\n\n    Continuation paragraph.\n\n- Item two\n"
+	v := lintString(t, rules.MD046{Style: "fenced"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for list item continuation, got %v", v)
+	}
+}
+
+func TestMD051_UnderscoreAnchor(t *testing.T) {
+	// Heading with underscore: anchor should preserve the underscore.
+	src := "# Hello_World\n\n[link](#hello_world)\n"
+	v := lintString(t, rules.MD051{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for underscore anchor, got %v", v)
+	}
+}
+
+func TestMD051_ReferenceDefinition(t *testing.T) {
+	// Reference link definitions with fragment destinations should also be checked.
+	src := "# Hello\n\n[link]: #nonexistent\n"
+	v := lintString(t, rules.MD051{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for reference definition with bad fragment, got %d: %v", len(v), v)
 	}
 }

@@ -37,7 +37,7 @@ func (r MD024) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
-		text := strings.ToLower(strings.TrimSpace(headingText(h, doc.Source)))
+		text := strings.TrimSpace(headingText(h, doc.Source))
 		if seen[text] {
 			line := 1
 			if h.Lines() != nil && h.Lines().Len() > 0 {
@@ -72,7 +72,7 @@ func (r MD024) checkSiblings(doc *lint.Document) []lint.Violation {
 			if !ok {
 				continue
 			}
-			text := strings.ToLower(strings.TrimSpace(headingText(h, doc.Source)))
+			text := strings.TrimSpace(headingText(h, doc.Source))
 			if seen[text] {
 				line := 1
 				if h.Lines() != nil && h.Lines().Len() > 0 {

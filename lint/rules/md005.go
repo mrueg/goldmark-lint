@@ -22,44 +22,42 @@ func (r MD005) Description() string {
 
 func (r MD005) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
-	expectedIndent := make(map[int]int)
-	depth := 0
 
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-		switch n := n.(type) {
-		case *ast.List:
-			if entering {
-				depth++
-			} else {
-				depth--
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		list, ok := n.(*ast.List)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+
+		// Determine expected indent from first list item.
+		expectedIndent := -1
+		for child := list.FirstChild(); child != nil; child = child.NextSibling() {
+			li, ok2 := child.(*ast.ListItem)
+			if !ok2 {
+				continue
 			}
-		case *ast.ListItem:
-			if !entering {
-				return ast.WalkContinue, nil
-			}
-			// ListItem.Lines() is empty in goldmark; content is in the first TextBlock child.
-			seg, ok := listItemFirstSegment(n)
-			if !ok {
-				return ast.WalkContinue, nil
+			seg, ok3 := listItemFirstSegment(li)
+			if !ok3 {
+				continue
 			}
 			lineIdx := countLine(doc.Source, seg.Start) - 1
 			if lineIdx < 0 || lineIdx >= len(doc.Lines) {
-				return ast.WalkContinue, nil
+				continue
 			}
 			line := doc.Lines[lineIdx]
 			spaces := len(line) - len(strings.TrimLeft(line, " "))
-
-			if exp, ok := expectedIndent[depth]; ok {
-				if spaces != exp {
-					violations = append(violations, lint.Violation{
-						Rule:    r.ID(),
-						Line:    lineIdx + 1,
-						Column:  spaces + 1,
-						Message: fmt.Sprintf("Inconsistent indentation for list items at the same level [Expected: %d; Actual: %d]", exp, spaces),
-					})
-				}
-			} else {
-				expectedIndent[depth] = spaces
+			if expectedIndent < 0 {
+				expectedIndent = spaces
+			} else if spaces != expectedIndent {
+				violations = append(violations, lint.Violation{
+					Rule:    r.ID(),
+					Line:    lineIdx + 1,
+					Column:  spaces + 1,
+					Message: fmt.Sprintf("Inconsistent indentation for list items at the same level [Expected: %d; Actual: %d]", expectedIndent, spaces),
+				})
 			}
 		}
 		return ast.WalkContinue, nil

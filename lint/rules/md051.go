@@ -23,6 +23,9 @@ func (r MD051) Description() string { return "Link fragments should be valid" }
 // md051FragRE matches internal links with fragments: [text](#fragment).
 var md051FragRE = regexp.MustCompile(`\[([^\]]*)\]\(#([^)]*)\)`)
 
+// md051DefFragRE matches reference link definitions with fragment destinations.
+var md051DefFragRE = regexp.MustCompile(`(?m)^\[[^\]]*\]:\s+#([^\s]*)`)
+
 // md051LineRefRE matches GitHub line reference patterns like #L123 or #L1C1-L2C2.
 var md051LineRefRE = regexp.MustCompile(`^L\d+(?:C\d+-L\d+C\d+)?$`)
 
@@ -97,6 +100,36 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 					Message: "Link fragments should be valid [Fragment: #" + fragment + "]",
 				})
 			}
+		}
+	}
+
+	// Also check reference link definitions with fragment destinations.
+	for i, line := range doc.Lines {
+		if mask[i] {
+			continue
+		}
+		m := md051DefFragRE.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		fragment := m[1]
+		if fragment == "top" || md051LineRefRE.MatchString(fragment) {
+			continue
+		}
+		if ignoredRE != nil && ignoredRE.MatchString(fragment) {
+			continue
+		}
+		checkFrag := fragment
+		if r.IgnoreCase {
+			checkFrag = strings.ToLower(fragment)
+		}
+		if !anchors[checkFrag] {
+			violations = append(violations, lint.Violation{
+				Rule:    r.ID(),
+				Line:    i + 1,
+				Column:  1,
+				Message: "Link fragments should be valid [Fragment: #" + fragment + "]",
+			})
 		}
 	}
 	return violations

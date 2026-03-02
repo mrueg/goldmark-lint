@@ -189,7 +189,7 @@ func headingAnchor(text string) string {
 	for _, r := range result {
 		if r == ' ' || r == '-' {
 			b.WriteRune('-')
-		} else if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+		} else if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
 			b.WriteRune(r)
 		}
 	}
@@ -304,4 +304,16 @@ func findTables(lines []string, mask []bool) [][2]int {
 		i = end + 1
 	}
 	return tables
+}
+
+// isIndentedCodeLine returns true if the line is an indented code block line
+// (starts with a tab or 4+ spaces).
+func isIndentedCodeLine(line string) bool {
+	if len(line) == 0 {
+		return false
+	}
+	if line[0] == '\t' {
+		return true
+	}
+	return strings.HasPrefix(line, "    ")
 }
