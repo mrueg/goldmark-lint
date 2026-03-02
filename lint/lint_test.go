@@ -1044,6 +1044,26 @@ func TestMD049_Fix(t *testing.T) {
 	}
 }
 
+func TestMD049_Fix_ListItemWithCodeSpan(t *testing.T) {
+	// A list item whose marker happens to pair with a * inside a code span
+	// must not be modified by the Fix function.
+	src := "* [FEATURE] Add `kube_networkpolicy_*` metrics #893\n"
+	got := fixString(t, rules.MD049{Style: "underscore"}, src)
+	if got != src {
+		t.Errorf("Fix() modified list item with * inside code span:\n got  %q\n want %q", got, src)
+	}
+}
+
+func TestMD049_Check_ListItemWithCodeSpan(t *testing.T) {
+	// The Check function must not report a false violation for a list item
+	// whose marker * pairs visually with a * inside a code span.
+	src := "* [FEATURE] Add `kube_networkpolicy_*` metrics #893\n"
+	v := lintString(t, rules.MD049{Style: "underscore"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations, got %v", v)
+	}
+}
+
 func TestMD050_Valid(t *testing.T) {
 	src := "Use **asterisk** strong.\n"
 	v := lintString(t, rules.MD050{Style: "asterisk"}, src)
