@@ -81,11 +81,6 @@ func tableAlignedViolations(lines []string, t [2]int, ruleID string) []lint.Viol
 
 	var violations []lint.Violation
 	for row := t[0] + 1; row <= t[1]; row++ {
-		// Skip delimiter rows: their pipe positions are determined by cell widths,
-		// not by visual alignment, so they don't need to match header pipe positions.
-		if isTableDelimiterRow(lines[row]) {
-			continue
-		}
 		remaining := make(map[int]bool, len(headerSet))
 		for p := range headerSet {
 			remaining[p] = true
@@ -111,9 +106,6 @@ func tableAlignedViolations(lines []string, t [2]int, ruleID string) []lint.Viol
 // content; tight requires no spaces.
 func tableCompactTightViolations(lines []string, t [2]int, ruleID string) (compact, tight []lint.Violation) {
 	for row := t[0]; row <= t[1]; row++ {
-		if isTableDelimiterRow(lines[row]) {
-			continue
-		}
 		c, ti := rowCompactTightViolations(lines[row], ruleID, row+1)
 		compact = append(compact, c...)
 		tight = append(tight, ti...)

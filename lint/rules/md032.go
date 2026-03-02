@@ -18,8 +18,50 @@ func (r MD032) Description() string { return "Lists should be surrounded by blan
 // listItemRE matches unordered or ordered list item lines.
 var listItemRE = regexp.MustCompile(`^( *)(?:[-*+]|\d+\.) `)
 
+// md032HTMLCommentRE matches HTML comments (used for isBlankLikeForMD032).
+var md032HTMLCommentRE = regexp.MustCompile(`<!--.*?-->`)
+
 func isListItemLine(line string) bool {
 	return listItemRE.MatchString(line)
+}
+
+// isBlankLikeForMD032 returns true if a line is "blank" for MD032 purposes.
+// This matches markdownlint's isBlankLine() which also treats lines consisting
+// only of HTML comments and '>' characters (blockquote markers) as blank.
+func isBlankLikeForMD032(line string) bool {
+	if strings.TrimSpace(line) == "" {
+		return true
+	}
+	// Remove HTML comments, then remove '>' characters.
+	// If nothing meaningful remains, treat as blank.
+	cleaned := md032HTMLCommentRE.ReplaceAllString(line, "")
+	cleaned = strings.ReplaceAll(cleaned, ">", "")
+	return strings.TrimSpace(cleaned) == ""
+}
+
+// isBlockLevelBreaker returns true if the line starts a markdown block element
+// that cannot be lazily continued as part of a list item paragraph. Plain text
+// that follows a list item without a blank line is treated as a lazy
+// continuation in CommonMark, so it does not produce an "after" violation.
+func isBlockLevelBreaker(line string) bool {
+	if len(line) == 0 {
+		return false
+	}
+	switch line[0] {
+	case '#':
+		return true // ATX heading
+	case '>':
+		return true // block quote
+	}
+	// Fenced code block
+	if strings.HasPrefix(line, "```") || strings.HasPrefix(line, "~~~") {
+		return true
+	}
+	// List item marker
+	if listItemRE.MatchString(line) {
+		return true
+	}
+	return false
 }
 
 // listItemFirstLine returns the 1-based source line number of the first content
@@ -157,26 +199,32 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 
 		// Before check: the line immediately preceding the first list item must
 		// be blank (or the list must be at the start of the document).
+		// Use isBlankLikeForMD032 which treats HTML comment-only lines and
+		// blockquote-marker-only lines as blank (matching markdownlint behavior).
 		beforeViolation := -1
-		if firstLineIdx > 0 && strings.TrimSpace(lines[firstLineIdx-1]) != "" {
+		if firstLineIdx > 0 && !isBlankLikeForMD032(lines[firstLineIdx-1]) {
 			beforeViolation = firstLine
 		}
 
 		// After check: scan source lines that follow the last list marker.
-		// ast.ListItem.Offset is the column offset of the item's content after
-		// the marker (e.g. 2 for "- item", 3 for "1. item"). Lines with at
-		// least that many leading spaces are continuations of the item and are
-		// skipped. The first non-blank, non-continuation line triggers a
-		// violation.
+		// In CommonMark, plain text can be "lazily continued" into the last list
+		// item paragraph, so it does not produce a violation. Only block-level
+		// elements that cannot be lazily continued (headings, blockquotes, code
+		// fences, list markers) trigger an after violation.
 		afterViolation := -1
 		offset := lastItem.Offset
 		for i := lastItemLineIdx + 1; i < n; i++ {
 			line := lines[i]
-			if strings.TrimSpace(line) == "" {
+			if strings.TrimSpace(line) == "" || isBlankLikeForMD032(line) {
 				break
 			}
 			if md032LeadingSpaces(line) >= offset {
 				continue // continuation of the last list item
+			}
+			// Only flag if this line is a block-level marker (cannot be a lazy
+			// continuation of a paragraph inside the last list item).
+			if !isBlockLevelBreaker(line) {
+				break
 			}
 			afterViolation = lastItemLine
 			break

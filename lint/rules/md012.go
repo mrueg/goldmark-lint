@@ -46,7 +46,13 @@ func (r MD012) Check(doc *lint.Document) []lint.Violation {
 	}
 	var violations []lint.Violation
 	consecutive := 0
+	mask := fencedCodeBlockMask(doc.Lines)
 	for i, line := range doc.Lines {
+		if mask[i] {
+			// Reset consecutive blank count inside code blocks (treat as non-blank).
+			consecutive = 0
+			continue
+		}
 		if strings.TrimSpace(line) == "" {
 			consecutive++
 			if consecutive > maximum {

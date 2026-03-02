@@ -677,12 +677,14 @@ func TestMD032_MultilineListItem_NoViolation(t *testing.T) {
 }
 
 func TestMD032_MultilineListItem_Violation(t *testing.T) {
-	// A list with a multiline item missing blank lines should produce exactly
-	// two violations (one before the list, one after) – not four.
+	// A list with a multiline item missing a blank line before it should produce
+	// one violation (before only). Plain text after a list is treated as a lazy
+	// continuation in CommonMark, so no "after" violation is reported –
+	// matching markdownlint behaviour.
 	src := "Text\n- item 1\n  continuation\n- item 2\nMore text\n"
 	v := lintString(t, rules.MD032{}, src)
-	if len(v) != 2 {
-		t.Errorf("expected 2 violations for multiline list without blank lines, got %d: %v", len(v), v)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for multiline list without blank line before, got %d: %v", len(v), v)
 	}
 }
 
