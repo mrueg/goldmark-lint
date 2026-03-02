@@ -78,6 +78,11 @@ func (r MD033) Check(doc *lint.Document) []lint.Violation {
 				seg := node.Segments.At(0)
 				lineNum = countLine(doc.Source, seg.Start)
 			}
+			// Skip closing tags (e.g. </b>) — only opening tags are reported,
+			// matching markdownlint-cli2 behaviour.
+			if isClosingRawHTML(node, doc.Source) {
+				return ast.WalkContinue, nil
+			}
 			// Extract the tag name for allowed-element checking.
 			tag := rawHTMLTagName(node, doc.Source)
 			if r.isAllowed(tag) {
@@ -128,4 +133,15 @@ func rawHTMLTagName(n *ast.RawHTML, source []byte) string {
 		return "unknown"
 	}
 	return raw[start:i]
+}
+
+// isClosingRawHTML reports whether a RawHTML node represents a closing tag
+// (i.e., starts with "</"), such as </b> or </div>.
+func isClosingRawHTML(n *ast.RawHTML, source []byte) bool {
+	if n.Segments == nil || n.Segments.Len() == 0 {
+		return false
+	}
+	seg := n.Segments.At(0)
+	raw := seg.Value(source)
+	return len(raw) >= 2 && raw[0] == '<' && raw[1] == '/'
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -805,14 +806,12 @@ func TestCLI_OverridesDoNotApplyToNonMatchingFile(t *testing.T) {
 	bin := buildBinary(t)
 
 	dir := t.TempDir()
-	// A line of exactly 100 characters
-	line := "# " + string(make([]byte, 98))
-	for i := range line[2:] {
-		line = line[:2+i] + "a" + line[2+i+1:]
-	}
-	// root file.md has a 100-char line; should fail with base line_length:80
+	// A wrappable line that exceeds 80 characters: 80 'a' chars + space + "extra".
+	// The "trimmed" length (before the last word) is 81 chars, exceeding line_length:80.
+	line := strings.Repeat("a", 80) + " extra"
+	// root file.md has this long wrappable line; should fail with base line_length:80
 	rootFile := filepath.Join(dir, "file.md")
-	if err := os.WriteFile(rootFile, []byte(line+"\n"), 0644); err != nil {
+	if err := os.WriteFile(rootFile, []byte("# Heading\n\n"+line+"\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	cfgContent := `config:

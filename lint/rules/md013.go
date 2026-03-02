@@ -160,7 +160,16 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 			limit = defaultLimit
 		}
 		lineLen := utf8.RuneCountInString(line)
-		if lineLen > limit {
+		// In non-strict, non-stern mode markdownlint exempts lines where only the
+		// trailing non-whitespace "word" causes the line to exceed the limit.
+		// It replaces the trailing run of non-whitespace with a single '#' before
+		// checking length, so a line that is all one word (no spaces) is never
+		// flagged in this mode.
+		effectiveLen := lineLen
+		if !r.Strict && !r.Stern {
+			effectiveLen = trailingWordTrimmedLen(line)
+		}
+		if effectiveLen > limit {
 			// URL exemption: skip lines that exceed the limit only due to a URL.
 			// lineURLLens[i+1] returns nil for lines without URLs, and
 			// lineExemptByURL handles nil slices by returning false.
@@ -325,4 +334,24 @@ func lineExemptByURL(urlLens []int, lineLen, limit int) bool {
 		}
 	}
 	return false
+}
+
+// trailingWordTrimmedLen returns the effective length of line for MD013 in
+// non-strict, non-stern mode. It mirrors markdownlint's behaviour of replacing
+// the trailing run of non-whitespace with a single '#' before checking length,
+// so that a line whose only violation is a long final word is not flagged
+// (the last word cannot be wrapped to the next line).
+func trailingWordTrimmedLen(line string) int {
+	// Find the start of the trailing non-whitespace run.
+	runes := []rune(line)
+	n := len(runes)
+	// Walk backwards to find the last whitespace boundary.
+	end := n
+	for end > 0 && runes[end-1] != ' ' && runes[end-1] != '\t' {
+		end--
+	}
+	// Simulate markdownlint's line.replace(/\S*$/u, "#"):
+	// replace the trailing non-whitespace run with a single '#' (1 rune).
+	// When end == 0, the entire line is one word; the effective length is 1.
+	return end + 1
 }
