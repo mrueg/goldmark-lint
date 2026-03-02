@@ -1405,6 +1405,13 @@ func TestMD060_Consistent_Valid(t *testing.T) {
 	}
 }
 
+func TestMD060_SingleSpaceCell(t *testing.T) {
+	// A cell containing only a single space should not panic.
+	src := "| | Col2 |\n| - | ---- |\n| A | B |\n"
+	v := lintString(t, rules.MD060{Style: "consistent"}, src)
+	_ = v // just ensure no panic
+}
+
 // --- Inline disable comment tests ---
 
 func TestInlineDisable_DisableAll(t *testing.T) {
