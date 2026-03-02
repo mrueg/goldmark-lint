@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -234,8 +235,21 @@ func urlLengthsPerLine(doc *lint.Document) map[int][]int {
 		}
 	}
 
+	// Also detect bare URLs (not part of link syntax) in raw lines.
+	// markdownlint exempts lines where a bare URL is the reason for exceeding
+	// the limit. We scan each line for plain http(s):// URLs.
+	for i, line := range doc.Lines {
+		for _, m := range md013BareURLRE.FindAllString(line, -1) {
+			addURL(i+1, utf8.RuneCountInString(m))
+		}
+	}
+
 	return result
 }
+
+// md013BareURLRE matches bare http/https URLs in plain text (not wrapped in
+// markdown link or angle-bracket auto-link syntax).
+var md013BareURLRE = regexp.MustCompile(`https?://\S+`)
 
 // linkRefLabel returns the link-reference label from a line that looks like a
 // link reference definition (e.g. "[foo]: https://..."), or "" if the line

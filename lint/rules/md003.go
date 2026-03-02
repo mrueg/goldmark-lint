@@ -35,15 +35,30 @@ func headingStyleOf(h *ast.Heading, source []byte) string {
 	for pos > 0 && source[pos-1] != '\n' {
 		pos--
 	}
-	if pos >= len(source) || source[pos] != '#' {
+	// Skip any leading spaces and blockquote markers ("> ") so that headings
+	// inside blockquotes like "> # Heading" are correctly identified as ATX.
+	cur := pos
+	for cur < len(source) {
+		if source[cur] == ' ' {
+			cur++
+		} else if source[cur] == '>' {
+			cur++
+			if cur < len(source) && source[cur] == ' ' {
+				cur++
+			}
+		} else {
+			break
+		}
+	}
+	if cur >= len(source) || source[cur] != '#' {
 		return "setext"
 	}
 	// It's ATX. Find the end of the line to detect closed ATX (## Heading ##).
-	end := pos
+	end := cur
 	for end < len(source) && source[end] != '\n' {
 		end++
 	}
-	lineStr := strings.TrimRight(string(source[pos:end]), " ")
+	lineStr := strings.TrimRight(string(source[cur:end]), " ")
 	// Count leading '#' characters (the heading marker).
 	leadingHashes := 0
 	for leadingHashes < len(lineStr) && lineStr[leadingHashes] == '#' {
