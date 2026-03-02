@@ -590,34 +590,34 @@ func formatFileDiff(filename string, original, fixed []byte, w io.Writer, color 
 		return false
 	}
 	if color {
-		fmt.Fprintf(w, "%sdiff --git a/%s b/%s%s\n", colorBold, filename, filename, colorReset)
-		fmt.Fprintf(w, "%s--- a/%s%s\n", colorBold, filename, colorReset)
-		fmt.Fprintf(w, "%s+++ b/%s%s\n", colorBold, filename, colorReset)
+		_, _ = fmt.Fprintf(w, "%sdiff --git a/%s b/%s%s\n", colorBold, filename, filename, colorReset)
+		_, _ = fmt.Fprintf(w, "%s--- a/%s%s\n", colorBold, filename, colorReset)
+		_, _ = fmt.Fprintf(w, "%s+++ b/%s%s\n", colorBold, filename, colorReset)
 	} else {
-		fmt.Fprintf(w, "diff --git a/%s b/%s\n", filename, filename)
-		fmt.Fprintf(w, "--- a/%s\n", filename)
-		fmt.Fprintf(w, "+++ b/%s\n", filename)
+		_, _ = fmt.Fprintf(w, "diff --git a/%s b/%s\n", filename, filename)
+		_, _ = fmt.Fprintf(w, "--- a/%s\n", filename)
+		_, _ = fmt.Fprintf(w, "+++ b/%s\n", filename)
 	}
 	for _, hunk := range hunks {
 		if color {
-			fmt.Fprintf(w, "%s@@ -%d,%d +%d,%d @@%s\n",
+			_, _ = fmt.Fprintf(w, "%s@@ -%d,%d +%d,%d @@%s\n",
 				colorCyan, hunk.oldStart, hunk.oldCount, hunk.newStart, hunk.newCount, colorReset)
 		} else {
-			fmt.Fprintf(w, "@@ -%d,%d +%d,%d @@\n",
+			_, _ = fmt.Fprintf(w, "@@ -%d,%d +%d,%d @@\n",
 				hunk.oldStart, hunk.oldCount, hunk.newStart, hunk.newCount)
 		}
 		for _, op := range hunk.ops {
 			if color {
 				switch op.op {
 				case '-':
-					fmt.Fprintf(w, "%s-%s%s\n", colorRed, op.text, colorReset)
+					_, _ = fmt.Fprintf(w, "%s-%s%s\n", colorRed, op.text, colorReset)
 				case '+':
-					fmt.Fprintf(w, "%s+%s%s\n", colorGreen, op.text, colorReset)
+					_, _ = fmt.Fprintf(w, "%s+%s%s\n", colorGreen, op.text, colorReset)
 				default:
-					fmt.Fprintf(w, " %s\n", op.text)
+					_, _ = fmt.Fprintf(w, " %s\n", op.text)
 				}
 			} else {
-				fmt.Fprintf(w, "%c%s\n", op.op, op.text)
+				_, _ = fmt.Fprintf(w, "%c%s\n", op.op, op.text)
 			}
 		}
 	}

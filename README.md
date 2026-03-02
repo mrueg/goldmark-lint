@@ -21,6 +21,7 @@ select rules.
 - [Features](#features)
 - [Comparison with markdownlint-cli2](#comparison-with-markdownlint-cli2)
   - [`--fail-on-warning`](#--fail-on-warning)
+  - [`--fix-dry-run`](#--fix-dry-run)
   - [`--list-rules`](#--list-rules)
   - [`--summary`](#--summary)
   - [`--watch`](#--watch)
@@ -144,6 +145,7 @@ Optional parameters:
   --config           path to config file (overrides auto-discovery)
   --fail-on-warning  exit with code 1 even when all violations are warnings
   --fix              updates files to resolve fixable issues
+  --fix-dry-run      show a diff of changes --fix would make, without modifying files
   --format           read stdin, apply fixes, write stdout
   --list-rules       print a table of all rules with their aliases, enabled/disabled state, and options
   --no-cache         disable reading/writing the .markdownlint-cli2-cache file
@@ -168,6 +170,9 @@ goldmark-lint '**/*.md'
 
 # Lint and auto-fix fixable issues
 goldmark-lint --fix '**/*.md'
+
+# Preview what --fix would change (git diff style, no files modified)
+goldmark-lint --fix-dry-run '**/*.md'
 
 # Treat warnings as errors (useful for strict CI gates)
 goldmark-lint --fail-on-warning '**/*.md'
@@ -372,6 +377,7 @@ Omit the rule ID to disable/enable all rules. Rule aliases (e.g.
 - Parses Markdown with the goldmark library for accurate, spec-compliant analysis.
 - Reports violations with file, line, and column information.
 - Auto-fix support (`--fix`) for a subset of rules.
+- Dry-run preview (`--fix-dry-run`): shows a git diff style unified diff of all changes `--fix` would make, without touching any files.
 - stdin support: lint with `goldmark-lint -` or format with `goldmark-lint --format`.
 - Watch mode (`--watch`): re-lint files on every change, running until interrupted.
 - Configuration file discovery: searches from the current directory up to the filesystem root.
@@ -379,8 +385,10 @@ Omit the rule ID to disable/enable all rules. Rule aliases (e.g.
 - Config inheritance via `extends` for composable configuration.
 - Per-glob rule overrides via `overrides` for fine-grained control.
 - Inline disable comments (`markdownlint-disable`, `markdownlint-disable-next-line`, etc.).
-- Multiple output formats: default text, JSON, JUnit XML, TAP, SARIF, and GitHub Actions annotations.
+- Multiple output formats via `--output-format`: default text, JSON, JUnit XML, TAP, SARIF, and GitHub Actions annotations.
+- Colored terminal output: violations and diffs use ANSI colors when writing to a TTY (suppressed by `NO_COLOR`).
 - Result caching via `.markdownlint-cli2-cache` to speed up repeated runs.
+- Parallel file linting bounded by `GOMAXPROCS` for fast, deterministic output on large repositories.
 - Gitignore integration via the `gitignore` config key.
 - `--list-rules` flag to inspect all rules with their enabled state and current options.
 - `--summary` flag to print a per-rule violation count after linting.
@@ -393,6 +401,7 @@ markdownlint-cli2 also has capabilities that goldmark-lint does not:
 | Feature | goldmark-lint | markdownlint-cli2 |
 |---------|:---:|:---:|
 | `--fail-on-warning` flag (exit code 1 for warnings) | ✅ | ❌ |
+| `--fix-dry-run` flag (diff preview without modifying files) | ✅ | ❌ |
 | SARIF output format | ✅ | ❌ |
 | GitHub Actions annotation output format | ✅ | ❌ |
 | `--list-rules` flag (inspect rules, options, and enabled state) | ✅ | ❌ |
@@ -411,6 +420,45 @@ This is useful for stricter CI gates:
 
 ```sh
 goldmark-lint --fail-on-warning '**/*.md'
+```
+
+### `--fix-dry-run`
+
+Preview all changes that `--fix` would apply as a unified diff in git diff
+style, without modifying any files on disk. The diff is written to stdout so it
+can be inspected, piped, or saved. ANSI colors are used when stdout is a
+terminal (`NO_COLOR` suppresses them).
+
+The exit code follows the same logic as `--fix`: it reflects remaining
+violations found after the would-be fixes are applied, so the result is
+identical to what you would observe if you ran `--fix` and then re-linted.
+
+`--fix-dry-run` and `--fix` are mutually exclusive; specifying both exits with
+code 2.
+
+```sh
+# Show what --fix would change across all Markdown files
+goldmark-lint --fix-dry-run '**/*.md'
+
+# Save the proposed patch for review
+goldmark-lint --fix-dry-run '**/*.md' > proposed-fixes.patch
+```
+
+Example output:
+
+```
+diff --git a/docs/guide.md b/docs/guide.md
+--- a/docs/guide.md
++++ b/docs/guide.md
+@@ -1,7 +1,7 @@
+ # Guide
+ 
+ Some intro text.
+ 
+-Trailing spaces here.   
++Trailing spaces here.
+ 
+ More content.
 ```
 
 ### `--list-rules`
