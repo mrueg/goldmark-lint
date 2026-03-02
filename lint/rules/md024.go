@@ -56,8 +56,15 @@ func headingRawContent(h *ast.Heading, source []byte, lines []string) string {
 		j++
 	}
 	content := line[j:]
-	// Strip optional closing ATX markers.
-	content = strings.TrimRight(content, " #")
+	// Strip optional closing ATX markers (## heading ##).
+	// Closing hashes must be preceded by a space to be valid.
+	content = strings.TrimRight(content, " \t")
+	if idx := strings.LastIndexByte(content, ' '); idx >= 0 {
+		rest := strings.TrimLeft(content[idx+1:], "#")
+		if rest == "" {
+			content = strings.TrimRight(content[:idx], " \t")
+		}
+	}
 	return strings.TrimSpace(content)
 }
 
