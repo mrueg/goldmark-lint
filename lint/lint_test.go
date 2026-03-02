@@ -1981,6 +1981,21 @@ func TestMD013_Strict(t *testing.T) {
 	}
 }
 
+func TestMD013_Unicode(t *testing.T) {
+	// A line with 81 multi-byte Unicode characters should trigger a violation.
+	src := strings.Repeat("é", 81) + "\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for 81 unicode chars, got %d: %v", len(v), v)
+	}
+	// A line with exactly 80 multi-byte Unicode characters should be valid.
+	src = strings.Repeat("é", 80) + "\n"
+	v = lintString(t, rules.MD013{LineLength: 80}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for 80 unicode chars, got %v", v)
+	}
+}
+
 func TestMD022_LinesAboveArray(t *testing.T) {
 	// Per-level: h1 needs 0 blank lines above (since it's first), h2 needs 2.
 	src := "# Heading 1\n\n\n## Heading 2\n\nText\n"
