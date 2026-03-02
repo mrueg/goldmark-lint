@@ -267,8 +267,7 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 		// Determine what style is used in this list.
 		allOne := true
 		allZero := true
-		sequential := true   // sequential from 1
-		seqFromFirst := true // sequential from first item's number
+		sequential := true // sequential from 1
 		for i, it := range items {
 			if it.number != 1 {
 				allOne = false
@@ -279,13 +278,7 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 			if it.number != i+1 {
 				sequential = false
 			}
-			if i > 0 && it.number != items[i-1].number+1 {
-				seqFromFirst = false
-			}
 		}
-		// Note: for a single-item list, seqFromFirst is always true (no consecutive
-		// pairs to compare). A single-item ordered list is considered valid regardless
-		// of its starting number, matching markdownlint behavior.
 
 		switch style {
 		case "one":
@@ -329,9 +322,10 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 				}
 			}
 		case "one_or_ordered":
-			// Valid if all items use 1, or items are sequential (incrementing by 1)
-			// from any starting number (including non-1 starts like 3. 4. 5. ...).
-			if allOne || seqFromFirst {
+			// Valid if all items use 1, or items are sequential starting from 1
+			// (i.e., 1, 2, 3, ...). A list like 2, 3, 4 that starts at non-1
+			// is invalid even though consecutive items increment by 1.
+			if allOne || sequential {
 				break
 			}
 			// Invalid: determine expected style based on first item.

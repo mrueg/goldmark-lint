@@ -78,12 +78,8 @@ func (r MD050) Check(doc *lint.Document) []lint.Violation {
 			Message: fmt.Sprintf("Strong style [Expected: %s; Actual: %s]", expected, actual),
 		})
 		// Report closing marker violation (markdownlint reports both opening and closing).
-		var lastTextStop int
-		for c := emph.FirstChild(); c != nil; c = c.NextSibling() {
-			if t, ok2 := c.(*ast.Text); ok2 && t.Segment.Stop > lastTextStop {
-				lastTextStop = t.Segment.Stop
-			}
-		}
+		// Find the last text stop position recursively in case of complex inline children.
+		lastTextStop := lastTextStopInInline(emph)
 		if lastTextStop > 0 && lastTextStop < len(doc.Source) {
 			closingLine := countLine(doc.Source, lastTextStop)
 			// Calculate column relative to the start of the line.
