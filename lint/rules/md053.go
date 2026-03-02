@@ -30,7 +30,15 @@ func (r MD053) ignoredDefs() map[string]bool {
 
 func (r MD053) Check(doc *lint.Document) []lint.Violation {
 	mask := fencedCodeBlockMask(doc.Lines)
+	// Also skip indented code block lines and HTML block lines to avoid false negatives
+	// from bracket-like patterns in code blocks being counted as usages.
+	indentedMask := indentedCodeBlockMask(doc)
+	htmlMask := htmlBlockLineMask(doc)
 	ignored := r.ignoredDefs()
+
+	skipLine := func(i int) bool {
+		return mask[i] || indentedMask[i] || htmlMask[i]
+	}
 
 	// Collect definitions and their line numbers.
 	type defEntry struct {
@@ -39,7 +47,7 @@ func (r MD053) Check(doc *lint.Document) []lint.Violation {
 	}
 	var defs []defEntry
 	for i, line := range doc.Lines {
-		if mask[i] {
+		if skipLine(i) {
 			continue
 		}
 		if m := md052DefRE.FindStringSubmatch(line); m != nil {
@@ -55,7 +63,7 @@ func (r MD053) Check(doc *lint.Document) []lint.Violation {
 	// Collect used labels.
 	used := make(map[string]bool)
 	for i, line := range doc.Lines {
-		if mask[i] {
+		if skipLine(i) {
 			continue
 		}
 		// Skip definition lines themselves.
