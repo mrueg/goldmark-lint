@@ -7,6 +7,7 @@
 # Requirements:
 #   - git, go, jq
 #   - markdownlint-cli2 (npm install -g markdownlint-cli2)
+#   - markdownlint-cli2-formatter-json (npm install -g markdownlint-cli2-formatter-json)
 #
 # Usage:
 #   ./bench/conform.sh
@@ -76,7 +77,9 @@ info "Built: ${GOLDMARK_BIN}"
 # ---------------------------------------------------------------------------
 GOLDMARK_OUT=$(mktemp)
 MDLINT_OUT=$(mktemp)
-trap 'rm -f "${GOLDMARK_OUT}" "${MDLINT_OUT}"' EXIT
+MDLINT_TMPDIR=$(mktemp -d)
+MDLINT_CFG="${MDLINT_TMPDIR}/markdownlint-cli2.json"
+trap 'rm -f "${GOLDMARK_OUT}" "${MDLINT_OUT}"; rm -rf "${MDLINT_TMPDIR}"' EXIT
 
 cd "${RFCS_DIR}"
 
@@ -85,8 +88,16 @@ info "Running goldmark-lint…"
 "${GOLDMARK_BIN}" --no-cache --output-format json '**/*.md' >"${GOLDMARK_OUT}" 2>/dev/null || true
 
 info "Running markdownlint-cli2…"
-# markdownlint-cli2 --json writes JSON to stdout; exit code 1 when violations found.
-markdownlint-cli2 --json '**/*.md' >"${MDLINT_OUT}" 2>/dev/null || true
+# markdownlint-cli2 does not support --json; use a temporary config file that
+# enables the JSON output formatter and writes results to MDLINT_OUT.
+cat > "${MDLINT_CFG}" <<EOF
+{
+  "outputFormatters": [
+    ["markdownlint-cli2-formatter-json", { "name": "${MDLINT_OUT}" }]
+  ]
+}
+EOF
+markdownlint-cli2 --config "${MDLINT_CFG}" '**/*.md' >/dev/null 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # Extract per-rule violation counts using jq.
@@ -95,7 +106,7 @@ markdownlint-cli2 --json '**/*.md' >"${MDLINT_OUT}" 2>/dev/null || true
 #   A flat array of objects; each has "ruleNames": ["MDxxx", ...].
 #   Primary rule ID is ruleNames[0].
 #
-# markdownlint-cli2 JSON format (--json):
+# markdownlint-cli2 JSON format (markdownlint-cli2-formatter-json):
 #   An array of {fileName, results: [{ruleNames: ["MDxxx", ...], ...}, ...]}.
 #   Primary rule ID is results[].ruleNames[0].
 # ---------------------------------------------------------------------------
