@@ -103,10 +103,25 @@ func (r MD022) Check(doc *lint.Document) []lint.Violation {
 	return violations
 }
 
+// isBlankOrBlockquoteBlank reports whether a line is blank (empty or whitespace only),
+// or is a blank blockquote line (e.g. ">", "> ", ">> ", etc.).
+// Such lines count as blank separators for the purposes of MD022.
+func isBlankOrBlockquoteBlank(line string) bool {
+	rest := strings.TrimLeft(line, " \t")
+	// Strip any number of blockquote markers (with optional trailing space each).
+	for len(rest) > 0 && rest[0] == '>' {
+		rest = rest[1:]
+		if len(rest) > 0 && rest[0] == ' ' {
+			rest = rest[1:]
+		}
+	}
+	return strings.TrimSpace(rest) == ""
+}
+
 func countBlankLinesAbove(lines []string, idx int) int {
 	count := 0
 	for i := idx - 1; i >= 0; i-- {
-		if strings.TrimSpace(lines[i]) == "" {
+		if isBlankOrBlockquoteBlank(lines[i]) {
 			count++
 		} else {
 			break
@@ -118,7 +133,7 @@ func countBlankLinesAbove(lines []string, idx int) int {
 func countBlankLinesBelow(lines []string, idx int) int {
 	count := 0
 	for i := idx + 1; i < len(lines); i++ {
-		if strings.TrimSpace(lines[i]) == "" {
+		if isBlankOrBlockquoteBlank(lines[i]) {
 			count++
 		} else {
 			break

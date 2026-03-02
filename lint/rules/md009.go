@@ -85,6 +85,11 @@ func (r MD009) Check(doc *lint.Document) []lint.Violation {
 		if !checkCodeBlocks && codeMask[i] {
 			continue
 		}
+		// Skip blank lines (lines containing only whitespace): markdownlint does not
+		// flag trailing spaces on lines that have no non-whitespace content.
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
 		trimmed := strings.TrimRight(line, " \t")
 		trailingLen := len(line) - len(trimmed)
 		if trailingLen > 0 {

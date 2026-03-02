@@ -57,13 +57,17 @@ func tableColumnStyle(line string) string {
 	return "other"
 }
 
-// md60PipePositions returns the 0-based column positions of all '|' characters in line.
+// md60PipePositions returns the 0-based rune (character) positions of all '|' characters in line.
+// Using rune positions ensures correct alignment comparison when lines contain multi-byte
+// Unicode characters (e.g., emoji, CJK, ✓), matching markdownlint behaviour.
 func md60PipePositions(line string) []int {
 	var positions []int
-	for i := 0; i < len(line); i++ {
-		if line[i] == '|' {
-			positions = append(positions, i)
+	runeIdx := 0
+	for _, r := range line {
+		if r == '|' {
+			positions = append(positions, runeIdx)
 		}
+		runeIdx++
 	}
 	return positions
 }

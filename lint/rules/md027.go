@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/yuin/goldmark/ast"
 )
 
 // MD027 checks for multiple spaces after blockquote symbols.
@@ -27,24 +28,33 @@ var md027ListItemRE = regexp.MustCompile(`^ {2,}`)
 
 // md027ViolationLine checks whether a line has multiple spaces after any blockquote
 // marker at any nesting level. It returns (violated bool, prefix string up to the
-// offending spaces, extraSpaces string). Indented-code-block levels (4+ extra spaces
-// after the required one) are skipped.
+// offending spaces, extraSpaces string).
+//
+// An optional ordered/unordered list-item prefix is stripped first so that lines
+// like "9. >  text" (blockquote inside a list item) are checked correctly.
 func md027ViolationLine(line string) (violated bool, before, spaces string) {
 	rest := line
 	consumed := 0
+
+	// Strip an optional list-item prefix at the very start of the line so
+	// that blockquotes embedded inside list items (e.g. "9. >  text") are checked.
+	if m := orderedItemRE.FindStringSubmatch(rest); m != nil {
+		consumed += len(m[0])
+		rest = rest[len(m[0]):]
+	} else if len(rest) >= 2 && (rest[0] == '-' || rest[0] == '*' || rest[0] == '+') && rest[1] == ' ' {
+		consumed += 2
+		rest = rest[2:]
+	}
+
 	for {
 		m := md027BQLevelRE.FindStringSubmatch(rest)
 		if m == nil {
 			return false, "", ""
 		}
-		marker := m[1]  // e.g. ">" or "   >"
-		sp := m[2]      // spaces immediately after ">"
+		marker := m[1] // e.g. ">" or "   >"
+		sp := m[2]     // spaces immediately after ">"
 		advance := len(marker) + len(sp)
 		if len(sp) >= 2 {
-			// 5+ spaces after > = indented code block inside blockquote; skip.
-			if len(sp) >= 5 {
-				return false, "", ""
-			}
 			return true, line[:consumed+len(marker)], sp
 		}
 		// 0 or 1 space: no violation at this level; advance and check next level.
@@ -53,16 +63,67 @@ func md027ViolationLine(line string) (violated bool, before, spaces string) {
 	}
 }
 
+// md027ListInBQMask returns a boolean mask marking lines whose content is inside
+// a list that is itself inside a blockquote. Those lines should not be flagged by
+// MD027 because the extra spaces after ">" are list-indentation, not a style error.
+func md027ListInBQMask(doc *lint.Document) []bool {
+	mask := make([]bool, len(doc.Lines))
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		// Only process block-level nodes that carry line information.
+		// Calling Lines() on inline nodes panics in goldmark.
+		switch n.(type) {
+		case *ast.Paragraph, *ast.TextBlock, *ast.Heading,
+			*ast.CodeBlock, *ast.FencedCodeBlock, *ast.HTMLBlock:
+		default:
+			return ast.WalkContinue, nil
+		}
+		if n.Lines() == nil || n.Lines().Len() == 0 {
+			return ast.WalkContinue, nil
+		}
+		// Check whether this node is inside both a List and a BlockQuote ancestor.
+		inList := false
+		inBQ := false
+		for p := n.Parent(); p != nil; p = p.Parent() {
+			if _, ok := p.(*ast.List); ok {
+				inList = true
+			}
+			if _, ok := p.(*ast.Blockquote); ok {
+				inBQ = true
+			}
+		}
+		if inList && inBQ {
+			for i := 0; i < n.Lines().Len(); i++ {
+				seg := n.Lines().At(i)
+				lineNum := countLine(doc.Source, seg.Start) - 1
+				if lineNum >= 0 && lineNum < len(mask) {
+					mask[lineNum] = true
+				}
+			}
+		}
+		return ast.WalkContinue, nil
+	})
+	return mask
+}
+
 func (r MD027) Check(doc *lint.Document) []lint.Violation {
 	checkListItems := r.ListItems == nil || *r.ListItems
 	var violations []lint.Violation
 	mask := fencedCodeBlockMask(doc.Lines)
+	listInBQ := md027ListInBQMask(doc)
 	for i, line := range doc.Lines {
 		if mask[i] {
 			continue
 		}
 		if !checkListItems && md027ListItemRE.MatchString(line) {
 			// Line is indented (likely a list item); skip.
+			continue
+		}
+		// Skip lines that are list-item content inside a blockquote: their extra
+		// spaces after ">" are list indentation, not a multiple-space violation.
+		if listInBQ[i] {
 			continue
 		}
 		if violated, _, _ := md027ViolationLine(line); violated {
