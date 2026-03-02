@@ -45,6 +45,15 @@ func (r MD026) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
+		// Strip inline code-span content: markdownlint ignores text inside
+		// backtick code spans when checking for trailing punctuation.
+		// Only check punctuation in the non-code portions of the heading.
+		text = headingTextStripCode(h, doc.Source)
+		text = strings.TrimRight(text, " \t")
+		if len(text) == 0 {
+			return ast.WalkContinue, nil
+		}
+
 		runes := []rune(text)
 		lastRune := runes[len(runes)-1]
 		if !strings.ContainsRune(punct, lastRune) {
