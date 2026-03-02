@@ -5,7 +5,7 @@
 # reports per-rule deltas and a summary of discrepancies between their outputs.
 #
 # Requirements:
-#   - git, go
+#   - git, go, jq
 #   - markdownlint-cli2 (npm install -g markdownlint-cli2)
 #
 # Usage:
@@ -40,6 +40,7 @@ require_cmd() {
 # ---------------------------------------------------------------------------
 require_cmd git
 require_cmd go
+require_cmd jq
 require_cmd markdownlint-cli2
 
 # ---------------------------------------------------------------------------
@@ -80,46 +81,52 @@ trap 'rm -f "${GOLDMARK_OUT}" "${MDLINT_OUT}"' EXIT
 cd "${RFCS_DIR}"
 
 info "Running goldmark-lint…"
-# goldmark-lint writes violations to stderr; exit code 1 when violations found.
-"${GOLDMARK_BIN}" --no-cache '**/*.md' 2>"${GOLDMARK_OUT}" || true
+# goldmark-lint writes JSON violations to stdout; exit code 1 when violations found.
+"${GOLDMARK_BIN}" --no-cache --output-format json '**/*.md' >"${GOLDMARK_OUT}" 2>/dev/null || true
 
 info "Running markdownlint-cli2…"
-# markdownlint-cli2 exits 1 when violations found; capture stdout and stderr.
-markdownlint-cli2 '**/*.md' >"${MDLINT_OUT}" 2>&1 || true
+# markdownlint-cli2 --json writes JSON to stdout; exit code 1 when violations found.
+markdownlint-cli2 --json '**/*.md' >"${MDLINT_OUT}" 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
-# Extract per-rule violation counts
+# Extract per-rule violation counts using jq.
 #
-# goldmark-lint output format:   file:line:col RULE message
-# markdownlint-cli2 output fmt:  file:line RULE/alias message  (no column)
+# goldmark-lint JSON format:
+#   A flat array of objects; each has "ruleNames": ["MDxxx", ...].
+#   Primary rule ID is ruleNames[0].
 #
-# Both formats place the rule ID as the second whitespace-delimited field.
-# markdownlint-cli2 appends alias names separated by "/"; we keep only the
-# primary rule ID (the part before the first "/").
-# We identify violation lines by requiring $1 to contain ":digit" (ruling out
-# header/summary lines) and $2 to start with "MD" followed by digits.
+# markdownlint-cli2 JSON format (--json):
+#   An array of {fileName, results: [{ruleNames: ["MDxxx", ...], ...}, ...]}.
+#   Primary rule ID is results[].ruleNames[0].
 # ---------------------------------------------------------------------------
-extract_rules() {
-  awk '($1 ~ /:[0-9]+(:[0-9]+)?$/) { split($2, a, "/"); if (a[1] ~ /^MD[0-9]+$/) print a[1] }' "$1"
+
+# extract_gm_rules emits one rule ID per line from goldmark-lint JSON output.
+extract_gm_rules() {
+  jq -r '.[].ruleNames[0]' "$1"
+}
+
+# extract_ml_rules emits one rule ID per line from markdownlint-cli2 JSON output.
+extract_ml_rules() {
+  jq -r '.[].results[].ruleNames[0]' "$1"
 }
 
 declare -A GM_RULE ML_RULE
 
 while read -r count rule; do
   GM_RULE["$rule"]=$count
-done < <(extract_rules "${GOLDMARK_OUT}" | sort | uniq -c | awk '{print $1, $2}')
+done < <(extract_gm_rules "${GOLDMARK_OUT}" | sort | uniq -c | awk '{print $1, $2}')
 
 while read -r count rule; do
   ML_RULE["$rule"]=$count
-done < <(extract_rules "${MDLINT_OUT}" | sort | uniq -c | awk '{print $1, $2}')
+done < <(extract_ml_rules "${MDLINT_OUT}" | sort | uniq -c | awk '{print $1, $2}')
 
-GM_TOTAL=$(extract_rules "${GOLDMARK_OUT}" | wc -l | tr -d ' ')
-ML_TOTAL=$(extract_rules "${MDLINT_OUT}" | wc -l | tr -d ' ')
+GM_TOTAL=$(extract_gm_rules "${GOLDMARK_OUT}" | wc -l | tr -d ' ')
+ML_TOTAL=$(extract_ml_rules "${MDLINT_OUT}" | wc -l | tr -d ' ')
 
 # Collect all rules seen by either tool, sorted alphabetically.
 SORTED_RULES=()
 mapfile -t SORTED_RULES < <(
-  { extract_rules "${GOLDMARK_OUT}"; extract_rules "${MDLINT_OUT}"; } | sort -u
+  { extract_gm_rules "${GOLDMARK_OUT}"; extract_ml_rules "${MDLINT_OUT}"; } | sort -u
 )
 
 # ---------------------------------------------------------------------------
