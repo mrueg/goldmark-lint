@@ -524,6 +524,94 @@ func TestCLI_Watch(t *testing.T) {
 	}
 }
 
+func TestCLI_FixDryRun(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// File with trailing spaces (MD009) and no final newline (MD047) – both fixable.
+	content := "# Heading\n\nContent   \nNo newline at end"
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, "--fix-dry-run", mdFile)
+	var stdout strings.Builder
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 after --fix-dry-run (all issues fixable), got: %v", err)
+	}
+
+	// The original file must be unchanged.
+	got, err := os.ReadFile(mdFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != content {
+		t.Errorf("--fix-dry-run modified the file; want %q, got %q", content, string(got))
+	}
+
+	// The diff should be present on stdout.
+	diff := stdout.String()
+	if !strings.Contains(diff, "diff --git") {
+		t.Errorf("expected 'diff --git' header in --fix-dry-run output, got:\n%s", diff)
+	}
+	if !strings.Contains(diff, "--- a/") {
+		t.Errorf("expected '--- a/' in --fix-dry-run output, got:\n%s", diff)
+	}
+	if !strings.Contains(diff, "+++ b/") {
+		t.Errorf("expected '+++ b/' in --fix-dry-run output, got:\n%s", diff)
+	}
+	// The trailing-spaces fix should appear as a removed line.
+	if !strings.Contains(diff, "-Content   ") {
+		t.Errorf("expected '-Content   ' (trailing spaces removed) in diff, got:\n%s", diff)
+	}
+	if !strings.Contains(diff, "+Content") {
+		t.Errorf("expected '+Content' (cleaned line) in diff, got:\n%s", diff)
+	}
+}
+
+func TestCLI_FixDryRun_NoChanges(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// A file with no fixable issues.
+	mdFile := filepath.Join(dir, "clean.md")
+	if err := os.WriteFile(mdFile, []byte("# Heading\n\nContent.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, "--fix-dry-run", mdFile)
+	var stdout strings.Builder
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 for clean file with --fix-dry-run, got: %v", err)
+	}
+	if stdout.String() != "" {
+		t.Errorf("expected no diff output for clean file, got:\n%s", stdout.String())
+	}
+}
+
+func TestCLI_FixDryRun_MutualExclusion(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Heading\n\nContent.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, "--fix", "--fix-dry-run", mdFile)
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected non-zero exit when --fix and --fix-dry-run are combined, got nil error")
+	}
+	if exitErr.ExitCode() != 2 {
+		t.Errorf("--fix + --fix-dry-run exit code = %d, want 2", exitErr.ExitCode())
+	}
+}
+
 // TestCLI_ParallelDeterministic verifies that linting multiple files in parallel
 // produces output in a consistent (deterministic) order regardless of goroutine
 // scheduling. It runs the linter several times on the same set of files and

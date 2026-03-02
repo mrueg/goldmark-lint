@@ -1,12 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
 	"os"
-  "sort"
+	"sort"
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
@@ -17,6 +18,7 @@ const (
 	colorReset  = "\033[0m"
 	colorBold   = "\033[1m"
 	colorRed    = "\033[31m"
+	colorGreen  = "\033[32m"
 	colorYellow = "\033[33m"
 	colorCyan   = "\033[36m"
 )
@@ -436,4 +438,188 @@ func parseOutputFormatters(raw []interface{}) []outputFormatterSpec {
 		specs = append(specs, spec)
 	}
 	return specs
+}
+
+// diffOp is a single element of a line-level diff: a context, deleted, or added line.
+type diffOp struct {
+	op   byte   // ' ' context, '-' deleted, '+' added
+	text string
+}
+
+// computeLineDiff computes the line-level diff between a and b using LCS.
+// It returns a sequence of diffOps in forward (source→target) order.
+func computeLineDiff(a, b []string) []diffOp {
+	m, n := len(a), len(b)
+	// Build the LCS DP table.
+	dp := make([][]int, m+1)
+	for i := range dp {
+		dp[i] = make([]int, n+1)
+	}
+	for i := 1; i <= m; i++ {
+		for j := 1; j <= n; j++ {
+			if a[i-1] == b[j-1] {
+				dp[i][j] = dp[i-1][j-1] + 1
+			} else if dp[i-1][j] >= dp[i][j-1] {
+				dp[i][j] = dp[i-1][j]
+			} else {
+				dp[i][j] = dp[i][j-1]
+			}
+		}
+	}
+	// Backtrack to build the edit script in reverse order.
+	ops := make([]diffOp, 0, m+n)
+	for i, j := m, n; i > 0 || j > 0; {
+		switch {
+		case i > 0 && j > 0 && a[i-1] == b[j-1]:
+			ops = append(ops, diffOp{' ', a[i-1]})
+			i--
+			j--
+		case j > 0 && (i == 0 || dp[i][j-1] >= dp[i-1][j]):
+			ops = append(ops, diffOp{'+', b[j-1]})
+			j--
+		default:
+			ops = append(ops, diffOp{'-', a[i-1]})
+			i--
+		}
+	}
+	// Reverse to get forward order.
+	for l, r := 0, len(ops)-1; l < r; l, r = l+1, r-1 {
+		ops[l], ops[r] = ops[r], ops[l]
+	}
+	return ops
+}
+
+// diffHunk is a contiguous block of diff operations with surrounding context.
+type diffHunk struct {
+	oldStart, oldCount int
+	newStart, newCount int
+	ops                []diffOp
+}
+
+// buildHunks groups diff operations into hunks with ctx lines of surrounding context.
+func buildHunks(ops []diffOp, ctx int) []diffHunk {
+	type changeRange struct{ start, end int }
+	var ranges []changeRange
+	inChange := false
+	start := 0
+	for i, op := range ops {
+		if op.op != ' ' {
+			if !inChange {
+				start = i
+				inChange = true
+			}
+		} else if inChange {
+			ranges = append(ranges, changeRange{start, i})
+			inChange = false
+		}
+	}
+	if inChange {
+		ranges = append(ranges, changeRange{start, len(ops)})
+	}
+	if len(ranges) == 0 {
+		return nil
+	}
+
+	// Merge nearby change ranges and expand by ctx.
+	type hunkRange struct{ start, end int }
+	cur := hunkRange{
+		start: max(0, ranges[0].start-ctx),
+		end:   min(len(ops), ranges[0].end+ctx),
+	}
+	var hunkRanges []hunkRange
+	for _, r := range ranges[1:] {
+		exp := hunkRange{
+			start: max(0, r.start-ctx),
+			end:   min(len(ops), r.end+ctx),
+		}
+		if exp.start <= cur.end {
+			if exp.end > cur.end {
+				cur.end = exp.end
+			}
+		} else {
+			hunkRanges = append(hunkRanges, cur)
+			cur = exp
+		}
+	}
+	hunkRanges = append(hunkRanges, cur)
+
+	// Convert each range into a diffHunk with correct line numbers.
+	var hunks []diffHunk
+	for _, hr := range hunkRanges {
+		oldLine, newLine := 1, 1
+		for k := 0; k < hr.start; k++ {
+			if ops[k].op != '+' {
+				oldLine++
+			}
+			if ops[k].op != '-' {
+				newLine++
+			}
+		}
+		oldCount, newCount := 0, 0
+		for k := hr.start; k < hr.end; k++ {
+			if ops[k].op != '+' {
+				oldCount++
+			}
+			if ops[k].op != '-' {
+				newCount++
+			}
+		}
+		hunks = append(hunks, diffHunk{
+			oldStart: oldLine,
+			oldCount: oldCount,
+			newStart: newLine,
+			newCount: newCount,
+			ops:      ops[hr.start:hr.end],
+		})
+	}
+	return hunks
+}
+
+// formatFileDiff writes a unified diff for filename between original and fixed to w
+// in git diff style. color controls ANSI coloring. Returns true if there were
+// differences.
+func formatFileDiff(filename string, original, fixed []byte, w io.Writer, color bool) bool {
+	if bytes.Equal(original, fixed) {
+		return false
+	}
+	origLines := strings.Split(string(original), "\n")
+	fixedLines := strings.Split(string(fixed), "\n")
+	ops := computeLineDiff(origLines, fixedLines)
+	hunks := buildHunks(ops, 3)
+	if len(hunks) == 0 {
+		return false
+	}
+	if color {
+		fmt.Fprintf(w, "%sdiff --git a/%s b/%s%s\n", colorBold, filename, filename, colorReset)
+		fmt.Fprintf(w, "%s--- a/%s%s\n", colorBold, filename, colorReset)
+		fmt.Fprintf(w, "%s+++ b/%s%s\n", colorBold, filename, colorReset)
+	} else {
+		fmt.Fprintf(w, "diff --git a/%s b/%s\n", filename, filename)
+		fmt.Fprintf(w, "--- a/%s\n", filename)
+		fmt.Fprintf(w, "+++ b/%s\n", filename)
+	}
+	for _, hunk := range hunks {
+		if color {
+			fmt.Fprintf(w, "%s@@ -%d,%d +%d,%d @@%s\n",
+				colorCyan, hunk.oldStart, hunk.oldCount, hunk.newStart, hunk.newCount, colorReset)
+		} else {
+			fmt.Fprintf(w, "@@ -%d,%d +%d,%d @@\n",
+				hunk.oldStart, hunk.oldCount, hunk.newStart, hunk.newCount)
+		}
+		for _, op := range hunk.ops {
+			if color {
+				switch op.op {
+				case '-':
+					fmt.Fprintf(w, "%s-%s%s\n", colorRed, op.text, colorReset)
+				case '+':
+					fmt.Fprintf(w, "%s+%s%s\n", colorGreen, op.text, colorReset)
+				default:
+					fmt.Fprintf(w, " %s\n", op.text)
+				}
+			} else {
+				fmt.Fprintf(w, "%c%s\n", op.op, op.text)
+			}
+		}
+	}
+	return true
 }
