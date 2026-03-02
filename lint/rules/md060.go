@@ -57,7 +57,7 @@ func tableColumnStyle(line string) string {
 func (r MD060) Check(doc *lint.Document) []lint.Violation {
 	style := r.Style
 	if style == "" {
-		style = "any"
+		style = "consistent"
 	}
 	if style == "any" {
 		return nil
@@ -68,19 +68,30 @@ func (r MD060) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 
 	for _, t := range tables {
+		firstStyle := ""
 		for row := t[0]; row <= t[1]; row++ {
 			line := doc.Lines[row]
 			if isTableDelimiterRow(line) {
 				continue
 			}
 			actual := tableColumnStyle(line)
-			if actual != style && actual != "other" {
-				// Only report if style doesn't match expected.
+			if actual == "other" {
+				continue
+			}
+			expected := style
+			if style == "consistent" {
+				if firstStyle == "" {
+					firstStyle = actual
+					continue
+				}
+				expected = firstStyle
+			}
+			if actual != expected {
 				violations = append(violations, lint.Violation{
 					Rule:    r.ID(),
 					Line:    row + 1,
 					Column:  1,
-					Message: fmt.Sprintf("Table column style [Expected: %s; Actual: %s]", style, actual),
+					Message: fmt.Sprintf("Table column style [Expected: %s; Actual: %s]", expected, actual),
 				})
 			}
 		}
