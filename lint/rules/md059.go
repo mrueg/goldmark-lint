@@ -36,14 +36,9 @@ func (r MD059) Check(doc *lint.Document) []lint.Violation {
 		if !ok {
 			return ast.WalkContinue, nil
 		}
-		// Collect text from direct Text children.
-		var sb strings.Builder
-		for c := link.FirstChild(); c != nil; c = c.NextSibling() {
-			if t, ok := c.(*ast.Text); ok {
-				sb.Write(doc.Source[t.Segment.Start:t.Segment.Stop])
-			}
-		}
-		text := strings.TrimSpace(sb.String())
+		// Collect all text from the link's children (including inline elements
+		// like emphasis, strong, code spans, etc.).
+		text := strings.TrimSpace(string(inlineNodeText(link, doc.Source)))
 		for _, p := range prohibited {
 			if strings.EqualFold(text, p) {
 				violations = append(violations, lint.Violation{
