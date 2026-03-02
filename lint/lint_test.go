@@ -2073,6 +2073,28 @@ func TestMD013_URLExemption_Stern(t *testing.T) {
 	}
 }
 
+func TestMD013_URLExemption_RefLinkCodeSpan(t *testing.T) {
+	// A reference link whose link text is a code span (e.g. [`cmd`][ref]) should
+	// be correctly attributed to the line it appears on, not to the first line of
+	// the surrounding paragraph.  The URL from the reference definition should
+	// exempt the line if removing it would make the line fit within the limit.
+	//
+	// Line 3: "   [`cargo metadata`][wg-cargo-std-aware#20], [`cargo clean`][wg-cargo-std-aware#21],"
+	// is 84 chars.  The URL from wg-cargo-std-aware#21 is 57 chars, so
+	// lineLen - urlLen = 27 <= 80 → should be exempt.
+	src := "Some preceding paragraph text.\n\n" +
+		"   [`cargo metadata`][wg-cargo-std-aware#20], [`cargo clean`][wg-cargo-std-aware#21],\n" +
+		"\n" +
+		"[wg-cargo-std-aware#20]: https://github.com/rust-lang/wg-cargo-std-aware/issues/20\n" +
+		"[wg-cargo-std-aware#21]: https://github.com/rust-lang/wg-cargo-std-aware/issues/21\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	for _, viol := range v {
+		if viol.Line == 3 {
+			t.Errorf("expected line with reference link code-span to be exempt, got violation: %v", viol)
+		}
+	}
+}
+
 func TestMD013_URLExemption_LongLineWithText(t *testing.T) {
 	// A line that is long even after removing the URL should still be reported.
 	// "See this really long description text at " (42 chars) + URL (50 chars) = 92 chars
