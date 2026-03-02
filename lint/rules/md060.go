@@ -38,6 +38,9 @@ func tableColumnStyle(line string) string {
 		// compact: exactly one space before and after content
 		if !hasLeadingSpace || !hasTrailingSpace {
 			allSingleSpace = false
+		} else if len(cell) < 2 {
+			// single-space cell has no content; not compact
+			allSingleSpace = false
 		} else {
 			inner := cell[1 : len(cell)-1]
 			if strings.HasPrefix(inner, " ") || strings.HasSuffix(inner, " ") {
