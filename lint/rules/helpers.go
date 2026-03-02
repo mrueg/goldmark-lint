@@ -57,16 +57,29 @@ func countLine(source []byte, pos int) int {
 	return line
 }
 
-// headingText returns the text content of a heading node.
+// headingText returns the text content of a heading node by recursively
+// extracting text from all inline descendants. This includes text inside
+// code spans, emphasis, strong, links, etc., matching GitHub's anchor
+// generation which uses the full heading text.
 func headingText(n ast.Node, source []byte) string {
-	var text []byte
+	var b []byte
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-		if t, ok := c.(*ast.Text); ok {
-			seg := t.Segment
-			text = append(text, source[seg.Start:seg.Stop]...)
-		}
+		b = append(b, inlineNodeText(c, source)...)
 	}
-	return string(text)
+	return string(b)
+}
+
+// inlineNodeText recursively extracts raw text bytes from an inline AST node.
+func inlineNodeText(n ast.Node, source []byte) []byte {
+	if t, ok := n.(*ast.Text); ok {
+		return source[t.Segment.Start:t.Segment.Stop]
+	}
+	// For any other node, recurse into its children.
+	var b []byte
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		b = append(b, inlineNodeText(c, source)...)
+	}
+	return b
 }
 
 // fencedCodeBlockLine returns the 1-based line number of the opening fence of a

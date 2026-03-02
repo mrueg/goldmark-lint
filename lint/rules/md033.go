@@ -60,6 +60,11 @@ func (r MD033) Check(doc *lint.Document) []lint.Violation {
 
 		switch node := n.(type) {
 		case *ast.HTMLBlock:
+			// Skip HTML comment blocks (type 2: <!-- ... -->).
+			// markdownlint does not flag HTML comments as inline HTML.
+			if node.HTMLBlockType == ast.HTMLBlockType2 {
+				return ast.WalkContinue, nil
+			}
 			line := 1
 			if node.Lines() != nil && node.Lines().Len() > 0 {
 				seg := node.Lines().At(0)

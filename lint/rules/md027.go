@@ -66,6 +66,10 @@ func md027ViolationLine(line string) (violated bool, before, spaces string) {
 // md027ListInBQMask returns a boolean mask marking lines whose content is inside
 // a list that is itself inside a blockquote. Those lines should not be flagged by
 // MD027 because the extra spaces after ">" are list-indentation, not a style error.
+//
+// Only lines where the BLOCKQUOTE is the OUTER container (blockquote contains
+// the list, not list contains the blockquote) are masked. This preserves
+// violations like "1. >  text" where a list item contains a blockquote.
 func md027ListInBQMask(doc *lint.Document) []bool {
 	mask := make([]bool, len(doc.Lines))
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -83,18 +87,29 @@ func md027ListInBQMask(doc *lint.Document) []bool {
 		if n.Lines() == nil || n.Lines().Len() == 0 {
 			return ast.WalkContinue, nil
 		}
-		// Check whether this node is inside both a List and a BlockQuote ancestor.
+		// Walk up ancestors: check that a List is found before (more immediate
+		// than) a Blockquote. This means the structure is BQ → … → List → … →
+		// node, i.e. the blockquote is the outer container. When a List contains
+		// a Blockquote (List → … → BQ → … → node), the BQ would be found first
+		// and we must NOT mask (those are legitimate blockquote violations).
 		inList := false
 		inBQ := false
+		listFoundBeforeBQ := false
 		for p := n.Parent(); p != nil; p = p.Parent() {
 			if _, ok := p.(*ast.List); ok {
-				inList = true
+				if !inList {
+					inList = true
+					if !inBQ {
+						listFoundBeforeBQ = true
+					}
+				}
 			}
 			if _, ok := p.(*ast.Blockquote); ok {
 				inBQ = true
 			}
 		}
-		if inList && inBQ {
+		// Mask only when Blockquote is the outer container (List found first).
+		if inList && inBQ && listFoundBeforeBQ {
 			for i := 0; i < n.Lines().Len(); i++ {
 				seg := n.Lines().At(i)
 				lineNum := countLine(doc.Source, seg.Start) - 1
