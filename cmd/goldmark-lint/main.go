@@ -35,6 +35,7 @@ Optional parameters:
 - --config           path to config file (overrides auto-discovery)
 - --fail-on-warning  exit with code 1 even when all violations are warnings
 - --fix              updates files to resolve fixable issues
+- --fix-dry-run      show a diff of changes --fix would make, without modifying files
 - --format           read stdin, apply fixes, write stdout
 - --list-rules       print a table of all rules with their aliases, enabled/disabled state, and options
 - --no-cache         disable reading/writing the .markdownlint-cli2-cache file
@@ -68,6 +69,7 @@ func main() {
 	configPath := flag.String("config", "", "path to config file (overrides auto-discovery)")
 	failOnWarning := flag.Bool("fail-on-warning", false, "exit with code 1 even when all violations are warnings")
 	fix := flag.Bool("fix", false, "updates files to resolve fixable issues")
+	fixDryRun := flag.Bool("fix-dry-run", false, "show a diff of changes --fix would make, without modifying files")
 	format := flag.Bool("format", false, "read stdin, apply fixes, write stdout")
 	help := flag.Bool("help", false, "writes help message and exits")
 	listRules := flag.Bool("list-rules", false, "print a table of all rules with their aliases, enabled/disabled state, and options")
@@ -87,6 +89,11 @@ func main() {
 	if *ver {
 		fmt.Println(version)
 		os.Exit(0)
+	}
+
+	if *fix && *fixDryRun {
+		fmt.Fprintln(os.Stderr, "Error: --fix and --fix-dry-run are mutually exclusive")
+		os.Exit(2)
 	}
 
 	// Validate --output-format flag if specified.
@@ -194,8 +201,8 @@ func main() {
 		linter.FrontMatterRegexp = re
 	}
 
-	// Load cache (skip when --no-cache, fix, or watch is used).
-	useCache := !*noCache && !effectiveFix && !*watch
+	// Load cache (skip when --no-cache, fix, fix-dry-run, or watch is used).
+	useCache := !*noCache && !effectiveFix && !*fixDryRun && !*watch
 	cache := make(lintCache)
 	if useCache && cwd != "" {
 		cache = loadCache(cwd)
@@ -259,6 +266,8 @@ func main() {
 		violations []lint.Violation
 		err        error
 		errCode    int
+		original   []byte // non-nil when --fix-dry-run: the content before fixing
+		fixed      []byte // non-nil when --fix-dry-run: the content after fixing
 	}
 
 	results := make([]fileResult, len(allFiles))
@@ -303,18 +312,24 @@ func main() {
 			}
 
 			// Apply fixes if requested.
+			var origContent, fixedContent []byte
 			if effectiveFix {
-				fixed := fileLinter.Fix(source)
-				if err := os.WriteFile(file, fixed, 0644); err != nil {
+				fixedContent = fileLinter.Fix(source)
+				if err := os.WriteFile(file, fixedContent, 0644); err != nil {
 					results[i] = fileResult{err: err, errCode: 2}
 					return
 				}
-				source = fixed
+				source = fixedContent
+				hash = hashContent(source)
+			} else if *fixDryRun {
+				fixedContent = fileLinter.Fix(source)
+				origContent = source
+				source = fixedContent
 				hash = hashContent(source)
 			}
 
 			violations := fileLinter.Lint(source)
-			results[i] = fileResult{violations: violations}
+			results[i] = fileResult{violations: violations, original: origContent, fixed: fixedContent}
 
 			// Store the new cache entry.
 			if useCache {
@@ -337,6 +352,17 @@ func main() {
 			continue
 		}
 		allViolations = append(allViolations, fileViolation{File: file, Violations: r.violations})
+	}
+
+	// --fix-dry-run: output a unified diff for every file that would be changed.
+	if *fixDryRun {
+		color := isColorEnabled(os.Stdout)
+		for i, file := range allFiles {
+			r := results[i]
+			if r.original != nil {
+				formatFileDiff(file, r.original, r.fixed, os.Stdout, color)
+			}
+		}
 	}
 
 	// Apply per-violation severity so formatters can use it.
