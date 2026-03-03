@@ -133,17 +133,20 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 	}
 
 	// Build a per-line URL length map for the URL exemption (when not in stern mode).
-	var lineURLLens map[int][]int
+	var urlLens urlLengthsResult
 	if !r.Stern {
-		lineURLLens = urlLengthsPerLine(doc)
+		urlLens = urlLengthsPerLine(doc)
 	}
 
 	// Build a set of "link only" line numbers: lines whose only non-whitespace
 	// content is links or images (no bare text outside link/image nodes).
 	// Markdownlint exempts such lines because they cannot be split at the URL.
 	// Also build the set of link reference definition line indices (0-based).
+	// Additionally build the set of table row line numbers that contain any
+	// resolved Link or Image node — markdownlint exempts ALL such table rows.
 	var linkOnlyLines map[int]bool
 	var linkRefDefLines map[int]bool
+	var tableRowLinkLines map[int]bool
 	if !r.Stern {
 		linkOnlyLines = md013LinkOnlyLines(doc)
 		linkRefDefLines = make(map[int]bool)
@@ -152,6 +155,21 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 				linkRefDefLines[i] = true
 			}
 		}
+		// Collect 1-based line numbers of table rows that contain a link or image.
+		tableRowLinkLines = make(map[int]bool)
+		_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+			if !entering {
+				return ast.WalkContinue, nil
+			}
+			if n.Kind() != ast.KindLink && n.Kind() != ast.KindImage {
+				return ast.WalkContinue, nil
+			}
+			lineNum := inlineLinkLine(n, doc.Source)
+			if lineNum > 0 && lineNum <= len(tableMask) && tableMask[lineNum-1] {
+				tableRowLinkLines[lineNum] = true
+			}
+			return ast.WalkContinue, nil
+		})
 	}
 
 	var violations []lint.Violation
@@ -196,13 +214,21 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 			// cause of the length. Reference-link-only lines (no URL in source)
 			// are NOT exempted here; they fall through to the URL/trailing-word
 			// checks below, matching markdownlint behaviour.
-			if !r.Stern && linkOnlyLines[i+1] && len(lineURLLens[i+1]) > 0 {
+			if !r.Stern && linkOnlyLines[i+1] && len(urlLens.inlineLinkURLLens[i+1]) > 0 {
 				continue
 			}
-			// URL exemption: skip lines that exceed the limit only due to a URL.
-			// lineURLLens[i+1] returns nil for lines without URLs, and
-			// lineExemptByURL handles nil slices by returning false.
-			if !r.Stern && lineExemptByURL(lineURLLens[i+1], lineLen, limit) {
+			// Table rows that contain any resolved link or image node are exempt.
+			// Markdownlint skips the line-length check for all such rows regardless
+			// of URL type (inline URL or reference link resolved via a definition).
+			if !r.Stern && tableMask[i] && tableRowLinkLines[i+1] {
+				continue
+			}
+			// URL exemption for non-table, non-link-only lines: skip lines that
+			// exceed the limit only due to a bare URL or auto-link.  Inline link
+			// URLs embedded in "[text](url): description" style content do NOT
+			// grant an exemption here — the description text is the reformattable
+			// part that should be shortened.
+			if !r.Stern && lineExemptByURL(urlLens.bareURLLens[i+1], lineLen, limit) {
 				continue
 			}
 			violations = append(violations, lint.Violation{
@@ -216,15 +242,39 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 	return violations
 }
 
-// urlLengthsPerLine returns a map from 1-based line number to a slice of URL
-// rune lengths found on that line. It uses the document's AST to find inline
-// links and images, and doc.LinkRefs (populated from the goldmark parser
-// context) to find link reference definition lines.
-func urlLengthsPerLine(doc *lint.Document) map[int][]int {
-	result := make(map[int][]int)
-	addURL := func(lineNum, urlLen int) {
+// urlLengthsResult bundles the per-line URL length maps returned by
+// urlLengthsPerLine.
+type urlLengthsResult struct {
+	// inlineLinkURLLens maps 1-based line number → rune lengths of inline
+	// link/image destination URLs that appear verbatim on that line.  These
+	// are used for the "link-only line" exemption.
+	inlineLinkURLLens map[int][]int
+	// bareURLLens maps 1-based line number → rune lengths of bare http(s)://
+	// URLs and auto-links on that line.  These are used for the general URL
+	// exemption (lines that exceed the limit only because of a URL that cannot
+	// be wrapped) on non-table lines.
+	bareURLLens map[int][]int
+}
+
+// urlLengthsPerLine returns URL length information per line for the MD013 URL
+// exemption logic. It distinguishes between inline link URLs (in [text](url)
+// syntax) and bare/autolink URLs, because markdownlint treats them differently:
+//
+//   - Table rows that contain any inline link URL are exempt entirely.
+//   - Non-table lines are only exempt when a bare URL (or auto-link) is the
+//     sole reason the line exceeds the limit; inline link URLs embedded in
+//     "[text](url): description" style list items do NOT grant an exemption.
+func urlLengthsPerLine(doc *lint.Document) urlLengthsResult {
+	inlineResult := make(map[int][]int)
+	bareResult := make(map[int][]int)
+	addInline := func(lineNum, urlLen int) {
 		if lineNum > 0 && urlLen > 0 {
-			result[lineNum] = append(result[lineNum], urlLen)
+			inlineResult[lineNum] = append(inlineResult[lineNum], urlLen)
+		}
+	}
+	addBare := func(lineNum, urlLen int) {
+		if lineNum > 0 && urlLen > 0 {
+			bareResult[lineNum] = append(bareResult[lineNum], urlLen)
 		}
 	}
 
@@ -236,22 +286,20 @@ func urlLengthsPerLine(doc *lint.Document) map[int][]int {
 		case *ast.Link:
 			lineNum := inlineLinkLine(node, doc.Source)
 			dest := node.Destination
-			// Only apply the URL exemption for inline links where the URL actually
-			// appears on the source line. Reference links resolve their URL from a
-			// definition elsewhere; attributing that URL length to the using line
-			// would incorrectly exempt lines that only contain a short reference label.
+			// Only record inline links where the URL actually appears on the
+			// source line (not reference links whose URL lives elsewhere).
 			if lineNum >= 1 && lineNum <= len(doc.Lines) && strings.Contains(doc.Lines[lineNum-1], string(dest)) {
-				addURL(lineNum, utf8.RuneCount(dest))
+				addInline(lineNum, utf8.RuneCount(dest))
 			}
 		case *ast.Image:
 			lineNum := inlineLinkLine(node, doc.Source)
 			dest := node.Destination
 			if lineNum >= 1 && lineNum <= len(doc.Lines) && strings.Contains(doc.Lines[lineNum-1], string(dest)) {
-				addURL(lineNum, utf8.RuneCount(dest))
+				addInline(lineNum, utf8.RuneCount(dest))
 			}
 		case *ast.AutoLink:
 			lineNum := autoLinkSourceLine(node, doc.Source)
-			addURL(lineNum, utf8.RuneCount(node.URL(doc.Source)))
+			addBare(lineNum, utf8.RuneCount(node.URL(doc.Source)))
 		}
 		return ast.WalkContinue, nil
 	})
@@ -268,21 +316,33 @@ func urlLengthsPerLine(doc *lint.Document) map[int][]int {
 			}
 			key := strings.ToLower(label)
 			if dest, ok := doc.LinkRefs[key]; ok {
-				addURL(i+1, utf8.RuneCount(dest))
+				addBare(i+1, utf8.RuneCount(dest))
 			}
 		}
 	}
 
 	// Also detect bare URLs (not part of link syntax) in raw lines.
 	// markdownlint exempts lines where a bare URL is the reason for exceeding
-	// the limit. We scan each line for plain http(s):// URLs.
+	// the limit. We scan each line for plain http(s):// URLs, but skip URLs
+	// that are part of inline link or image syntax [text](url) — those are
+	// already captured in inlineLinkURLLens and should not contribute to the
+	// bare-URL exemption for non-link-only content.
 	for i, line := range doc.Lines {
-		for _, m := range md013BareURLRE.FindAllString(line, -1) {
-			addURL(i+1, utf8.RuneCountInString(m))
+		for _, loc := range md013BareURLRE.FindAllStringIndex(line, -1) {
+			start := loc[0]
+			// A URL immediately preceded by '(' is part of [text](url) syntax.
+			if start > 0 && line[start-1] == '(' {
+				continue
+			}
+			url := line[loc[0]:loc[1]]
+			addBare(i+1, utf8.RuneCountInString(url))
 		}
 	}
 
-	return result
+	return urlLengthsResult{
+		inlineLinkURLLens: inlineResult,
+		bareURLLens:       bareResult,
+	}
 }
 
 // md013BareURLRE matches bare http/https URLs in plain text (not wrapped in

@@ -26,6 +26,40 @@ func (r MD052) Description() string {
 // md052DefRE matches reference link definitions: [label]: url.
 var md052DefRE = regexp.MustCompile(`(?i)^\s*\[([^\]]+)\]:\s+\S`)
 
+// md052DefURLRE captures the URL portion of a reference link definition.
+// Group 1 is the label, group 2 is the destination URL (up to whitespace or end).
+var md052DefURLRE = regexp.MustCompile(`(?i)^\s*\[[^\]]+\]:\s+(\S+)`)
+
+// md052DefLabelValid returns true if the line looks like a valid link reference
+// definition whose URL has balanced parentheses and whose label is not a footnote
+// label (which starts with '^').  This extra validation prevents the regex-based
+// scanner from accepting malformed definitions that goldmark's parser would reject.
+func md052DefLabelValid(line string) bool {
+	m := md052DefRE.FindStringSubmatch(line)
+	if m == nil {
+		return false
+	}
+	// Footnote definitions [^label]: text are not link reference definitions.
+	if strings.HasPrefix(m[1], "^") {
+		return false
+	}
+	// Extract the destination and check for unbalanced trailing ')'.
+	um := md052DefURLRE.FindStringSubmatch(line)
+	if um == nil {
+		return false
+	}
+	dest := um[1]
+	open, close := 0, 0
+	for _, c := range dest {
+		if c == '(' {
+			open++
+		} else if c == ')' {
+			close++
+		}
+	}
+	return close <= open
+}
+
 // md052FullRE matches full reference links/images: [text][label] or ![text][label].
 var md052FullRE = regexp.MustCompile(`!?\[[^\]]*\]\[([^\]]*)\]`)
 
@@ -75,14 +109,18 @@ func (r MD052) Check(doc *lint.Document) []lint.Violation {
 		if skipLine(i) {
 			continue
 		}
-		if m := md052DefRE.FindStringSubmatch(line); m != nil {
-			defined[strings.ToLower(m[1])] = true
+		if md052DefLabelValid(line) {
+			if m := md052DefRE.FindStringSubmatch(line); m != nil {
+				defined[strings.ToLower(m[1])] = true
+			}
 		}
 		// Register the blanked label so that collapsed references like [`label`][]
 		// (where blankCodeSpans turns the label into spaces) can still be matched.
 		if blanked := blankCodeSpans(line); blanked != line {
-			if m := md052DefRE.FindStringSubmatch(blanked); m != nil {
-				defined[strings.ToLower(m[1])] = true
+			if md052DefLabelValid(blanked) {
+				if m := md052DefRE.FindStringSubmatch(blanked); m != nil {
+					defined[strings.ToLower(m[1])] = true
+				}
 			}
 		}
 	}

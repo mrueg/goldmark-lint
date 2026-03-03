@@ -41,13 +41,19 @@ func (r MD053) Check(doc *lint.Document) []lint.Violation {
 	}
 
 	// Collect definitions and their line numbers.
+	// Only count definitions with valid URLs (no unbalanced trailing paren),
+	// and skip footnote definitions [^label]: text.
 	type defEntry struct {
 		label string
 		line  int
 	}
 	var defs []defEntry
+	seen := make(map[string]bool) // first-seen label set for duplicate detection
 	for i, line := range doc.Lines {
 		if skipLine(i) {
+			continue
+		}
+		if !md052DefLabelValid(line) {
 			continue
 		}
 		if m := md052DefRE.FindStringSubmatch(line); m != nil {
@@ -66,8 +72,10 @@ func (r MD053) Check(doc *lint.Document) []lint.Violation {
 		if skipLine(i) {
 			continue
 		}
-		// Skip definition lines themselves.
-		if md052DefRE.MatchString(line) {
+		// Skip link reference definition lines themselves, but NOT footnote
+		// definition lines [^label]: text — those contain inline content that
+		// may use link labels, so they must be scanned.
+		if md052DefLabelValid(line) && md052DefRE.MatchString(line) {
 			continue
 		}
 		// Full references.
@@ -92,7 +100,11 @@ func (r MD053) Check(doc *lint.Document) []lint.Violation {
 		if ignored[def.label] {
 			continue
 		}
-		if !used[def.label] {
+		// A duplicate definition (same label already seen earlier) is always
+		// "unused" because the first definition takes precedence (CommonMark).
+		isDuplicate := seen[def.label]
+		seen[def.label] = true
+		if isDuplicate || !used[def.label] {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
 				Line:    def.line,
@@ -115,8 +127,8 @@ func (r MD053) Fix(source []byte) []byte {
 		if mask[i] {
 			continue
 		}
-		// Skip definition lines themselves.
-		if md052DefRE.MatchString(line) {
+		// Skip link reference definition lines themselves, but not footnote defs.
+		if md052DefLabelValid(line) && md052DefRE.MatchString(line) {
 			continue
 		}
 		for _, m := range md052FullRE.FindAllStringSubmatch(line, -1) {
@@ -133,16 +145,21 @@ func (r MD053) Fix(source []byte) []byte {
 		}
 	}
 
+	seen := make(map[string]bool)
 	var result []string
 	for i, line := range lines {
 		if mask[i] {
 			result = append(result, line)
 			continue
 		}
-		if m := md052DefRE.FindStringSubmatch(line); m != nil {
-			label := strings.ToLower(m[1])
-			if !ignored[label] && !used[label] {
-				continue // Remove unused definition.
+		if md052DefLabelValid(line) {
+			if m := md052DefRE.FindStringSubmatch(line); m != nil {
+				label := strings.ToLower(m[1])
+				isDuplicate := seen[label]
+				seen[label] = true
+				if !ignored[label] && (isDuplicate || !used[label]) {
+					continue // Remove unused/duplicate definition.
+				}
 			}
 		}
 		result = append(result, line)
