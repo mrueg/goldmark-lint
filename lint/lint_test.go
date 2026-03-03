@@ -440,6 +440,26 @@ func TestMD033_Invalid(t *testing.T) {
 	}
 }
 
+func TestMD033_MultilineHTMLTag(t *testing.T) {
+	// An HTML opening tag whose attributes span multiple lines must be detected.
+	// The closing ">" appears on a later line, so per-line scanning alone misses it.
+	src := "<p align=\"center\">\n    <img src=\"image.svg\"\n        alt=\"An image\"\n        height=\"800px\">\n</p>\n"
+	v := lintString(t, rules.MD033{}, src)
+	// Expect violations for <p> (line 1) and <img> (line 2).
+	if len(v) < 2 {
+		t.Errorf("expected at least 2 violations (p and img), got %d: %v", len(v), v)
+	}
+	foundImg := false
+	for _, viol := range v {
+		if viol.Line == 2 {
+			foundImg = true
+		}
+	}
+	if !foundImg {
+		t.Errorf("expected violation for <img> at line 2, got %v", v)
+	}
+}
+
 func TestMD034_Valid(t *testing.T) {
 	src := "Visit <https://example.com> for more.\n"
 	v := lintString(t, rules.MD034{}, src)
@@ -741,6 +761,26 @@ func TestMD032_LinkRefDefAfterList_Violation(t *testing.T) {
 	v := lintString(t, rules.MD032{}, src)
 	if len(v) == 0 {
 		t.Errorf("expected violation for link ref def after list without blank line, got none")
+	}
+}
+
+func TestMD032_BlockquoteList_NoFalsePositive(t *testing.T) {
+	// A list inside a blockquote must not produce false after-violations caused
+	// by the "> " prefix of the following blockquote-continuation lines.
+	src := "Before.\n\n> * Item one\n>   continuation\n>\n> * Item two\n>   continuation\n\nAfter.\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for list inside blockquote, got %v", v)
+	}
+}
+
+func TestMD032_LazyContinuationBeforeCodeBlock_Violation(t *testing.T) {
+	// A list item whose lazy-continuation text is immediately followed by a fenced
+	// code block (no blank line) should produce an after-violation.
+	src := "Intro.\n\n+ Item one,\ncontinuation\n```rust\ncode\n```\n+ Item two\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) == 0 {
+		t.Errorf("expected violation for list+lazy-continuation+code block without blank line, got none")
 	}
 }
 
@@ -1419,6 +1459,26 @@ func TestMD034_BareEmail_NoViolation(t *testing.T) {
 	v := lintString(t, rules.MD034{}, src)
 	if len(v) != 0 {
 		t.Errorf("expected no violations for bare email, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD034_BrokenLinkSyntaxURL_NoViolation(t *testing.T) {
+	// A URL that appears as the destination of a broken link ['text'(url) should
+	// not be flagged: markdownlint treats it as an attempted link, not a bare URL.
+	src := "See ['some text'(https://example.com) for details.\n"
+	v := lintString(t, rules.MD034{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for URL in broken-link syntax, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD034_ProseParenURL_Violation(t *testing.T) {
+	// A URL inside parentheses in prose (without a preceding '[') should still
+	// be flagged as a bare URL.
+	src := "Check (https://example.com) for more info.\n"
+	v := lintString(t, rules.MD034{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for URL in prose parentheses, got %d: %v", len(v), v)
 	}
 }
 
