@@ -196,7 +196,7 @@ func rowCompactTightViolations(line, ruleID string, lineNum int) (compact, tight
 func (r MD060) Check(doc *lint.Document) []lint.Violation {
 	style := r.Style
 	if style == "" {
-		style = "any"
+		style = "consistent"
 	}
 
 	mask := fencedCodeBlockMask(doc.Lines)

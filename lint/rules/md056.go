@@ -14,8 +14,14 @@ func (r MD056) Aliases() []string   { return []string{"table-column-count"} }
 func (r MD056) Description() string { return "Table column count" }
 
 func (r MD056) Check(doc *lint.Document) []lint.Violation {
-	mask := fencedCodeBlockMask(doc.Lines)
-	tables := findTables(doc.Lines, mask)
+	fenceMask := fencedCodeBlockMask(doc.Lines)
+	htmlMask := htmlBlockLineMask(doc)
+	// Combine masks: skip lines inside fenced code blocks or HTML blocks.
+	combinedMask := make([]bool, len(doc.Lines))
+	for i := range combinedMask {
+		combinedMask[i] = fenceMask[i] || htmlMask[i]
+	}
+	tables := findTables(doc.Lines, combinedMask)
 	var violations []lint.Violation
 
 	for _, t := range tables {

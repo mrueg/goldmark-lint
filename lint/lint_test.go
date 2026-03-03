@@ -715,14 +715,12 @@ func TestMD032_MultilineListItem_NoViolation(t *testing.T) {
 }
 
 func TestMD032_MultilineListItem_Violation(t *testing.T) {
-	// A list with a multiline item missing a blank line before it should produce
-	// one violation (before only). Plain text after a list is treated as a lazy
-	// continuation in CommonMark, so no "after" violation is reported –
-	// matching markdownlint behaviour.
+	// A list missing blank lines before and after it should produce two violations.
+	// Markdownlint requires blank lines both before and after every list.
 	src := "Text\n- item 1\n  continuation\n- item 2\nMore text\n"
 	v := lintString(t, rules.MD032{}, src)
-	if len(v) != 1 {
-		t.Errorf("expected 1 violation for multiline list without blank line before, got %d: %v", len(v), v)
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations for list missing blank lines before and after, got %d: %v", len(v), v)
 	}
 }
 
@@ -1373,6 +1371,15 @@ func TestMD051_Invalid(t *testing.T) {
 	}
 }
 
+func TestMD051_DuplicateHeadings_Valid(t *testing.T) {
+	// Link to second occurrence of a duplicate heading (#section-1) should be valid.
+	src := "# Section\n\n## Section\n\n[link1](#section)\n[link2](#section-1)\n"
+	v := lintString(t, rules.MD051{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for duplicate heading anchors, got %v", v)
+	}
+}
+
 func TestMD052_Valid(t *testing.T) {
 	src := "[link][ref]\n\n[ref]: https://example.com\n"
 	v := lintString(t, rules.MD052{}, src)
@@ -1611,14 +1618,12 @@ func TestMD060_Invalid(t *testing.T) {
 	}
 }
 
-func TestMD060_Default_Any(t *testing.T) {
-	// Default style is "any": data row not aligned with header → aligned violations.
+func TestMD060_Default_Consistent(t *testing.T) {
+	// Default style is "consistent": header is compact, data row is tight → 1 violation.
 	src := "| Col1 | Col2 |\n| ---- | ---- |\n|A|B|\n"
 	v := lintString(t, rules.MD060{}, src)
-	// Data row |A|B| has pipes at cols 0,2,4 while header has pipes at 0,7,14.
-	// Aligned check fails (2 misaligned pipes); aligned has fewer errors than compact (4).
-	if len(v) != 2 {
-		t.Errorf("expected 2 violations with default any style, got %d: %v", len(v), v)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation with default consistent style, got %d: %v", len(v), v)
 	}
 }
 

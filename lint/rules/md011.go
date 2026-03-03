@@ -31,8 +31,10 @@ func (r MD011) Fix(source []byte) []byte {
 func (r MD011) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	mask := fencedCodeBlockMask(doc.Lines)
+	indentedMask := indentedCodeBlockMask(doc)
+	htmlMask := htmlBlockLineMask(doc)
 	for i, line := range doc.Lines {
-		if mask[i] {
+		if mask[i] || indentedMask[i] || htmlMask[i] {
 			continue
 		}
 		// Count each occurrence, not just whether the line has a match.

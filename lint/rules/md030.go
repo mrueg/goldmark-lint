@@ -69,13 +69,15 @@ func isMultiLineListItem(lines []string, i int) bool {
 func (r MD030) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	mask := fencedCodeBlockMask(doc.Lines)
+	indentedMask := indentedCodeBlockMask(doc)
+	htmlMask := htmlBlockLineMask(doc)
 	ulSpaces := r.ulSpaces()
 	olSpaces := r.olSpaces()
 	ulMultiSpaces := r.ulMultiSpaces()
 	olMultiSpaces := r.olMultiSpaces()
 
 	for i, line := range doc.Lines {
-		if mask[i] {
+		if mask[i] || indentedMask[i] || htmlMask[i] {
 			continue
 		}
 		m := md030FullRE.FindStringSubmatch(line)
