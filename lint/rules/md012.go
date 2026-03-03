@@ -52,14 +52,18 @@ func (r MD012) Check(doc *lint.Document) []lint.Violation {
 	// Blank lines inside indented code blocks should not trigger MD012.
 	indentMask := indentedCodeBlockMask(doc)
 
+	// Build a mask for HTML block lines. Blank lines inside HTML blocks
+	// should not trigger MD012 (matching markdownlint behaviour).
+	htmlMask := htmlBlockLineMask(doc)
+
 	for i, line := range doc.Lines {
 		// Skip front-matter lines (they were stripped to blank lines by stripFrontMatterAt).
 		if i < doc.FrontMatterLines {
 			consecutive = 0
 			continue
 		}
-		if mask[i] || indentMask[i] {
-			// Reset consecutive blank count inside code blocks (treat as non-blank).
+		if mask[i] || indentMask[i] || htmlMask[i] {
+			// Reset consecutive blank count inside code/HTML blocks (treat as non-blank).
 			consecutive = 0
 			continue
 		}

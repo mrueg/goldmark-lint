@@ -52,13 +52,15 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 		anchor := headingAnchor(text)
 		count := anchorCount[anchor]
 		anchorCount[anchor]++
+		var addedAnchor string
 		if count == 0 {
-			anchors[anchor] = true
+			addedAnchor = anchor
 		} else {
-			anchors[fmt.Sprintf("%s-%d", anchor, count)] = true
+			addedAnchor = fmt.Sprintf("%s-%d", anchor, count)
 		}
+		anchors[addedAnchor] = true
 		if r.IgnoreCase {
-			anchors[strings.ToLower(anchor)] = true
+			anchors[strings.ToLower(addedAnchor)] = true
 		}
 		return ast.WalkContinue, nil
 	})
