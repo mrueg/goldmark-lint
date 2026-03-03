@@ -39,6 +39,9 @@ func (r MD059) Check(doc *lint.Document) []lint.Violation {
 		// Collect all text from the link's children (including inline elements
 		// like emphasis, strong, code spans, etc.).
 		text := strings.TrimSpace(string(inlineNodeText(link, doc.Source)))
+		// Strip trailing punctuation to match markdownlint's behaviour: a link
+		// whose text is "here." or "here," etc. is treated the same as "here".
+		text = strings.TrimRight(text, ".,;:!?")
 		for _, p := range prohibited {
 			if strings.EqualFold(text, p) {
 				violations = append(violations, lint.Violation{

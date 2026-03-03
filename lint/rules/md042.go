@@ -12,9 +12,16 @@ func (r MD042) ID() string          { return "MD042" }
 func (r MD042) Aliases() []string   { return []string{"no-empty-links"} }
 func (r MD042) Description() string { return "No empty links" }
 
-// inlineNodeLine returns the 1-based line number of an inline node by walking
-// up to the nearest ancestor block node that has source line information.
+// inlineNodeLine returns the 1-based line number of an inline node.
+// It first tries to find the exact source line via a descendant Text node,
+// then falls back to the first line of the nearest ancestor block.
 func inlineNodeLine(n ast.Node, source []byte) int {
+	// Use the first text leaf to get the actual line where the node appears,
+	// rather than the block's first line.  This is important for multi-line
+	// paragraphs where a link may appear on a line other than the first.
+	if t := firstTextLeaf(n); t != nil {
+		return countLine(source, t.Segment.Start)
+	}
 	for p := n.Parent(); p != nil; p = p.Parent() {
 		if p.Type() != ast.TypeBlock {
 			continue
@@ -22,12 +29,6 @@ func inlineNodeLine(n ast.Node, source []byte) int {
 		if p.Lines() != nil && p.Lines().Len() > 0 {
 			seg := p.Lines().At(0)
 			return countLine(source, seg.Start)
-		}
-	}
-	// Fallback: check text children
-	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-		if t, ok := c.(*ast.Text); ok {
-			return countLine(source, t.Segment.Start)
 		}
 	}
 	return 1
