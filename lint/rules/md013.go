@@ -435,6 +435,9 @@ func autoLinkSourceLine(n ast.Node, source []byte) int {
 // nearest ancestor block node that has line information.
 func blockFirstLine(n ast.Node, source []byte) int {
 	for p := n.Parent(); p != nil; p = p.Parent() {
+		if p.Type() != ast.TypeBlock {
+			continue
+		}
 		if p.Lines() != nil && p.Lines().Len() > 0 {
 			return countLine(source, p.Lines().At(0).Start)
 		}
