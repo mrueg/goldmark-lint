@@ -71,6 +71,35 @@ func (r MD034) Check(doc *lint.Document) []lint.Violation {
 		// Use FindAllStringIndex to get precise positions for multi-line text nodes.
 		for _, loc := range bareURLRE.FindAllStringIndex(text, -1) {
 			lineNum := lineBase + strings.Count(text[:loc[0]], "\n")
+			// Skip URLs that appear to be link destinations in broken link syntax.
+			// When the source has ['label'(url) or similar (a '[' that was consumed
+			// as a link opener by the parser, leaving the label as a text node), and
+			// the URL is immediately preceded by '(' in the text, markdownlint treats
+			// it as an attempted link destination rather than a bare URL.
+			// We detect this by scanning the raw source from the start of the current
+			// line up to the '(' character and checking for an unclosed '['.
+			if loc[0] > 0 && text[loc[0]-1] == '(' {
+				// Position of '(' in the original source.
+				srcParenPos := seg.Start + loc[0] - 1
+				// Find the start of the current line in the source.
+				lineStartInSrc := srcParenPos
+				for lineStartInSrc > 0 && doc.Source[lineStartInSrc-1] != '\n' {
+					lineStartInSrc--
+				}
+				// Count unclosed '[' in source from line start up to '('.
+				depth := 0
+				for _, b := range doc.Source[lineStartInSrc:srcParenPos] {
+					if b == '[' {
+						depth++
+					} else if b == ']' && depth > 0 {
+						depth--
+					}
+				}
+				if depth > 0 {
+					// Unclosed '[' before this '(url)': looks like an attempted link.
+					continue
+				}
+			}
 			addViolation(lineNum, text[loc[0]:loc[1]])
 		}
 		return ast.WalkContinue, nil

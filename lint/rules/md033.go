@@ -26,6 +26,11 @@ func (r MD033) Description() string { return "Inline HTML" }
 // Used to scan HTML block content for individual opening tags.
 var htmlOpenTagRE = regexp.MustCompile(`<([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^>]*)?/?>`)
 
+// htmlOpenTagStartRE matches the START of an opening HTML tag whose attributes
+// span multiple lines (i.e., the closing ">" is not on the same line).
+// Example: `<img src="..." (with no ">" on this line)
+var htmlOpenTagStartRE = regexp.MustCompile(`<([a-zA-Z][a-zA-Z0-9-]*)\s[^>]*$`)
+
 func (r MD033) isAllowed(tag string) bool {
 	for _, allowed := range r.AllowedElements {
 		if allowed == tag {
@@ -85,6 +90,30 @@ func (r MD033) Check(doc *lint.Document) []lint.Violation {
 						continue
 					}
 					for _, m := range htmlOpenTagRE.FindAllStringSubmatch(lineContent, -1) {
+						tag := strings.ToLower(m[1])
+						if r.isAllowed(tag) {
+							continue
+						}
+						if len(r.TableAllowedElements) > 0 && tableMask != nil {
+							lineIdx := lineNum - 1
+							if lineIdx >= 0 && lineIdx < len(tableMask) && tableMask[lineIdx] && r.isTableAllowed(tag) {
+								continue
+							}
+						}
+						violations = append(violations, lint.Violation{
+							Rule:    r.ID(),
+							Line:    lineNum,
+							Column:  1,
+							Message: fmt.Sprintf("Inline HTML [Element: %s]", tag),
+						})
+					}
+					// Also detect opening tags whose attributes span multiple lines
+					// (i.e., the closing ">" appears on a later line).  The per-line
+					// regex above requires ">" on the same line so it misses these.
+					// htmlOpenTagStartRE uses [^>]*$ which only matches when no ">"
+					// appears between the tag name and end-of-line, so it naturally
+					// skips complete tags and avoids double-reporting.
+					for _, m := range htmlOpenTagStartRE.FindAllStringSubmatch(lineContent, -1) {
 						tag := strings.ToLower(m[1])
 						if r.isAllowed(tag) {
 							continue

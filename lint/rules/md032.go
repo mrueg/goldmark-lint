@@ -224,27 +224,67 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 		}
 
 		// After check: scan source lines that follow the last list marker.
-		// In CommonMark, plain text can be "lazily continued" into the last list
-		// item paragraph, so it does not produce a violation. Only block-level
-		// elements that cannot be lazily continued (headings, blockquotes, code
-		// fences, thematic breaks, list markers, tables, HTML blocks) trigger
-		// an after violation.
+		// We track the last non-blank content line of the list (lastContentLine)
+		// so we can report the violation at that line (matching markdownlint) rather
+		// than at the first line of the last list item.
+		//
+		// For lists inside blockquotes the raw source lines all carry a leading "> "
+		// prefix.  Checking those lines with isBlockLevelBreaker would falsely flag
+		// the ">" as a new blockquote element.  We normalise them by stripping one
+		// level of the blockquote prefix before any further analysis.
+		//
+		// We also continue scanning past lazy-continuation lines (non-blank, below
+		// the list-item indent, not a block-level marker) so that we correctly detect
+		// violations like: list item → continuation text → code fence (no blank line).
+		inBlockquote := false
+		for p := list.Parent(); p != nil; p = p.Parent() {
+			if p.Kind() == ast.KindBlockquote {
+				inBlockquote = true
+				break
+			}
+		}
+		// stripBlockquotePrefix strips one level of "> " (or ">") from a line when
+		// the list is nested inside a blockquote.  Leading spaces are trimmed first
+		// so that indented blockquote markers ("   > text") are handled correctly.
+		// The relative indentation within the blockquote is preserved in the
+		// returned string, keeping md032LeadingSpaces comparisons against offset
+		// correct.
+		normalizeForAfterCheck := func(line string) string {
+			if !inBlockquote {
+				return line
+			}
+			trimmed := strings.TrimLeft(line, " \t")
+			if len(trimmed) > 0 && trimmed[0] == '>' {
+				rest := trimmed[1:]
+				if len(rest) > 0 && rest[0] == ' ' {
+					rest = rest[1:]
+				}
+				return rest
+			}
+			return line
+		}
+
 		afterViolation := -1
+		lastContentLine := lastItemLine // last non-blank line seen while scanning
 		offset := lastItem.Offset
 		for i := lastItemLineIdx + 1; i < n; i++ {
-			line := lines[i]
+			rawLine := lines[i]
+			line := normalizeForAfterCheck(rawLine)
 			if strings.TrimSpace(line) == "" || isBlankLikeForMD032(line) {
 				break
 			}
 			if md032LeadingSpaces(line) >= offset {
+				lastContentLine = i + 1 // 1-based
 				continue // continuation/indented content of the last list item
 			}
-			// Only flag if this line is a block-level marker (cannot be a lazy
-			// continuation of a paragraph inside the last list item).
 			if !isBlockLevelBreaker(line) {
-				break
+				// Lazy continuation of the last list item's paragraph: keep scanning
+				// rather than breaking, so that a subsequent block-level element on
+				// the very next line (e.g. a fenced code block) is still detected.
+				lastContentLine = i + 1 // 1-based
+				continue
 			}
-			afterViolation = lastItemLine
+			afterViolation = lastContentLine
 			break
 		}
 
