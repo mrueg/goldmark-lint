@@ -79,14 +79,6 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 					codeBlockMask[i] = true
 				}
 			}
-			// Also check indented code blocks (4 spaces or tab, after blank line).
-			if !codeBlockMask[i] && isIndentedCodeLine(line) {
-				if i > 0 && strings.TrimSpace(doc.Lines[i-1]) == "" {
-					codeBlockMask[i] = true
-				} else if i > 0 && codeBlockMask[i-1] && isIndentedCodeLine(doc.Lines[i-1]) {
-					codeBlockMask[i] = true
-				}
-			}
 		} else {
 			j := 0
 			for j < len(trimmed) && trimmed[j] == fenceChar {
@@ -96,6 +88,16 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 				inFence = false
 				codeBlockMask[i] = true
 			}
+		}
+	}
+	// Use the AST to mark indented code block lines.  The heuristic
+	// "4 spaces after a blank line" is unreliable — it incorrectly catches
+	// indented list content such as tables inside list items.  The goldmark
+	// AST (ast.CodeBlock nodes) correctly distinguishes real indented code
+	// blocks from indented table or paragraph content.
+	for i, v := range indentedCodeBlockMask(doc) {
+		if v {
+			codeBlockMask[i] = true
 		}
 	}
 
@@ -324,15 +326,19 @@ func urlLengthsPerLine(doc *lint.Document) urlLengthsResult {
 	// Also detect bare URLs (not part of link syntax) in raw lines.
 	// markdownlint exempts lines where a bare URL is the reason for exceeding
 	// the limit. We scan each line for plain http(s):// URLs, but skip URLs
-	// that are part of inline link or image syntax [text](url) — those are
-	// already captured in inlineLinkURLLens and should not contribute to the
-	// bare-URL exemption for non-link-only content.
+	// that are part of inline link or image syntax [text](url) or that appear
+	// inside HTML attribute values like src="url" — those do not qualify for
+	// the bare-URL exemption.
 	for i, line := range doc.Lines {
 		for _, loc := range md013BareURLRE.FindAllStringIndex(line, -1) {
 			start := loc[0]
-			// A URL immediately preceded by '(' is part of [text](url) syntax.
-			if start > 0 && line[start-1] == '(' {
-				continue
+			// Skip URLs that are part of [text](url) syntax (preceded by '('),
+			// or inside HTML attribute values (preceded by '"' or '\'').
+			if start > 0 {
+				prev := line[start-1]
+				if prev == '(' || prev == '"' || prev == '\'' {
+					continue
+				}
 			}
 			url := line[loc[0]:loc[1]]
 			addBare(i+1, utf8.RuneCountInString(url))
