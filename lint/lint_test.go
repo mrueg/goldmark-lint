@@ -2588,6 +2588,33 @@ func TestMD046_ListItemContinuation(t *testing.T) {
 	}
 }
 
+func TestMD046_IndentedCodeAfterRefDefInterruptingList(t *testing.T) {
+	// When a link reference definition (0-indent) interrupts an ordered list,
+	// any indented (4+ space) content that follows at the top level IS a genuine
+	// indented code block and should be flagged.
+	// However, continuation paragraphs inside a subsequent ordered list (even those
+	// with 5-space indentation matching the list content column) are NOT code blocks
+	// and must NOT be flagged.
+	//
+	// Note: markdownlint (micromark) has a known parsing divergence where ordered
+	// list items starting with numbers > 1 that appear after an indented code block
+	// are not recognised as list items.  Their continuation paragraphs are therefore
+	// misidentified as indented code blocks, causing markdownlint to produce 4 extra
+	// false-positive MD046 violations for files like text/0736-privacy-respecting-fru.md.
+	// Goldmark correctly follows the CommonMark spec and does not reproduce those
+	// false positives.
+	src := "```rust\ncode\n```\n\n  1. Item one\n\n  2. Item two\n\n[ref]: /url\n\n     Indented code\n\n  3. Item three\n\n     Continuation paragraph\n"
+	v := lintString(t, rules.MD046{}, src)
+	// Only the genuine indented code block on line 11 should be flagged.
+	// The continuation paragraph on line 15 is inside list item 3 and must NOT be flagged.
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation (indented code block only), got %d: %v", len(v), v)
+	}
+	if len(v) == 1 && v[0].Line != 11 {
+		t.Errorf("expected violation at line 11, got line %d", v[0].Line)
+	}
+}
+
 func TestMD051_UnderscoreAnchor(t *testing.T) {
 	// Heading with underscore: anchor should preserve the underscore.
 	src := "# Hello_World\n\n[link](#hello_world)\n"
