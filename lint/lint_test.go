@@ -2784,3 +2784,15 @@ func TestMD045_BlockHTMLImgMultilineWithAlt(t *testing.T) {
 		t.Errorf("expected no violation for multi-line block-level img with alt, got %v", v)
 	}
 }
+
+func TestMD013_AutoLinkInEmphasis_NoPanic(t *testing.T) {
+	// AutoLink nested inside emphasis (or other inline nodes) must not panic.
+	// The blockFirstLine helper used to call Lines() on inline parent nodes,
+	// which panics in goldmark. Regression test for that crash.
+	src := "*<https://www.example.com/autolink/inside/emphasis/that/is/very/long/indeed>*\n"
+	// Should not panic; URL exemption applies so no violations expected.
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for autolink in emphasis, got %d: %v", len(v), v)
+	}
+}
