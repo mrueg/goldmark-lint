@@ -51,9 +51,10 @@ func md052DefLabelValid(line string) bool {
 	dest := um[1]
 	open, close := 0, 0
 	for _, c := range dest {
-		if c == '(' {
+		switch c {
+		case '(':
 			open++
-		} else if c == ')' {
+		case ')':
 			close++
 		}
 	}

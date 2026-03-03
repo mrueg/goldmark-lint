@@ -369,18 +369,6 @@ func findTables(lines []string, mask []bool) [][2]int {
 	return tables
 }
 
-// isIndentedCodeLine returns true if the line is an indented code block line
-// (starts with a tab or 4+ spaces).
-func isIndentedCodeLine(line string) bool {
-	if len(line) == 0 {
-		return false
-	}
-	if line[0] == '\t' {
-		return true
-	}
-	return strings.HasPrefix(line, "    ")
-}
-
 // indentedCodeBlockMask returns a bool slice with true for each line that is
 // part of an indented code block (ast.CodeBlock). Used by MD012 to avoid
 // flagging blank lines inside indented code blocks.
