@@ -14,8 +14,10 @@ func (r MD056) Aliases() []string   { return []string{"table-column-count"} }
 func (r MD056) Description() string { return "Table column count" }
 
 func (r MD056) Check(doc *lint.Document) []lint.Violation {
-	mask := fencedCodeBlockMask(doc.Lines)
-	tables := findTables(doc.Lines, mask)
+	// Use the AST-based table detection to exclude tables inside fenced code
+	// blocks (including those nested inside blockquotes, which the line-based
+	// fencedCodeBlockMask misses) and HTML blocks.
+	tables := md060TablesFromAST(doc)
 	var violations []lint.Violation
 
 	for _, t := range tables {

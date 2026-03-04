@@ -715,14 +715,14 @@ func TestMD032_MultilineListItem_NoViolation(t *testing.T) {
 }
 
 func TestMD032_MultilineListItem_Violation(t *testing.T) {
-	// A list with a multiline item missing a blank line before it should produce
-	// one violation (before only). Plain text after a list is treated as a lazy
-	// continuation in CommonMark, so no "after" violation is reported –
-	// matching markdownlint behaviour.
+	// A list missing blank lines both before and after produces two violations.
+	// "More text" immediately after the list (without a blank line) is flagged
+	// even though CommonMark treats it as a lazy continuation — markdownlint
+	// reports the after-violation too.
 	src := "Text\n- item 1\n  continuation\n- item 2\nMore text\n"
 	v := lintString(t, rules.MD032{}, src)
-	if len(v) != 1 {
-		t.Errorf("expected 1 violation for multiline list without blank line before, got %d: %v", len(v), v)
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations (before and after) for list without blank lines, got %d: %v", len(v), v)
 	}
 }
 
@@ -1373,6 +1373,25 @@ func TestMD051_Invalid(t *testing.T) {
 	}
 }
 
+func TestMD051_DuplicateHeadings_Valid(t *testing.T) {
+	// Link to second occurrence of a duplicate heading (#section-1) should be valid.
+	src := "# Section\n\n## Section\n\n[link1](#section)\n[link2](#section-1)\n"
+	v := lintString(t, rules.MD051{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for duplicate heading anchors, got %v", v)
+	}
+}
+
+func TestMD051_UnicodeHeading_NoViolation(t *testing.T) {
+	// Links to headings with Unicode characters must not be flagged as broken.
+	// GitHub generates anchors that preserve Unicode letters (e.g. "ü" stays "ü").
+	src := "## Über alles\n\n[link](#über-alles)\n"
+	v := lintString(t, rules.MD051{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for Unicode heading anchor, got %v", v)
+	}
+}
+
 func TestMD052_Valid(t *testing.T) {
 	src := "[link][ref]\n\n[ref]: https://example.com\n"
 	v := lintString(t, rules.MD052{}, src)
@@ -1612,11 +1631,12 @@ func TestMD060_Invalid(t *testing.T) {
 }
 
 func TestMD060_Default_Any(t *testing.T) {
-	// Default style is "any": data row not aligned with header → aligned violations.
+	// Default style is "any": a data row with tight cells produces violations
+	// for the style that minimises the violation count (here: aligned, since the
+	// delimiter row aligns with the header and only the data row contributes 2
+	// mis-aligned pipe positions).
 	src := "| Col1 | Col2 |\n| ---- | ---- |\n|A|B|\n"
 	v := lintString(t, rules.MD060{}, src)
-	// Data row |A|B| has pipes at cols 0,2,4 while header has pipes at 0,7,14.
-	// Aligned check fails (2 misaligned pipes); aligned has fewer errors than compact (4).
 	if len(v) != 2 {
 		t.Errorf("expected 2 violations with default any style, got %d: %v", len(v), v)
 	}
@@ -2423,6 +2443,36 @@ func TestMD013_URLExemption_LongLineWithText(t *testing.T) {
 	}
 }
 
+func TestMD013_TableRowWithLink_URLIsOnlyCause_NoViolation(t *testing.T) {
+	// A table row that exceeds the limit only because of an inline link URL
+	// should be exempt (the URL cannot be reformatted).
+	url := strings.Repeat("x", 70)
+	src := "| Short | [text](https://" + url + ") |\n| --- | --- |\n| a | b |\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	for _, viol := range v {
+		if viol.Line == 1 {
+			t.Errorf("expected table row with URL as only cause to be exempt, got %v", viol)
+		}
+	}
+}
+
+func TestMD013_TableRowWithLink_TextAlsoLong_Violation(t *testing.T) {
+	// A table row that is long even after removing the link URL should be
+	// reported — the long text is the reformattable part.
+	longText := strings.Repeat("a", 81)
+	src := "| " + longText + " | [x](https://url) |\n| --- | --- |\n| a | b |\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	found := false
+	for _, viol := range v {
+		if viol.Line == 1 {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected violation for table row long even without URL, got none")
+	}
+}
+
 func TestMD022_LinesAboveArray(t *testing.T) {
 	// Per-level: h1 needs 0 blank lines above (since it's first), h2 needs 2.
 	src := "# Heading 1\n\n\n## Heading 2\n\nText\n"
@@ -2794,5 +2844,73 @@ func TestMD013_AutoLinkInEmphasis_NoPanic(t *testing.T) {
 	v := lintString(t, rules.MD013{LineLength: 80}, src)
 	if len(v) != 0 {
 		t.Errorf("expected no violations for autolink in emphasis, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD030_ThematicBreakNoViolation(t *testing.T) {
+	// Thematic breaks that start with -, *, or _ must not be reported as
+	// list-marker spacing violations.
+	src := "*  *  *\n\n-  -  -\n\n_ _ _\n"
+	v := lintString(t, rules.MD030{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for thematic breaks, got %v", v)
+	}
+}
+
+func TestMD028_IndentedCodeBlockIgnored(t *testing.T) {
+	// Lines inside an indented code block that start with '>' must not be
+	// treated as blockquote lines by MD028.
+	src := "    > not a blockquote\n\n    > also not\n"
+	v := lintString(t, rules.MD028{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for > inside indented code block, got %v", v)
+	}
+}
+
+func TestMD032_PlainTextAfterList_Violation(t *testing.T) {
+	// Plain text immediately following a list without a blank line must be
+	// flagged — matching markdownlint behaviour.
+	src := "- item 1\n- item 2\nplain text\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) == 0 {
+		t.Errorf("expected violation for plain text after list without blank line, got none")
+	}
+}
+
+func TestMD060_Default_AnyNoViolation(t *testing.T) {
+	// Default "any" style: all rows compact with perfectly aligned pipes → no violations.
+	src := "| Col1 | Col2 |\n| ---- | ---- |\n| A | B |\n"
+	v := lintString(t, rules.MD060{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for uniform compact table, got %v", v)
+	}
+}
+
+func TestMD011_ReversedLinkInCodeSpan_NoViolation(t *testing.T) {
+	// A reversed-link pattern inside a code span must not be reported.
+	src := "Use `(text)[url]` in your docs.\n"
+	v := lintString(t, rules.MD011{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for reversed link inside code span, got %v", v)
+	}
+}
+
+func TestMD056_IndentedCodeBlockIgnored(t *testing.T) {
+	// A table-like pattern inside an indented code block must not be reported.
+	src := "    Col1 | Col2\n    ---- | ----\n    A | B\n"
+	v := lintString(t, rules.MD056{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for table inside indented code block, got %v", v)
+	}
+}
+
+func TestMD056_FencedCodeBlockInBlockquoteIgnored(t *testing.T) {
+	// A table-like pattern inside a fenced code block that is itself inside a
+	// blockquote must not be reported (the line-based fencedCodeBlockMask misses
+	// such fences because they are preceded by "> ").
+	src := "> ```markdown\n> | A | B |\n> | - | - |\n> | a | b | extra |\n> ```\n"
+	v := lintString(t, rules.MD056{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for table inside fenced code block in blockquote, got %v", v)
 	}
 }

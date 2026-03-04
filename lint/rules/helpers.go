@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/mrueg/goldmark-lint/lint"
 	"github.com/yuin/goldmark/ast"
@@ -221,6 +222,37 @@ func isTableRow(line string) bool {
 	return strings.Contains(line, "|")
 }
 
+// isThematicBreakLine returns true if line is a CommonMark thematic break:
+// 3 or more -, *, or _ characters optionally separated by spaces, with at
+// most 3 leading spaces.  This is used to distinguish thematic-break lines
+// from list-item markers (both start with -, *, or +).
+func isThematicBreakLine(line string) bool {
+	trimmed := strings.TrimLeft(line, " \t")
+	if len(line)-len(trimmed) > 3 {
+		return false // more than 3 leading spaces → indented code
+	}
+	if len(trimmed) < 3 {
+		return false
+	}
+	ch := trimmed[0]
+	if ch != '-' && ch != '*' && ch != '_' {
+		return false
+	}
+	count := 0
+	for i := 0; i < len(trimmed); i++ {
+		c := trimmed[i]
+		switch c {
+		case ch:
+			count++
+		case ' ', '\t':
+			// allowed between markers
+		default:
+			return false
+		}
+	}
+	return count >= 3
+}
+
 // lastTextStopInInline returns the highest Segment.Stop value found among all
 // *ast.Text descendants of n, searching recursively. Returns 0 if none found.
 func lastTextStopInInline(n ast.Node) int {
@@ -247,7 +279,7 @@ func headingAnchor(text string) string {
 	for _, r := range result {
 		if r == ' ' || r == '-' {
 			b.WriteRune('-')
-		} else if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+		} else if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
 			b.WriteRune(r)
 		}
 	}

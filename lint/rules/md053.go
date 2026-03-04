@@ -36,8 +36,16 @@ func (r MD053) Check(doc *lint.Document) []lint.Violation {
 	htmlMask := htmlBlockLineMask(doc)
 	ignored := r.ignoredDefs()
 
-	skipLine := func(i int) bool {
+	// skipDefLine skips lines that cannot contain link reference definitions:
+	// fenced code blocks, indented code blocks, and HTML blocks.
+	skipDefLine := func(i int) bool {
 		return mask[i] || indentedMask[i] || htmlMask[i]
+	}
+	// skipUsageLine skips lines inside code blocks only. HTML blocks are NOT
+	// skipped here because markdownlint counts bracket patterns inside HTML
+	// blocks as reference usages.
+	skipUsageLine := func(i int) bool {
+		return mask[i] || indentedMask[i]
 	}
 
 	// Collect definitions and their line numbers.
@@ -50,7 +58,7 @@ func (r MD053) Check(doc *lint.Document) []lint.Violation {
 	var defs []defEntry
 	seen := make(map[string]bool) // first-seen label set for duplicate detection
 	for i, line := range doc.Lines {
-		if skipLine(i) {
+		if skipDefLine(i) {
 			continue
 		}
 		if !md052DefLabelValid(line) {
@@ -69,7 +77,7 @@ func (r MD053) Check(doc *lint.Document) []lint.Violation {
 	// Collect used labels.
 	used := make(map[string]bool)
 	for i, line := range doc.Lines {
-		if skipLine(i) {
+		if skipUsageLine(i) {
 			continue
 		}
 		// Skip link reference definition lines themselves, but NOT footnote

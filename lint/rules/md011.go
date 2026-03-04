@@ -31,12 +31,17 @@ func (r MD011) Fix(source []byte) []byte {
 func (r MD011) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	mask := fencedCodeBlockMask(doc.Lines)
+	indentedMask := indentedCodeBlockMask(doc)
+	htmlMask := htmlBlockLineMask(doc)
 	for i, line := range doc.Lines {
-		if mask[i] {
+		if mask[i] || indentedMask[i] || htmlMask[i] {
 			continue
 		}
+		// Blank out inline code spans to avoid false positives from
+		// reversed-link-like patterns inside backtick code spans.
+		checkLine := blankCodeSpans(line)
 		// Count each occurrence, not just whether the line has a match.
-		count := len(reversedLinkRE.FindAllString(line, -1))
+		count := len(reversedLinkRE.FindAllString(checkLine, -1))
 		for range count {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
