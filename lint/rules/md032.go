@@ -54,6 +54,32 @@ func listItemFirstLine(item *ast.ListItem, source []byte) int {
 	return 0
 }
 
+// listItemLastLine returns the 1-based source line number of the last content
+// line of the given list item, accounting for lazy continuation lines and nested
+// content (nested lists, multi-paragraph items, etc.).
+func listItemLastLine(item *ast.ListItem, source []byte) int {
+	return nodeLastSourceLine(item, source)
+}
+
+// nodeLastSourceLine recursively finds the last 1-based source line of a node
+// by examining the node's own Lines() segments and then descending into its
+// last child.
+func nodeLastSourceLine(n ast.Node, source []byte) int {
+	maxLine := 0
+	if lines := n.Lines(); lines != nil && lines.Len() > 0 {
+		seg := lines.At(lines.Len() - 1)
+		if line := countLine(source, seg.Start); line > maxLine {
+			maxLine = line
+		}
+	}
+	if last := n.LastChild(); last != nil {
+		if childLine := nodeLastSourceLine(last, source); childLine > maxLine {
+			maxLine = childLine
+		}
+	}
+	return maxLine
+}
+
 // md032LeadingSpaces counts the number of leading space/tab characters in line.
 // Tabs are counted as a single unit (not expanded).
 func md032LeadingSpaces(line string) int {
@@ -162,7 +188,18 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 			// Cannot determine the last item's position; skip this list.
 			return ast.WalkContinue, nil
 		}
-		lastItemLineIdx := lastItemLine - 1 // 0-based
+
+		// Find the actual last source line of the last list item (accounting for
+		// lazy continuation lines that goldmark includes in the ListItem's paragraph).
+		// Using only firstLine would cause false after-violations for patterns like:
+		//   - Description:
+		//   `code`
+		// where "`code`" is a lazy continuation of the list item.
+		lastActualLine := listItemLastLine(lastItem, doc.Source)
+		if lastActualLine < lastItemLine {
+			lastActualLine = lastItemLine
+		}
+		lastActualLineIdx := lastActualLine - 1 // 0-based
 
 		// Before check: the line immediately preceding the first list item must
 		// be blank (or the list must be at the start of the document).
