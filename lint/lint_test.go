@@ -715,12 +715,14 @@ func TestMD032_MultilineListItem_NoViolation(t *testing.T) {
 }
 
 func TestMD032_MultilineListItem_Violation(t *testing.T) {
-	// A list missing blank lines before and after it should produce two violations.
-	// Markdownlint requires blank lines both before and after every list.
+	// A list with a multiline item missing a blank line before it should produce
+	// one violation (before only). Plain text after a list is treated as a lazy
+	// continuation in CommonMark, so no "after" violation is reported –
+	// matching markdownlint behaviour.
 	src := "Text\n- item 1\n  continuation\n- item 2\nMore text\n"
 	v := lintString(t, rules.MD032{}, src)
-	if len(v) != 2 {
-		t.Errorf("expected 2 violations for list missing blank lines before and after, got %d: %v", len(v), v)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for multiline list without blank line before, got %d: %v", len(v), v)
 	}
 }
 
@@ -1618,12 +1620,14 @@ func TestMD060_Invalid(t *testing.T) {
 	}
 }
 
-func TestMD060_Default_Consistent(t *testing.T) {
-	// Default style is "consistent": header is compact, data row is tight → 1 violation.
+func TestMD060_Default_Any(t *testing.T) {
+	// Default style is "any": a data row with misaligned pipes produces violations
+	// for the style that minimises the violation count (here: aligned, since the
+	// data row has 2 pipes out of position vs 4 compact-style errors).
 	src := "| Col1 | Col2 |\n| ---- | ---- |\n|A|B|\n"
 	v := lintString(t, rules.MD060{}, src)
-	if len(v) != 1 {
-		t.Errorf("expected 1 violation with default consistent style, got %d: %v", len(v), v)
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations with default any style, got %d: %v", len(v), v)
 	}
 }
 

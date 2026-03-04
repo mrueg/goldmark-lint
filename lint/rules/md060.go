@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	gast "github.com/yuin/goldmark/ast"
+	extast "github.com/yuin/goldmark/extension/ast"
 )
 
 // MD060 checks table column style consistency.
@@ -196,11 +198,14 @@ func rowCompactTightViolations(line, ruleID string, lineNum int) (compact, tight
 func (r MD060) Check(doc *lint.Document) []lint.Violation {
 	style := r.Style
 	if style == "" {
-		style = "consistent"
+		style = "any"
 	}
 
-	mask := fencedCodeBlockMask(doc.Lines)
-	tables := findTables(doc.Lines, mask)
+	// Use goldmark's AST to find tables rather than a line-based heuristic.
+	// The GFM table extension parses Table/TableHeader/TableRow nodes with
+	// accurate line-number information, and automatically excludes tables that
+	// appear inside fenced code blocks or HTML blocks.
+	tables := md060TablesFromAST(doc)
 	var violations []lint.Violation
 
 	switch style {
@@ -276,4 +281,72 @@ func (r MD060) Check(doc *lint.Document) []lint.Violation {
 		}
 	}
 	return violations
+}
+
+// md060TablesFromAST collects table line ranges from the goldmark AST.
+// It returns a slice of [2]int{startLineIdx, endLineIdx} (0-based) where
+// startLineIdx is the header row and endLineIdx is the last data row.
+// The delimiter row is always at startLineIdx+1 (it is consumed by the parser
+// and does not appear as an explicit AST node).
+// Using the AST instead of a line-based heuristic means tables inside fenced
+// code blocks and HTML blocks are automatically excluded.
+func md060TablesFromAST(doc *lint.Document) [][2]int {
+	var tables [][2]int
+	_ = gast.Walk(doc.AST, func(n gast.Node, entering bool) (gast.WalkStatus, error) {
+		if !entering {
+			return gast.WalkContinue, nil
+		}
+		tbl, ok := n.(*extast.Table)
+		if !ok {
+			return gast.WalkContinue, nil
+		}
+
+		headerLineIdx := -1
+		lastDataLineIdx := -1
+
+		for child := tbl.FirstChild(); child != nil; child = child.NextSibling() {
+			lineNum := md060RowLineNum(child, doc.Source)
+			if lineNum <= 0 {
+				continue
+			}
+			lineIdx := lineNum - 1 // convert to 0-based
+			switch child.(type) {
+			case *extast.TableHeader:
+				headerLineIdx = lineIdx
+			case *extast.TableRow:
+				lastDataLineIdx = lineIdx
+			}
+		}
+
+		if headerLineIdx < 0 {
+			return gast.WalkContinue, nil
+		}
+		// endLineIdx is the last data row, or the delimiter row if there are no
+		// data rows (an unusual but syntactically valid table).
+		endLineIdx := lastDataLineIdx
+		if endLineIdx < 0 {
+			endLineIdx = headerLineIdx + 1 // delimiter row only
+		}
+		tables = append(tables, [2]int{headerLineIdx, endLineIdx})
+		return gast.WalkContinue, nil
+	})
+	return tables
+}
+
+// md060RowLineNum returns the 1-based source line number of a table header or
+// row node by inspecting the first text descendant of its first cell.
+func md060RowLineNum(n gast.Node, source []byte) int {
+	for cell := n.FirstChild(); cell != nil; cell = cell.NextSibling() {
+		// Check if the cell has Lines (some cells have direct line segments).
+		if cell.Lines().Len() > 0 {
+			return countLine(source, cell.Lines().At(0).Start)
+		}
+		// Otherwise look for the first Text descendant.
+		for c := cell.FirstChild(); c != nil; c = c.NextSibling() {
+			if t, ok := c.(*gast.Text); ok {
+				return countLine(source, t.Segment.Start)
+			}
+		}
+	}
+	return 0
 }

@@ -277,10 +277,13 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 				lastContentLine = i + 1 // 1-based
 				continue // continuation/indented content of the last list item
 			}
-			// Any non-blank, non-continuation line immediately following the list
-			// (without a blank line) is a violation, whether it is a block-level
-			// element or plain text (lazy continuation). This matches markdownlint
-			// behaviour which requires a blank line after every list.
+			if !isBlockLevelBreaker(line) {
+				// Lazy continuation of the last list item's paragraph: keep scanning
+				// rather than breaking, so that a subsequent block-level element on
+				// the very next line (e.g. a fenced code block) is still detected.
+				lastContentLine = i + 1 // 1-based
+				continue
+			}
 			afterViolation = lastContentLine
 			break
 		}
