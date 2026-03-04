@@ -2903,3 +2903,14 @@ func TestMD056_IndentedCodeBlockIgnored(t *testing.T) {
 		t.Errorf("expected no violations for table inside indented code block, got %v", v)
 	}
 }
+
+func TestMD056_FencedCodeBlockInBlockquoteIgnored(t *testing.T) {
+	// A table-like pattern inside a fenced code block that is itself inside a
+	// blockquote must not be reported (the line-based fencedCodeBlockMask misses
+	// such fences because they are preceded by "> ").
+	src := "> ```markdown\n> | A | B |\n> | - | - |\n> | a | b | extra |\n> ```\n"
+	v := lintString(t, rules.MD056{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for table inside fenced code block in blockquote, got %v", v)
+	}
+}

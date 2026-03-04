@@ -14,16 +14,10 @@ func (r MD056) Aliases() []string   { return []string{"table-column-count"} }
 func (r MD056) Description() string { return "Table column count" }
 
 func (r MD056) Check(doc *lint.Document) []lint.Violation {
-	fenceMask := fencedCodeBlockMask(doc.Lines)
-	htmlMask := htmlBlockLineMask(doc)
-	indentedMask := indentedCodeBlockMask(doc)
-	// Combine masks: skip lines inside fenced code blocks, indented code blocks,
-	// or HTML blocks.
-	combinedMask := make([]bool, len(doc.Lines))
-	for i := range combinedMask {
-		combinedMask[i] = fenceMask[i] || htmlMask[i] || indentedMask[i]
-	}
-	tables := findTables(doc.Lines, combinedMask)
+	// Use the AST-based table detection to exclude tables inside fenced code
+	// blocks (including those nested inside blockquotes, which the line-based
+	// fencedCodeBlockMask misses) and HTML blocks.
+	tables := md060TablesFromAST(doc)
 	var violations []lint.Violation
 
 	for _, t := range tables {
