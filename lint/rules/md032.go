@@ -16,7 +16,7 @@ func (r MD032) Aliases() []string   { return []string{"blanks-around-lists"} }
 func (r MD032) Description() string { return "Lists should be surrounded by blank lines" }
 
 // listItemRE matches unordered or ordered list item lines.
-var listItemRE = regexp.MustCompile(`^( *)(?:[-*+]|\d+\.) `)
+var listItemRE = regexp.MustCompile(`^( *)(?:[-*+]|\d+[.)]) `)
 
 // md032HTMLCommentRE matches HTML comments (used for isBlankLikeForMD032).
 var md032HTMLCommentRE = regexp.MustCompile(`<!--.*?-->`)
@@ -57,9 +57,12 @@ func isBlockLevelBreaker(line string) bool {
 	case '|':
 		return true // GFM table row
 	}
-	// Fenced code block
-	if strings.HasPrefix(line, "```") || strings.HasPrefix(line, "~~~") {
-		return true
+	// Fenced code block (CommonMark allows up to 3 spaces of indentation)
+	trimmedForFence := strings.TrimLeft(line, " ")
+	if len(line)-len(trimmedForFence) <= 3 {
+		if strings.HasPrefix(trimmedForFence, "```") || strings.HasPrefix(trimmedForFence, "~~~") {
+			return true
+		}
 	}
 	// Thematic break or setext heading underline (---, ===, ***, ___)
 	trimmed := strings.TrimSpace(line)

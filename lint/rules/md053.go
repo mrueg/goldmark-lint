@@ -58,6 +58,13 @@ func (r MD053) Check(doc *lint.Document) []lint.Violation {
 		}
 		if m := md052DefRE.FindStringSubmatch(line); m != nil {
 			label := strings.ToLower(m[1])
+			// Only include definitions that goldmark actually parsed as link
+			// reference definitions. Lines that look like definitions but appear
+			// inside paragraphs (no blank line before them) are not valid
+			// link reference definitions per CommonMark and should not be flagged.
+			if _, exists := doc.LinkRefs[label]; !exists {
+				continue
+			}
 			defs = append(defs, defEntry{label, i + 1})
 		}
 	}
@@ -91,6 +98,35 @@ func (r MD053) Check(doc *lint.Document) []lint.Violation {
 		}
 		// Shortcut references.
 		for _, m := range md052ShortcutRE.FindAllStringSubmatch(line, -1) {
+			used[strings.ToLower(m[1])] = true
+		}
+	}
+
+	// Also scan adjacent line pairs joined with a space. CommonMark allows
+	// link reference labels to span at most one line ending, so a label like
+	// [Foo\nBar] is used across two lines. Joining each consecutive pair
+	// catches such multi-line usages that the per-line scan above misses.
+	for i := 0; i < len(doc.Lines)-1; i++ {
+		if skipLine(i) || skipLine(i+1) {
+			continue
+		}
+		// Skip pairs where either line is a definition — the definition's label
+		// must not be counted as a usage of itself.
+		if (md052DefLabelValid(doc.Lines[i]) && md052DefRE.MatchString(doc.Lines[i])) ||
+			(md052DefLabelValid(doc.Lines[i+1]) && md052DefRE.MatchString(doc.Lines[i+1])) {
+			continue
+		}
+		joined := strings.TrimRight(doc.Lines[i], " \t") + " " + strings.TrimLeft(doc.Lines[i+1], " \t")
+		for _, m := range md052FullRE.FindAllStringSubmatch(joined, -1) {
+			label := strings.ToLower(m[1])
+			if label != "" {
+				used[label] = true
+			}
+		}
+		for _, m := range md052CollapsedRE.FindAllStringSubmatch(joined, -1) {
+			used[strings.ToLower(m[1])] = true
+		}
+		for _, m := range md052ShortcutRE.FindAllStringSubmatch(joined, -1) {
 			used[strings.ToLower(m[1])] = true
 		}
 	}

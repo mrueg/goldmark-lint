@@ -41,6 +41,7 @@ func (r MD022) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	lines := doc.Lines
 	n := len(lines)
+	htmlMask := htmlBlockLineMask(doc)
 
 	_ = ast.Walk(doc.AST, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
@@ -90,12 +91,28 @@ func (r MD022) Check(doc *lint.Document) []lint.Violation {
 		if lineIdx > 0 {
 			blankAbove := countBlankLinesAbove(lines, lineIdx)
 			if blankAbove < linesAbove {
-				violations = append(violations, lint.Violation{
-					Rule:    r.ID(),
-					Line:    lineNum,
-					Column:  1,
-					Message: "Headings should be surrounded by blank lines [Expected: 1; Actual: 0; Above]",
-				})
+				// Suppress the "above" violation if the nearest non-blank preceding line
+				// is an HTML block (e.g. <!-- comment -->).  Markdownlint does not require
+				// a blank line between an HTML comment block and the heading below it.
+				precededByHTML := false
+				for j := lineIdx - 1; j >= 0; j-- {
+					if strings.TrimSpace(lines[j]) == "" {
+						break
+					}
+					if htmlMask[j] {
+						precededByHTML = true
+						break
+					}
+					break
+				}
+				if !precededByHTML {
+					violations = append(violations, lint.Violation{
+						Rule:    r.ID(),
+						Line:    lineNum,
+						Column:  1,
+						Message: "Headings should be surrounded by blank lines [Expected: 1; Actual: 0; Above]",
+					})
+				}
 			}
 		}
 
