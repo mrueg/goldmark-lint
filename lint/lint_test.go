@@ -2914,3 +2914,22 @@ func TestMD056_FencedCodeBlockInBlockquoteIgnored(t *testing.T) {
 		t.Errorf("expected no violations for table inside fenced code block in blockquote, got %v", v)
 	}
 }
+
+func TestMD056_EscapedPipeNoViolation(t *testing.T) {
+	// A row with an escaped pipe (\|) must not be counted as having an extra
+	// cell — the \| is cell content, not a column separator.
+	src := "| Code | Desc |\n| ---- | ---- |\n| `a \\| b` | union |\n"
+	v := lintString(t, rules.MD056{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for row with escaped pipe, got %v", v)
+	}
+}
+
+func TestMD056_CodeSpanWithPipeNoViolation(t *testing.T) {
+	// A pipe inside a code span must not be treated as a cell separator.
+	src := "| Syntax | Semantics |\n| ------ | --------- |\n| `|` operator | bitwise OR |\n"
+	v := lintString(t, rules.MD056{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for row with pipe in code span, got %v", v)
+	}
+}

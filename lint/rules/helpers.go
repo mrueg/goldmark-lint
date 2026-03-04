@@ -287,7 +287,13 @@ func headingAnchor(text string) string {
 }
 
 // countTableCells counts the cells in a table row.
+// It handles escaped pipes (\|) and code spans (`...`) that may contain
+// pipe characters, which must not be treated as cell separators.
 func countTableCells(line string) int {
+	// Replace escaped pipes so they don't count as separators.
+	line = strings.ReplaceAll(line, `\|`, "\x00")
+	// Blank out code spans so pipes inside them don't count.
+	line = blankCodeSpans(line)
 	trimmed := strings.TrimPrefix(strings.TrimSpace(line), "|")
 	trimmed = strings.TrimSuffix(trimmed, "|")
 	return len(strings.Split(trimmed, "|"))
