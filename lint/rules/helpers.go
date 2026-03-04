@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/mrueg/goldmark-lint/lint"
 	"github.com/yuin/goldmark/ast"
@@ -247,16 +248,23 @@ func headingAnchor(text string) string {
 	for _, r := range result {
 		if r == ' ' || r == '-' {
 			b.WriteRune('-')
-		} else if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+		} else if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
 			b.WriteRune(r)
 		}
 	}
 	return b.String()
 }
 
-// countTableCells counts the cells in a table row.
+// countTableCells counts the cells in a GFM table row. It ignores pipe
+// characters that are inside backtick code spans or are escaped with a
+// backslash (\|), matching markdownlint's behaviour.
 func countTableCells(line string) int {
-	trimmed := strings.TrimPrefix(strings.TrimSpace(line), "|")
+	// Blank out pipe characters inside code spans and replace \| with a
+	// placeholder so they are not counted as cell separators.
+	processed := blankInlineCodeSpans(line)
+	// Replace backslash-escaped pipes outside code spans.
+	processed = strings.ReplaceAll(processed, `\|`, "__")
+	trimmed := strings.TrimPrefix(strings.TrimSpace(processed), "|")
 	trimmed = strings.TrimSuffix(trimmed, "|")
 	return len(strings.Split(trimmed, "|"))
 }
@@ -412,4 +420,54 @@ func htmlBlockLineMask(doc *lint.Document) []bool {
 		return ast.WalkContinue, nil
 	})
 	return mask
+}
+
+// blankInlineCodeSpans returns a copy of line with the content of every inline
+// code span replaced by underscore characters of the same byte length. This
+// prevents patterns inside code spans from being matched by rules that operate
+// on raw line text (e.g. MD011 reversed-link detection).
+func blankInlineCodeSpans(line string) string {
+b := []byte(line)
+i := 0
+for i < len(b) {
+if b[i] != '`' {
+i++
+continue
+}
+// Count opening backtick run.
+start := i
+for i < len(b) && b[i] == '`' {
+i++
+}
+tickLen := i - start
+contentStart := i
+// Search for matching closing backtick run.
+found := false
+j := i
+for j < len(b) {
+if b[j] == '`' {
+k := j
+for k < len(b) && b[k] == '`' {
+k++
+}
+if k-j == tickLen {
+// Blank out content between backticks.
+for x := contentStart; x < j; x++ {
+b[x] = '_'
+}
+i = k
+found = true
+break
+}
+j = k
+} else {
+j++
+}
+}
+if !found {
+// Unclosed code span — leave the rest of the line unchanged.
+break
+}
+}
+return string(b)
 }

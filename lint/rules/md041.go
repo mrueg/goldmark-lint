@@ -62,8 +62,14 @@ func (r MD041) Check(doc *lint.Document) []lint.Violation {
 		}}
 	}
 
+	htmlMask := htmlBlockLineMask(doc)
 	for i, line := range doc.Lines {
 		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		// Skip HTML block lines (e.g. <!-- comment --> at the top of the file).
+		// Markdownlint skips these and reports the violation at the first real content line.
+		if htmlMask[i] {
 			continue
 		}
 		if strings.HasPrefix(line, prefix) {

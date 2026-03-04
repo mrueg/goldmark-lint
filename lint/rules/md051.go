@@ -68,9 +68,12 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 
 	var violations []lint.Violation
 	mask := fencedCodeBlockMask(doc.Lines)
-	// Build an extended mask that also covers indented code block lines.
+	htmlMask := htmlBlockLineMask(doc)
+	// Build an extended mask that also covers indented code block lines and HTML blocks.
 	extMask := make([]bool, len(mask))
-	copy(extMask, mask)
+	for i := range extMask {
+		extMask[i] = mask[i] || htmlMask[i]
+	}
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
