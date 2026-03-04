@@ -1382,6 +1382,16 @@ func TestMD051_DuplicateHeadings_Valid(t *testing.T) {
 	}
 }
 
+func TestMD051_UnicodeHeading_NoViolation(t *testing.T) {
+	// Links to headings with Unicode characters must not be flagged as broken.
+	// GitHub generates anchors that preserve Unicode letters (e.g. "ü" stays "ü").
+	src := "## Über alles\n\n[link](#über-alles)\n"
+	v := lintString(t, rules.MD051{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for Unicode heading anchor, got %v", v)
+	}
+}
+
 func TestMD052_Valid(t *testing.T) {
 	src := "[link][ref]\n\n[ref]: https://example.com\n"
 	v := lintString(t, rules.MD052{}, src)
@@ -2430,6 +2440,36 @@ func TestMD013_URLExemption_LongLineWithText(t *testing.T) {
 	v := lintString(t, rules.MD013{LineLength: 80}, src)
 	if len(v) != 1 {
 		t.Errorf("expected 1 violation when line is long even without URL, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD013_TableRowWithLink_URLIsOnlyCause_NoViolation(t *testing.T) {
+	// A table row that exceeds the limit only because of an inline link URL
+	// should be exempt (the URL cannot be reformatted).
+	url := strings.Repeat("x", 70)
+	src := "| Short | [text](https://" + url + ") |\n| --- | --- |\n| a | b |\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	for _, viol := range v {
+		if viol.Line == 1 {
+			t.Errorf("expected table row with URL as only cause to be exempt, got %v", viol)
+		}
+	}
+}
+
+func TestMD013_TableRowWithLink_TextAlsoLong_Violation(t *testing.T) {
+	// A table row that is long even after removing the link URL should be
+	// reported — the long text is the reformattable part.
+	longText := strings.Repeat("a", 81)
+	src := "| " + longText + " | [x](https://url) |\n| --- | --- |\n| a | b |\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	found := false
+	for _, viol := range v {
+		if viol.Line == 1 {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected violation for table row long even without URL, got none")
 	}
 }
 

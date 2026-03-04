@@ -148,7 +148,6 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 	// resolved Link or Image node — markdownlint exempts ALL such table rows.
 	var linkOnlyLines map[int]bool
 	var linkRefDefLines map[int]bool
-	var tableRowLinkLines map[int]bool
 	if !r.Stern {
 		linkOnlyLines = md013LinkOnlyLines(doc)
 		linkRefDefLines = make(map[int]bool)
@@ -157,21 +156,6 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 				linkRefDefLines[i] = true
 			}
 		}
-		// Collect 1-based line numbers of table rows that contain a link or image.
-		tableRowLinkLines = make(map[int]bool)
-		_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-			if !entering {
-				return ast.WalkContinue, nil
-			}
-			if n.Kind() != ast.KindLink && n.Kind() != ast.KindImage {
-				return ast.WalkContinue, nil
-			}
-			lineNum := inlineLinkLine(n, doc.Source)
-			if lineNum > 0 && lineNum <= len(tableMask) && tableMask[lineNum-1] {
-				tableRowLinkLines[lineNum] = true
-			}
-			return ast.WalkContinue, nil
-		})
 	}
 
 	var violations []lint.Violation
@@ -219,18 +203,11 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 			if !r.Stern && linkOnlyLines[i+1] && len(urlLens.inlineLinkURLLens[i+1]) > 0 {
 				continue
 			}
-			// Table rows that contain any resolved link or image node are exempt.
-			// Markdownlint skips the line-length check for all such rows regardless
-			// of URL type (inline URL or reference link resolved via a definition).
-			if !r.Stern && tableMask[i] && tableRowLinkLines[i+1] {
-				continue
-			}
-			// URL exemption for non-table, non-link-only lines: skip lines that
-			// exceed the limit only due to a bare URL or auto-link.  Inline link
-			// URLs embedded in "[text](url): description" style content do NOT
-			// grant an exemption here — the description text is the reformattable
-			// part that should be shortened.
-			if !r.Stern && lineExemptByURL(urlLens.bareURLLens[i+1], lineLen, limit) {
+			// URL exemption: skip lines that exceed the limit only due to a URL.
+			// This covers bare URLs, auto-links, and inline link destination URLs
+			// embedded in [text](url) syntax (including inside table cells).
+			if !r.Stern && (lineExemptByURL(urlLens.bareURLLens[i+1], lineLen, limit) ||
+				lineExemptByURL(urlLens.inlineLinkURLLens[i+1], lineLen, limit)) {
 				continue
 			}
 			violations = append(violations, lint.Violation{

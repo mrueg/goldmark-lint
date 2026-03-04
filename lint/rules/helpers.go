@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/mrueg/goldmark-lint/lint"
 	"github.com/yuin/goldmark/ast"
@@ -278,7 +279,7 @@ func headingAnchor(text string) string {
 	for _, r := range result {
 		if r == ' ' || r == '-' {
 			b.WriteRune('-')
-		} else if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+		} else if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
 			b.WriteRune(r)
 		}
 	}
