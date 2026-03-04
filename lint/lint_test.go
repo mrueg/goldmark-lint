@@ -715,14 +715,14 @@ func TestMD032_MultilineListItem_NoViolation(t *testing.T) {
 }
 
 func TestMD032_MultilineListItem_Violation(t *testing.T) {
-	// A list with a multiline item missing a blank line before it should produce
-	// one violation (before only). Plain text after a list is treated as a lazy
-	// continuation in CommonMark, so no "after" violation is reported –
-	// matching markdownlint behaviour.
+	// A list missing blank lines both before and after produces two violations.
+	// "More text" immediately after the list (without a blank line) is flagged
+	// even though CommonMark treats it as a lazy continuation — markdownlint
+	// reports the after-violation too.
 	src := "Text\n- item 1\n  continuation\n- item 2\nMore text\n"
 	v := lintString(t, rules.MD032{}, src)
-	if len(v) != 1 {
-		t.Errorf("expected 1 violation for multiline list without blank line before, got %d: %v", len(v), v)
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations (before and after) for list without blank lines, got %d: %v", len(v), v)
 	}
 }
 
@@ -1620,14 +1620,13 @@ func TestMD060_Invalid(t *testing.T) {
 	}
 }
 
-func TestMD060_Default_Any(t *testing.T) {
-	// Default style is "any": a data row with misaligned pipes produces violations
-	// for the style that minimises the violation count (here: aligned, since the
-	// data row has 2 pipes out of position vs 4 compact-style errors).
+func TestMD060_Default_Consistent(t *testing.T) {
+	// Default style is "consistent": a data row with a different style than the
+	// header row produces one violation (for the inconsistent data row).
 	src := "| Col1 | Col2 |\n| ---- | ---- |\n|A|B|\n"
 	v := lintString(t, rules.MD060{}, src)
-	if len(v) != 2 {
-		t.Errorf("expected 2 violations with default any style, got %d: %v", len(v), v)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation with default consistent style, got %d: %v", len(v), v)
 	}
 }
 
@@ -2804,4 +2803,61 @@ func TestMD013_AutoLinkInEmphasis_NoPanic(t *testing.T) {
 	if len(v) != 0 {
 		t.Errorf("expected no violations for autolink in emphasis, got %d: %v", len(v), v)
 	}
+}
+
+func TestMD030_ThematicBreakNoViolation(t *testing.T) {
+// Thematic breaks that start with -, *, or _ must not be reported as
+// list-marker spacing violations.
+src := "*  *  *\n\n-  -  -\n\n_ _ _\n"
+v := lintString(t, rules.MD030{}, src)
+if len(v) != 0 {
+t.Errorf("expected no violations for thematic breaks, got %v", v)
+}
+}
+
+func TestMD028_IndentedCodeBlockIgnored(t *testing.T) {
+// Lines inside an indented code block that start with '>' must not be
+// treated as blockquote lines by MD028.
+src := "    > not a blockquote\n\n    > also not\n"
+v := lintString(t, rules.MD028{}, src)
+if len(v) != 0 {
+t.Errorf("expected no violations for > inside indented code block, got %v", v)
+}
+}
+
+func TestMD032_PlainTextAfterList_Violation(t *testing.T) {
+// Plain text immediately following a list without a blank line must be
+// flagged — matching markdownlint behaviour.
+src := "- item 1\n- item 2\nplain text\n"
+v := lintString(t, rules.MD032{}, src)
+if len(v) == 0 {
+t.Errorf("expected violation for plain text after list without blank line, got none")
+}
+}
+
+func TestMD060_Default_ConsistentNoViolation(t *testing.T) {
+// Default "consistent" style: all rows compact → no violations.
+src := "| Col1 | Col2 |\n| ---- | ---- |\n| A | B |\n"
+v := lintString(t, rules.MD060{}, src)
+if len(v) != 0 {
+t.Errorf("expected no violations for consistent table, got %v", v)
+}
+}
+
+func TestMD011_ReversedLinkInCodeSpan_NoViolation(t *testing.T) {
+// A reversed-link pattern inside a code span must not be reported.
+src := "Use `(text)[url]` in your docs.\n"
+v := lintString(t, rules.MD011{}, src)
+if len(v) != 0 {
+t.Errorf("expected no violations for reversed link inside code span, got %v", v)
+}
+}
+
+func TestMD056_IndentedCodeBlockIgnored(t *testing.T) {
+// A table-like pattern inside an indented code block must not be reported.
+src := "    Col1 | Col2\n    ---- | ----\n    A | B\n"
+v := lintString(t, rules.MD056{}, src)
+if len(v) != 0 {
+t.Errorf("expected no violations for table inside indented code block, got %v", v)
+}
 }

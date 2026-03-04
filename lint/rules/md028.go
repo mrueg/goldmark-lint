@@ -22,28 +22,29 @@ func (r MD028) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	mask := fencedCodeBlockMask(doc.Lines)
 	htmlMask := htmlBlockLineMask(doc)
+	indentedMask := indentedCodeBlockMask(doc)
 	n := len(doc.Lines)
 
 	i := 0
 	for i < n {
-		if mask[i] || htmlMask[i] || !isBlockquoteLine(doc.Lines[i]) {
+		if mask[i] || htmlMask[i] || indentedMask[i] || !isBlockquoteLine(doc.Lines[i]) {
 			i++
 			continue
 		}
 		// Find end of this contiguous blockquote run.
 		end := i
-		for end+1 < n && !mask[end+1] && !htmlMask[end+1] && isBlockquoteLine(doc.Lines[end+1]) {
+		for end+1 < n && !mask[end+1] && !htmlMask[end+1] && !indentedMask[end+1] && isBlockquoteLine(doc.Lines[end+1]) {
 			end++
 		}
 		// Collect blank lines immediately after this blockquote run.
 		j := end + 1
 		var blanks []int
-		for j < n && !mask[j] && !htmlMask[j] && strings.TrimSpace(doc.Lines[j]) == "" {
+		for j < n && !mask[j] && !htmlMask[j] && !indentedMask[j] && strings.TrimSpace(doc.Lines[j]) == "" {
 			blanks = append(blanks, j)
 			j++
 		}
 		// If we immediately hit another blockquote, report each blank line.
-		if len(blanks) > 0 && j < n && !mask[j] && !htmlMask[j] && isBlockquoteLine(doc.Lines[j]) {
+		if len(blanks) > 0 && j < n && !mask[j] && !htmlMask[j] && !indentedMask[j] && isBlockquoteLine(doc.Lines[j]) {
 			for _, bl := range blanks {
 				violations = append(violations, lint.Violation{
 					Rule:    r.ID(),

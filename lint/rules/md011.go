@@ -37,8 +37,11 @@ func (r MD011) Check(doc *lint.Document) []lint.Violation {
 		if mask[i] || indentedMask[i] || htmlMask[i] {
 			continue
 		}
+		// Blank out inline code spans to avoid false positives from
+		// reversed-link-like patterns inside backtick code spans.
+		checkLine := blankCodeSpans(line)
 		// Count each occurrence, not just whether the line has a match.
-		count := len(reversedLinkRE.FindAllString(line, -1))
+		count := len(reversedLinkRE.FindAllString(checkLine, -1))
 		for range count {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),

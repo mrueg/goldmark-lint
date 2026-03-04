@@ -198,7 +198,7 @@ func rowCompactTightViolations(line, ruleID string, lineNum int) (compact, tight
 func (r MD060) Check(doc *lint.Document) []lint.Violation {
 	style := r.Style
 	if style == "" {
-		style = "any"
+		style = "consistent"
 	}
 
 	// Use goldmark's AST to find tables rather than a line-based heuristic.

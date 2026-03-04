@@ -39,56 +39,6 @@ func isBlankLikeForMD032(line string) bool {
 	return strings.TrimSpace(cleaned) == ""
 }
 
-// isBlockLevelBreaker returns true if the line starts a markdown block element
-// that cannot be lazily continued as part of a list item paragraph. Plain text
-// that follows a list item without a blank line is treated as a lazy
-// continuation in CommonMark, so it does not produce an "after" violation.
-func isBlockLevelBreaker(line string) bool {
-	if len(line) == 0 {
-		return false
-	}
-	switch line[0] {
-	case '#':
-		return true // ATX heading
-	case '>':
-		return true // block quote
-	case '<':
-		return true // HTML block
-	case '|':
-		return true // GFM table row
-	}
-	// Fenced code block
-	if strings.HasPrefix(line, "```") || strings.HasPrefix(line, "~~~") {
-		return true
-	}
-	// Thematic break or setext heading underline (---, ===, ***, ___)
-	trimmed := strings.TrimSpace(line)
-	if len(trimmed) >= 3 {
-		r := rune(trimmed[0])
-		if r == '-' || r == '=' || r == '*' || r == '_' {
-			allSame := true
-			for _, c := range trimmed {
-				if c != r {
-					allSame = false
-					break
-				}
-			}
-			if allSame {
-				return true
-			}
-		}
-	}
-	// Link reference definition: [label]: url
-	if md052DefRE.MatchString(line) {
-		return true
-	}
-	// List item marker
-	if listItemRE.MatchString(line) {
-		return true
-	}
-	return false
-}
-
 // listItemFirstLine returns the 1-based source line number of the first content
 // line of the given list item. The direct children of a ListItem are always
 // block-level nodes (TextBlock, Paragraph, nested List, etc.) so it is safe to
@@ -233,9 +183,8 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 		// the ">" as a new blockquote element.  We normalise them by stripping one
 		// level of the blockquote prefix before any further analysis.
 		//
-		// We also continue scanning past lazy-continuation lines (non-blank, below
-		// the list-item indent, not a block-level marker) so that we correctly detect
-		// violations like: list item → continuation text → code fence (no blank line).
+		// Any non-blank, non-indented line immediately following the list
+		// (without a blank line) is a violation — matching markdownlint behaviour.
 		inBlockquote := false
 		for p := list.Parent(); p != nil; p = p.Parent() {
 			if p.Kind() == ast.KindBlockquote {
@@ -276,13 +225,6 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 			if md032LeadingSpaces(line) >= offset {
 				lastContentLine = i + 1 // 1-based
 				continue // continuation/indented content of the last list item
-			}
-			if !isBlockLevelBreaker(line) {
-				// Lazy continuation of the last list item's paragraph: keep scanning
-				// rather than breaking, so that a subsequent block-level element on
-				// the very next line (e.g. a fenced code block) is still detected.
-				lastContentLine = i + 1 // 1-based
-				continue
 			}
 			afterViolation = lastContentLine
 			break

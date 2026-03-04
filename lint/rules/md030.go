@@ -84,6 +84,11 @@ func (r MD030) Check(doc *lint.Document) []lint.Violation {
 		if m == nil {
 			continue
 		}
+		// Thematic breaks (e.g. "* * *", "- - -") match the list-marker regex
+		// but are not list items; skip them.
+		if isThematicBreakLine(line) {
+			continue
+		}
 		marker := m[2]
 		spaces := m[3]
 		isOrdered := len(marker) > 1 || (marker[0] >= '0' && marker[0] <= '9')

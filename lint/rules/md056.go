@@ -16,14 +16,12 @@ func (r MD056) Description() string { return "Table column count" }
 func (r MD056) Check(doc *lint.Document) []lint.Violation {
 	fenceMask := fencedCodeBlockMask(doc.Lines)
 	htmlMask := htmlBlockLineMask(doc)
-	// Combine masks: skip lines inside fenced code blocks or HTML blocks.
-	// Note: indented code blocks are not masked here because the goldmark AST
-	// accurately distinguishes indented code blocks from indented table content
-	// (e.g. tables inside list items), so false positives for tables inside
-	// indented code blocks are unlikely in practice.
+	indentedMask := indentedCodeBlockMask(doc)
+	// Combine masks: skip lines inside fenced code blocks, indented code blocks,
+	// or HTML blocks.
 	combinedMask := make([]bool, len(doc.Lines))
 	for i := range combinedMask {
-		combinedMask[i] = fenceMask[i] || htmlMask[i]
+		combinedMask[i] = fenceMask[i] || htmlMask[i] || indentedMask[i]
 	}
 	tables := findTables(doc.Lines, combinedMask)
 	var violations []lint.Violation
