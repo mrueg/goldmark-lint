@@ -2806,58 +2806,58 @@ func TestMD013_AutoLinkInEmphasis_NoPanic(t *testing.T) {
 }
 
 func TestMD030_ThematicBreakNoViolation(t *testing.T) {
-// Thematic breaks that start with -, *, or _ must not be reported as
-// list-marker spacing violations.
-src := "*  *  *\n\n-  -  -\n\n_ _ _\n"
-v := lintString(t, rules.MD030{}, src)
-if len(v) != 0 {
-t.Errorf("expected no violations for thematic breaks, got %v", v)
-}
+	// Thematic breaks that start with -, *, or _ must not be reported as
+	// list-marker spacing violations.
+	src := "*  *  *\n\n-  -  -\n\n_ _ _\n"
+	v := lintString(t, rules.MD030{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for thematic breaks, got %v", v)
+	}
 }
 
 func TestMD028_IndentedCodeBlockIgnored(t *testing.T) {
-// Lines inside an indented code block that start with '>' must not be
-// treated as blockquote lines by MD028.
-src := "    > not a blockquote\n\n    > also not\n"
-v := lintString(t, rules.MD028{}, src)
-if len(v) != 0 {
-t.Errorf("expected no violations for > inside indented code block, got %v", v)
-}
+	// Lines inside an indented code block that start with '>' must not be
+	// treated as blockquote lines by MD028.
+	src := "    > not a blockquote\n\n    > also not\n"
+	v := lintString(t, rules.MD028{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for > inside indented code block, got %v", v)
+	}
 }
 
 func TestMD032_PlainTextAfterList_Violation(t *testing.T) {
-// Plain text immediately following a list without a blank line must be
-// flagged — matching markdownlint behaviour.
-src := "- item 1\n- item 2\nplain text\n"
-v := lintString(t, rules.MD032{}, src)
-if len(v) == 0 {
-t.Errorf("expected violation for plain text after list without blank line, got none")
-}
+	// Plain text immediately following a list without a blank line must be
+	// flagged — matching markdownlint behaviour.
+	src := "- item 1\n- item 2\nplain text\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) == 0 {
+		t.Errorf("expected violation for plain text after list without blank line, got none")
+	}
 }
 
 func TestMD060_Default_ConsistentNoViolation(t *testing.T) {
-// Default "consistent" style: all rows compact → no violations.
-src := "| Col1 | Col2 |\n| ---- | ---- |\n| A | B |\n"
-v := lintString(t, rules.MD060{}, src)
-if len(v) != 0 {
-t.Errorf("expected no violations for consistent table, got %v", v)
-}
+	// Default "consistent" style: all rows compact → no violations.
+	src := "| Col1 | Col2 |\n| ---- | ---- |\n| A | B |\n"
+	v := lintString(t, rules.MD060{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for consistent table, got %v", v)
+	}
 }
 
 func TestMD011_ReversedLinkInCodeSpan_NoViolation(t *testing.T) {
-// A reversed-link pattern inside a code span must not be reported.
-src := "Use `(text)[url]` in your docs.\n"
-v := lintString(t, rules.MD011{}, src)
-if len(v) != 0 {
-t.Errorf("expected no violations for reversed link inside code span, got %v", v)
-}
+	// A reversed-link pattern inside a code span must not be reported.
+	src := "Use `(text)[url]` in your docs.\n"
+	v := lintString(t, rules.MD011{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for reversed link inside code span, got %v", v)
+	}
 }
 
 func TestMD056_IndentedCodeBlockIgnored(t *testing.T) {
-// A table-like pattern inside an indented code block must not be reported.
-src := "    Col1 | Col2\n    ---- | ----\n    A | B\n"
-v := lintString(t, rules.MD056{}, src)
-if len(v) != 0 {
-t.Errorf("expected no violations for table inside indented code block, got %v", v)
-}
+	// A table-like pattern inside an indented code block must not be reported.
+	src := "    Col1 | Col2\n    ---- | ----\n    A | B\n"
+	v := lintString(t, rules.MD056{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for table inside indented code block, got %v", v)
+	}
 }
