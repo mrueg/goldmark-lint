@@ -1620,13 +1620,15 @@ func TestMD060_Invalid(t *testing.T) {
 	}
 }
 
-func TestMD060_Default_Consistent(t *testing.T) {
-	// Default style is "consistent": a data row with a different style than the
-	// header row produces one violation (for the inconsistent data row).
+func TestMD060_Default_Any(t *testing.T) {
+	// Default style is "any": a data row with tight cells produces violations
+	// for the style that minimises the violation count (here: aligned, since the
+	// delimiter row aligns with the header and only the data row contributes 2
+	// mis-aligned pipe positions).
 	src := "| Col1 | Col2 |\n| ---- | ---- |\n|A|B|\n"
 	v := lintString(t, rules.MD060{}, src)
-	if len(v) != 1 {
-		t.Errorf("expected 1 violation with default consistent style, got %d: %v", len(v), v)
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations with default any style, got %d: %v", len(v), v)
 	}
 }
 
@@ -2835,12 +2837,12 @@ func TestMD032_PlainTextAfterList_Violation(t *testing.T) {
 	}
 }
 
-func TestMD060_Default_ConsistentNoViolation(t *testing.T) {
-	// Default "consistent" style: all rows compact → no violations.
+func TestMD060_Default_AnyNoViolation(t *testing.T) {
+	// Default "any" style: all rows compact with perfectly aligned pipes → no violations.
 	src := "| Col1 | Col2 |\n| ---- | ---- |\n| A | B |\n"
 	v := lintString(t, rules.MD060{}, src)
 	if len(v) != 0 {
-		t.Errorf("expected no violations for consistent table, got %v", v)
+		t.Errorf("expected no violations for uniform compact table, got %v", v)
 	}
 }
 

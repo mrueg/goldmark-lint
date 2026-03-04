@@ -240,10 +240,10 @@ func isThematicBreakLine(line string) bool {
 	count := 0
 	for i := 0; i < len(trimmed); i++ {
 		c := trimmed[i]
-		switch {
-		case c == ch:
+		switch c {
+		case ch:
 			count++
-		case c == ' ' || c == '\t':
+		case ' ', '\t':
 			// allowed between markers
 		default:
 			return false
