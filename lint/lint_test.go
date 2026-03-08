@@ -291,6 +291,24 @@ func TestMD012_Fix(t *testing.T) {
 	}
 }
 
+func TestMD012_HTMLComment_NoFalsePositive(t *testing.T) {
+	// Blank lines inside an HTML comment (type-2 HTML block) must NOT be flagged.
+	src := "<!--\n\n\nsome comment\n-->\n\nMore text\n"
+	v := lintString(t, rules.MD012{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for blank lines inside HTML comment, got %v", v)
+	}
+}
+
+func TestMD012_ScriptBlock_NoFalsePositive(t *testing.T) {
+	// Blank lines inside a <script> block (type-1 HTML block) must NOT be flagged.
+	src := "<script>\n\n\ncode();\n</script>\n\nMore text\n"
+	v := lintString(t, rules.MD012{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for blank lines inside script block, got %v", v)
+	}
+}
+
 func TestMD047_Fix(t *testing.T) {
 	src := "Content"
 	got := fixString(t, rules.MD047{}, src)
@@ -781,6 +799,45 @@ func TestMD032_LazyContinuationBeforeCodeBlock_Violation(t *testing.T) {
 	v := lintString(t, rules.MD032{}, src)
 	if len(v) == 0 {
 		t.Errorf("expected violation for list+lazy-continuation+code block without blank line, got none")
+	}
+}
+
+func TestMD032_FlatNested_BeforeViolation(t *testing.T) {
+	// "- - nested" syntax: a list item whose first child is immediately a nested
+	// list (same line).  The outer list must still be checked for the before-
+	// blank-line requirement.
+	src := "Text\n- - nested item\nMore\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) == 0 {
+		t.Errorf("expected before-violation for list preceded by text without blank line, got none")
+	}
+}
+
+func TestMD032_FlatNested_AtDocStart_NoViolation(t *testing.T) {
+	// "- - nested" at the very start of the document: no before-violation.
+	src := "- - nested item\nMore\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no before-violation for list at document start, got %v", v)
+	}
+}
+
+func TestMD032_EmptyOuterItem_BeforeViolation(t *testing.T) {
+	// Empty outer list item (just "-") immediately after text, followed by a
+	// nested list on the next line.  The outer list still needs a blank before it.
+	src := "Text\n-\n  - nested\nMore\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) == 0 {
+		t.Errorf("expected before-violation for outer list item preceded by text, got none")
+	}
+}
+
+func TestMD032_EmptyOuterItem_AtDocStart_NoViolation(t *testing.T) {
+	// Empty outer list item at the start of the document: no violation.
+	src := "-\n  - nested\nMore\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no before-violation for list at document start, got %v", v)
 	}
 }
 
@@ -2823,5 +2880,17 @@ func TestMD013_AutoLinkInEmphasis_NoPanic(t *testing.T) {
 	v := lintString(t, rules.MD013{LineLength: 80}, src)
 	if len(v) != 0 {
 		t.Errorf("expected no violations for autolink in emphasis, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD013_MultiLineLinkRefDef_TitleLineExempt(t *testing.T) {
+	// A title continuation line of a multi-line link reference definition
+	// (the line immediately following "[label]: url" that starts with a quote)
+	// must be exempt from MD013, just like the definition line itself.
+	longTitle := `"` + strings.Repeat("x", 85) + `"`
+	src := "[label]: https://example.com\n" + longTitle + "\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for link ref def title line, got %d: %v", len(v), v)
 	}
 }
