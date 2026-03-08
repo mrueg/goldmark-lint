@@ -57,17 +57,22 @@ func (r MD009) Check(doc *lint.Document) []lint.Violation {
 	checkCodeBlocks := r.CodeBlocks != nil && *r.CodeBlocks
 	codeMask := fencedCodeBlockMask(doc.Lines)
 	if !checkCodeBlocks {
-		// Also mark indented code block lines.
-		_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-			if !entering {
-				return ast.WalkContinue, nil
-			}
-			cb, ok := n.(*ast.CodeBlock)
-			if !ok {
-				return ast.WalkContinue, nil
+		// Also mark indented and fenced code block lines via the AST.
+		// The raw-line fencedCodeBlockMask misses fenced code blocks inside
+		// blockquotes (where each line is prefixed with "> "); the AST-based
+		// walk handles those correctly.
+		markBlockLines := func(n ast.Node) {
+			var cb *ast.BaseBlock
+			switch node := n.(type) {
+			case *ast.CodeBlock:
+				cb = &node.BaseBlock
+			case *ast.FencedCodeBlock:
+				cb = &node.BaseBlock
+			default:
+				return
 			}
 			if cb.Lines() == nil {
-				return ast.WalkContinue, nil
+				return
 			}
 			for i := 0; i < cb.Lines().Len(); i++ {
 				seg := cb.Lines().At(i)
@@ -76,6 +81,12 @@ func (r MD009) Check(doc *lint.Document) []lint.Violation {
 					codeMask[lineNum] = true
 				}
 			}
+		}
+		_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+			if !entering {
+				return ast.WalkContinue, nil
+			}
+			markBlockLines(n)
 			return ast.WalkContinue, nil
 		})
 		// Also mark blank (all-whitespace) lines that immediately follow an
