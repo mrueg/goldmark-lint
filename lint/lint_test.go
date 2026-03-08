@@ -1611,14 +1611,24 @@ func TestMD060_Invalid(t *testing.T) {
 	}
 }
 
-func TestMD060_Default_Any(t *testing.T) {
-	// Default style is "any": data row not aligned with header → aligned violations.
+func TestMD060_Default_Consistent(t *testing.T) {
+	// Default style is "consistent": data row style differs from header → 1 violation.
 	src := "| Col1 | Col2 |\n| ---- | ---- |\n|A|B|\n"
 	v := lintString(t, rules.MD060{}, src)
+	// Header row is compact; data row |A|B| is tight → inconsistent → 1 violation.
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation with default consistent style, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD060_Default_Any(t *testing.T) {
+	// "any" style explicitly set: data row not aligned with header → aligned violations.
+	src := "| Col1 | Col2 |\n| ---- | ---- |\n|A|B|\n"
+	v := lintString(t, rules.MD060{Style: "any"}, src)
 	// Data row |A|B| has pipes at cols 0,2,4 while header has pipes at 0,7,14.
 	// Aligned check fails (2 misaligned pipes); aligned has fewer errors than compact (4).
 	if len(v) != 2 {
-		t.Errorf("expected 2 violations with default any style, got %d: %v", len(v), v)
+		t.Errorf("expected 2 violations with any style, got %d: %v", len(v), v)
 	}
 }
 
@@ -1645,6 +1655,25 @@ func TestMD060_SingleSpaceCell(t *testing.T) {
 	src := "| | Col2 |\n| - | ---- |\n| A | B |\n"
 	v := lintString(t, rules.MD060{Style: "consistent"}, src)
 	_ = v // just ensure no panic
+}
+
+func TestMD060_Consistent_CrossTable(t *testing.T) {
+	// Two tables with different styles: rows of second table should be flagged.
+	// Table 1 is compact; table 2 is tight → violations for table 2.
+	src := "| A | B |\n|---|---|\n| 1 | 2 |\n\n|A|B|\n|---|---|\n|1|2|\n"
+	v := lintString(t, rules.MD060{Style: "consistent"}, src)
+	if len(v) == 0 {
+		t.Errorf("expected violations for tables with different styles, got none")
+	}
+}
+
+func TestMD060_Consistent_CrossTable_NoViolation(t *testing.T) {
+	// Two tables with the same compact style: no violations.
+	src := "| A | B |\n|---|---|\n| 1 | 2 |\n\n| X | Y |\n|---|---|\n| 3 | 4 |\n"
+	v := lintString(t, rules.MD060{Style: "consistent"}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for two compact tables, got %v", v)
+	}
 }
 
 // --- Inline disable comment tests ---
@@ -2478,6 +2507,15 @@ func TestMD030_ULMulti(t *testing.T) {
 	}
 }
 
+func TestMD030_IndentedCodeBlock_NoFalsePositive(t *testing.T) {
+	// List-like lines inside an indented code block must NOT be flagged by MD030.
+	src := "Some text\n\n    1.  item inside code block\n    -  another inside code block\n"
+	v := lintString(t, rules.MD030{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for list-like lines inside indented code block, got %v", v)
+	}
+}
+
 func TestMD031_ListItems_Disabled(t *testing.T) {
 	// list_items=false: skip fenced code block blank-line check inside list items.
 	f := false
@@ -2589,6 +2627,16 @@ func TestMD028_MultipleBlankLines(t *testing.T) {
 	v := lintString(t, rules.MD028{}, src)
 	if len(v) != 2 {
 		t.Errorf("expected 2 violations for 2 blank lines between blockquotes, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD028_IndentedCodeBlockWithArrow_NoFalsePositive(t *testing.T) {
+	// Lines inside an indented code block that start with '>' must NOT be treated
+	// as blockquote lines for MD028 purposes.
+	src := "    > arrow in code block\n\n    > another arrow\n"
+	v := lintString(t, rules.MD028{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for '>' inside indented code block, got %v", v)
 	}
 }
 

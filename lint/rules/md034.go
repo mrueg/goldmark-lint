@@ -110,7 +110,13 @@ func (r MD034) Check(doc *lint.Document) []lint.Violation {
 	// the URL as a Text node, so we scan the raw source lines directly.
 	// We strip inline links ([text](url)) from the content first to avoid
 	// flagging URLs that are already properly wrapped in a link.
+	// Skip lines inside fenced or indented code blocks to avoid false positives.
+	fencedMask := fencedCodeBlockMask(doc.Lines)
+	indentMask := indentedCodeBlockMask(doc)
 	for i, line := range doc.Lines {
+		if fencedMask[i] || indentMask[i] {
+			continue
+		}
 		trimmed := strings.TrimLeft(line, " \t")
 		if !strings.HasPrefix(trimmed, "[^") {
 			continue
