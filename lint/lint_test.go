@@ -2327,6 +2327,16 @@ func TestMD009_CodeBlocks_Disabled(t *testing.T) {
 	}
 }
 
+func TestMD009_FencedCodeInBlockquote_NoFalsePositive(t *testing.T) {
+	// Trailing spaces inside a fenced code block that is itself inside a blockquote
+	// must NOT be flagged by default (code_blocks defaults to not-checking).
+	src := "> ```\n> code with trailing   \n> ```\n"
+	v := lintString(t, rules.MD009{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for trailing spaces in fenced code block inside blockquote, got %v", v)
+	}
+}
+
 func TestMD009_Strict(t *testing.T) {
 	// Strict mode: br_spaces are also disallowed.
 	src := "Hard line break  \n"
