@@ -217,6 +217,53 @@ func TestMD013_LinkInTextNotExempt(t *testing.T) {
 	}
 }
 
+func TestMD013_FencedCodeBlockContentNotCheckedByDefault(t *testing.T) {
+	// Lines inside a fenced code block are classified as code block lines;
+	// with the default code_blocks:true they are still checked but use a
+	// separate limit. With code_blocks:false they are skipped entirely.
+	f := false
+	longLine := strings.Repeat("x", 100)
+	src := "```\n" + longLine + "\n```\n"
+	v := lintString(t, rules.MD013{LineLength: 80, CodeBlocks: &f}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations with code_blocks:false, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD013_ATXHeadingCheckedSeparately(t *testing.T) {
+	// ATX heading lines are classified correctly by the AST-based heading mask.
+	longHeading := "# " + strings.Repeat("Word ", 20)
+	src := longHeading + "\n\nNormal paragraph.\n"
+	f := false
+	v := lintString(t, rules.MD013{LineLength: 80, Headings: &f}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations with headings:false, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD013_SetextHeadingCheckedSeparately(t *testing.T) {
+	// Setext heading lines (content + underline) are classified correctly.
+	// With headings:false they should not be flagged.
+	longHeading := strings.Repeat("Word ", 20)
+	src := longHeading + "\n" + strings.Repeat("=", 80) + "\n\nNormal paragraph.\n"
+	f := false
+	v := lintString(t, rules.MD013{LineLength: 80, Headings: &f}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for setext heading with headings:false, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD013_TableRowCheckedSeparately(t *testing.T) {
+	// Table rows are classified correctly by the AST-based table mask.
+	longCell := strings.Repeat("x", 90)
+	src := "| " + longCell + " | B |\n|---|---|\n| C | D |\n"
+	f := false
+	v := lintString(t, rules.MD013{LineLength: 80, Tables: &f}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations with tables:false, got %d: %v", len(v), v)
+	}
+}
+
 func TestMD022_Valid(t *testing.T) {
 	src := "# Heading\n\nParagraph\n"
 	v := lintString(t, rules.MD022{}, src)

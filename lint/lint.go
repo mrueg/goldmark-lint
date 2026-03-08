@@ -130,7 +130,7 @@ func (l *Linter) Lint(source []byte) []Violation {
 
 	pctx := parser.NewContext()
 	reader := text.NewReader(source)
-	md := goldmark.New(goldmark.WithExtensions(extension.Table, extension.Strikethrough, extension.TaskList))
+	md := goldmark.New(goldmark.WithExtensions(extension.Table, extension.Strikethrough, extension.TaskList, extension.CJK))
 	node := md.Parser().Parse(reader, parser.WithContext(pctx))
 
 	// Build a normalised label → destination map from goldmark's parsed references.
