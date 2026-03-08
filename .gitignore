@@ -4,5 +4,6 @@ cmd/goldmark-lint/goldmark-lint
 cmd/goldmark-lint/goldmark-lint.exe
 .goldmark-lint-cache
 bench/rfcs/
+bench/tldr/
 bench/goldmark-lint
 bench/goldmark-lint.exe
