@@ -94,17 +94,11 @@ func (r MD022) Check(doc *lint.Document) []lint.Violation {
 				// Suppress the "above" violation if the nearest non-blank preceding line
 				// is an HTML block (e.g. <!-- comment -->).  Markdownlint does not require
 				// a blank line between an HTML comment block and the heading below it.
-				precededByHTML := false
-				for j := lineIdx - 1; j >= 0; j-- {
-					if strings.TrimSpace(lines[j]) == "" {
-						break
-					}
-					if htmlMask[j] {
-						precededByHTML = true
-						break
-					}
-					break
-				}
+				// Check only the immediately preceding non-blank line.
+				prevIdx := lineIdx - 1
+				precededByHTML := prevIdx >= 0 &&
+					strings.TrimSpace(lines[prevIdx]) != "" &&
+					htmlMask[prevIdx]
 				if !precededByHTML {
 					violations = append(violations, lint.Violation{
 						Rule:    r.ID(),
