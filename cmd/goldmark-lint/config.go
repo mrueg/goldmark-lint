@@ -238,19 +238,116 @@ func stripJSONComments(data []byte) []byte {
 	return result
 }
 
+// ruleMeta holds the markdownlint-compatible tags and aliases for a rule.
+// Tags allow disabling a group of rules with a single config key
+// (e.g. "whitespace": false disables all whitespace-tagged rules).
+// Aliases allow referring to a rule by a human-readable name.
+type ruleMeta struct {
+	tags    []string
+	aliases []string
+}
+
+// allRuleMeta maps each rule ID to its markdownlint-compatible tags and aliases.
+// Tags come from markdownlint's rule definitions; aliases from rule Aliases().
+var allRuleMeta = map[string]ruleMeta{
+	"MD001": {tags: []string{"headings"}, aliases: []string{"heading-increment"}},
+	"MD003": {tags: []string{"headings"}, aliases: []string{"heading-style"}},
+	"MD004": {tags: []string{"bullet", "ul"}, aliases: []string{"ul-style"}},
+	"MD005": {tags: []string{"bullet", "indentation", "ul"}, aliases: []string{"list-indent"}},
+	"MD007": {tags: []string{"bullet", "indentation", "ul"}, aliases: []string{"ul-indent"}},
+	"MD009": {tags: []string{"whitespace"}, aliases: []string{"no-trailing-spaces"}},
+	"MD010": {tags: []string{"whitespace"}, aliases: []string{"no-hard-tabs"}},
+	"MD011": {tags: []string{"links"}, aliases: []string{"no-reversed-links"}},
+	"MD012": {tags: []string{"blank_lines", "whitespace"}, aliases: []string{"no-multiple-blanks"}},
+	"MD013": {tags: []string{"line_length"}, aliases: []string{"line-length"}},
+	"MD014": {tags: []string{"code"}, aliases: []string{"commands-show-output"}},
+	"MD018": {tags: []string{"headings", "spaces"}, aliases: []string{"no-missing-space-atx"}},
+	"MD019": {tags: []string{"headings", "spaces"}, aliases: []string{"no-multiple-space-atx"}},
+	"MD020": {tags: []string{"headings", "spaces"}, aliases: []string{"no-missing-space-closed-atx"}},
+	"MD021": {tags: []string{"headings", "spaces"}, aliases: []string{"no-multiple-space-closed-atx"}},
+	"MD022": {tags: []string{"blank_lines", "headings"}, aliases: []string{"blanks-around-headings", "blanks-around-headers"}},
+	"MD023": {tags: []string{"headings", "spaces"}, aliases: []string{"heading-start-left"}},
+	"MD024": {tags: []string{"headings"}, aliases: []string{"no-duplicate-heading", "no-duplicate-header"}},
+	"MD025": {tags: []string{"headings"}, aliases: []string{"single-title", "single-h1"}},
+	"MD026": {tags: []string{"headings", "punctuation"}, aliases: []string{"no-trailing-punctuation"}},
+	"MD027": {tags: []string{"blockquote", "indentation", "whitespace"}, aliases: []string{"no-multiple-space-blockquote"}},
+	"MD028": {tags: []string{"blockquote", "whitespace"}, aliases: []string{"no-blanks-blockquote"}},
+	"MD029": {tags: []string{"ol"}, aliases: []string{"ol-prefix"}},
+	"MD030": {tags: []string{"ol", "ul", "whitespace"}, aliases: []string{"list-marker-space"}},
+	"MD031": {tags: []string{"blank_lines", "code"}, aliases: []string{"blanks-around-fences"}},
+	"MD032": {tags: []string{"blank_lines", "bullet", "ol", "ul"}, aliases: []string{"blanks-around-lists"}},
+	"MD033": {tags: []string{"html"}, aliases: []string{"no-inline-html"}},
+	"MD034": {tags: []string{"links", "url"}, aliases: []string{"no-bare-urls"}},
+	"MD035": {tags: []string{"hr"}, aliases: []string{"hr-style"}},
+	"MD036": {tags: []string{"emphasis", "headings"}, aliases: []string{"no-emphasis-as-heading", "no-emphasis-as-header"}},
+	"MD037": {tags: []string{"emphasis", "whitespace"}, aliases: []string{"no-space-in-emphasis"}},
+	"MD038": {tags: []string{"code", "whitespace"}, aliases: []string{"no-space-in-code"}},
+	"MD039": {tags: []string{"links", "whitespace"}, aliases: []string{"no-space-in-links"}},
+	"MD040": {tags: []string{"code", "language"}, aliases: []string{"fenced-code-language"}},
+	"MD041": {tags: []string{"headings"}, aliases: []string{"first-line-heading", "first-line-h1"}},
+	"MD043": {tags: []string{"headings"}, aliases: []string{"required-headings", "required-headers"}},
+	"MD044": {tags: []string{"spelling"}, aliases: []string{"proper-names"}},
+	"MD045": {tags: []string{"accessibility", "images"}, aliases: []string{"no-alt-text"}},
+	"MD046": {tags: []string{"code"}, aliases: []string{"code-block-style"}},
+	"MD047": {tags: []string{"blank_lines"}, aliases: []string{"single-trailing-newline"}},
+	"MD048": {tags: []string{"code"}, aliases: []string{"code-fence-style"}},
+	"MD049": {tags: []string{"emphasis"}, aliases: []string{"emphasis-style"}},
+	"MD050": {tags: []string{"emphasis"}, aliases: []string{"strong-style"}},
+	"MD051": {tags: []string{"links"}, aliases: []string{"link-fragments"}},
+	"MD052": {tags: []string{"images", "links"}, aliases: []string{"reference-links-images"}},
+	"MD053": {tags: []string{"images", "links"}, aliases: []string{"link-image-reference-definitions"}},
+	"MD054": {tags: []string{"images", "links"}, aliases: []string{"link-image-style"}},
+	"MD055": {tags: []string{"table"}, aliases: []string{"table-pipe-style"}},
+	"MD056": {tags: []string{"table"}, aliases: []string{"table-column-count"}},
+	"MD058": {tags: []string{"blank_lines", "table"}, aliases: []string{"blanks-around-tables"}},
+	"MD059": {tags: []string{"links"}, aliases: []string{"descriptive-link-text"}},
+	"MD060": {tags: []string{"table"}, aliases: []string{"table-column-style"}},
+}
+
 // isRuleEnabled returns whether the rule with the given ID should be run.
-// It checks the rule's config entry and falls back to the "default" key.
+// Priority (highest to lowest):
+//  1. Explicit rule ID config entry.
+//  2. Any alias of the rule (e.g. "no-hard-tabs" for MD010).
+//  3. Any tag of the rule set to false (e.g. "whitespace": false disables all
+//     whitespace-tagged rules). An explicit true for a tag only disables the
+//     tag-level check; it does not override a missing explicit ID entry.
+//  4. The "default" key.
+//  5. Implicit default: enabled (true).
 func isRuleEnabled(id string, cfg map[string]interface{}) bool {
+	// 1. Explicit rule ID.
 	if val, ok := cfg[id]; ok {
-		switch v := val.(type) {
+		switch val.(type) {
 		case bool:
-			return v
-		case string:
-			return true
-		case map[string]interface{}:
+			return val.(bool)
+		default:
+			// string ("warning") or map (options) → rule is enabled.
 			return true
 		}
 	}
+
+	meta := allRuleMeta[id]
+
+	// 2. Aliases: if any alias is explicitly configured as bool, use that.
+	for _, alias := range meta.aliases {
+		if val, ok := cfg[alias]; ok {
+			if b, ok := val.(bool); ok {
+				return b
+			}
+			return true // non-bool alias config → enabled
+		}
+	}
+
+	// 3. Tags: if any tag is set to false, the rule is disabled (unless the rule
+	// ID or an alias already explicitly re-enabled it above).
+	for _, tag := range meta.tags {
+		if val, ok := cfg[tag]; ok {
+			if b, ok := val.(bool); ok && !b {
+				return false
+			}
+		}
+	}
+
+	// 4. "default" key.
 	if d, ok := cfg["default"]; ok {
 		if b, ok := d.(bool); ok {
 			return b
