@@ -8,6 +8,7 @@ import (
 
 	"github.com/mrueg/goldmark-lint/lint"
 	"github.com/yuin/goldmark/ast"
+	extast "github.com/yuin/goldmark/extension/ast"
 )
 
 // IntOrArray is a JSON-compatible type that can be either a single integer or
@@ -400,6 +401,7 @@ func indentedCodeBlockMask(doc *lint.Document) []bool {
 	})
 	return mask
 }
+
 // It uses the goldmark AST to accurately detect HTML blocks.
 func htmlBlockLineMask(doc *lint.Document) []bool {
 	mask := make([]bool, len(doc.Lines))
@@ -413,6 +415,145 @@ func htmlBlockLineMask(doc *lint.Document) []bool {
 		for i := 0; i < n.Lines().Len(); i++ {
 			seg := n.Lines().At(i)
 			lineIdx := countLine(doc.Source, seg.Start) - 1
+			if lineIdx >= 0 && lineIdx < len(mask) {
+				mask[lineIdx] = true
+			}
+		}
+		return ast.WalkContinue, nil
+	})
+	return mask
+}
+
+// astFencedCodeBlockMask returns a bool slice with true for each source line
+// that is part of a fenced code block, including the fence delimiter lines
+// (opening and closing). It uses the goldmark AST for accurate detection.
+func astFencedCodeBlockMask(doc *lint.Document) []bool {
+	mask := make([]bool, len(doc.Lines))
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		if n.Kind() != ast.KindFencedCodeBlock {
+			return ast.WalkContinue, nil
+		}
+		lines := n.Lines()
+		if lines.Len() == 0 {
+			// Empty fenced code block: fall through to string-based detection
+			// (cannot locate fence delimiters via AST alone when there are no content lines).
+			return ast.WalkContinue, nil
+		}
+		firstSeg := lines.At(0)
+		lastSeg := lines.At(lines.Len() - 1)
+		firstCodeIdx := countLine(doc.Source, firstSeg.Start) - 1 // 0-indexed
+		lastCodeIdx := countLine(doc.Source, lastSeg.Start) - 1   // 0-indexed
+
+		// Opening fence delimiter: line immediately before first code line.
+		if firstCodeIdx > 0 {
+			mask[firstCodeIdx-1] = true
+		}
+		// Content lines.
+		for lineIdx := firstCodeIdx; lineIdx <= lastCodeIdx; lineIdx++ {
+			if lineIdx >= 0 && lineIdx < len(mask) {
+				mask[lineIdx] = true
+			}
+		}
+		// Closing fence delimiter: line immediately after last code line, if
+		// it exists and starts with the fence character (not another code line).
+		closingIdx := lastCodeIdx + 1
+		if closingIdx >= 0 && closingIdx < len(mask) {
+			mask[closingIdx] = true
+		}
+		return ast.WalkContinue, nil
+	})
+	// For empty fenced code blocks (AST Lines() == 0), fall back to the
+	// string-based scanner to catch their fence delimiter lines.
+	stringMask := fencedCodeBlockMask(doc.Lines)
+	for i, v := range stringMask {
+		if v {
+			mask[i] = true
+		}
+	}
+	return mask
+}
+
+// astHeadingMask returns a bool slice with true for each source line that is
+// a heading line (ATX or setext, including the setext underline).
+// It uses the goldmark AST for accurate detection.
+func astHeadingMask(doc *lint.Document) []bool {
+	mask := make([]bool, len(doc.Lines))
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		if n.Kind() != ast.KindHeading {
+			return ast.WalkContinue, nil
+		}
+		lines := n.Lines()
+		if lines.Len() == 0 {
+			return ast.WalkContinue, nil
+		}
+		firstSeg := lines.At(0)
+		lineIdx := countLine(doc.Source, firstSeg.Start) - 1 // 0-indexed
+		if lineIdx < 0 || lineIdx >= len(mask) {
+			return ast.WalkContinue, nil
+		}
+		mask[lineIdx] = true
+
+		// For setext headings the content line does NOT start with '#'.
+		// The underline (===... or ---...) is on the very next line.
+		srcLine := doc.Lines[lineIdx]
+		trimmed := strings.TrimLeft(srcLine, " \t")
+		if len(trimmed) == 0 || trimmed[0] != '#' {
+			// Setext heading – mark the underline line as well.
+			if lineIdx+1 < len(mask) {
+				mask[lineIdx+1] = true
+			}
+		}
+		return ast.WalkContinue, nil
+	})
+	return mask
+}
+
+// astTableMask returns a bool slice with true for each source line that is
+// part of a GFM table (header row, delimiter row, and data rows).
+// It uses the goldmark AST for accurate detection.
+func astTableMask(doc *lint.Document) []bool {
+	mask := make([]bool, len(doc.Lines))
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		if n.Kind() != extast.KindTable {
+			return ast.WalkContinue, nil
+		}
+		// Collect the first and last 1-based line numbers from all Text descendants.
+		first, last := -1, -1
+		_ = ast.Walk(n, func(child ast.Node, childEntering bool) (ast.WalkStatus, error) {
+			if !childEntering {
+				return ast.WalkContinue, nil
+			}
+			if txt, ok := child.(*ast.Text); ok {
+				ln := countLine(doc.Source, txt.Segment.Start)
+				if first == -1 || ln < first {
+					first = ln
+				}
+				if ln > last {
+					last = ln
+				}
+			}
+			return ast.WalkContinue, nil
+		})
+		if first == -1 {
+			return ast.WalkContinue, nil
+		}
+		// The delimiter row is always the line immediately after the header row.
+		// Ensure we mark at least header + delimiter (first and first+1 in 1-indexed).
+		end := last
+		if end < first+1 {
+			end = first + 1
+		}
+		// Mark all table lines (convert from 1-indexed to 0-indexed).
+		for lineIdx := first - 1; lineIdx <= end-1; lineIdx++ {
 			if lineIdx >= 0 && lineIdx < len(mask) {
 				mask[lineIdx] = true
 			}

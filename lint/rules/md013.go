@@ -55,82 +55,32 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 	checkTables := r.Tables == nil || *r.Tables
 	checkHeadings := r.Headings == nil || *r.Headings
 
-	// Build fenced code block mask (lines inside a fenced block, not including fence delimiters).
-	fenceMask := fencedCodeBlockMask(doc.Lines)
-	// Also mark fence delimiter lines themselves as code block lines.
-	codeBlockMask := make([]bool, len(doc.Lines))
-	copy(codeBlockMask, fenceMask)
-	inFence := false
-	fenceChar := byte(0)
-	fenceLen := 0
-	for i, line := range doc.Lines {
-		trimmed := strings.TrimLeft(line, " ")
-		if !inFence {
-			if len(trimmed) >= 3 && (trimmed[0] == '`' || trimmed[0] == '~') {
-				fc := trimmed[0]
-				j := 0
-				for j < len(trimmed) && trimmed[j] == fc {
-					j++
-				}
-				if j >= 3 {
-					inFence = true
-					fenceChar = fc
-					fenceLen = j
-					codeBlockMask[i] = true
-				}
-			}
-		} else {
-			j := 0
-			for j < len(trimmed) && trimmed[j] == fenceChar {
-				j++
-			}
-			if j >= fenceLen && strings.TrimSpace(trimmed[j:]) == "" && len(trimmed) > 0 && trimmed[0] == fenceChar {
-				inFence = false
-				codeBlockMask[i] = true
-			}
-		}
-	}
-	// Use the AST to mark indented code block lines.  The heuristic
-	// "4 spaces after a blank line" is unreliable — it incorrectly catches
-	// indented list content such as tables inside list items.  The goldmark
-	// AST (ast.CodeBlock nodes) correctly distinguishes real indented code
-	// blocks from indented table or paragraph content.
+	// Build fenced code block mask using the goldmark AST (includes fence
+	// delimiter lines, fenced content, and falls back to string-based
+	// detection for empty fenced blocks that have no content lines in the AST).
+	codeBlockMask := astFencedCodeBlockMask(doc)
+	// Also mark indented code block lines via the AST.
 	for i, v := range indentedCodeBlockMask(doc) {
 		if v {
 			codeBlockMask[i] = true
 		}
 	}
 
-	// Build table mask.
-	tableMask := make([]bool, len(doc.Lines))
-	for _, tbl := range findTables(doc.Lines, codeBlockMask) {
-		for i := tbl[0]; i <= tbl[1]; i++ {
-			tableMask[i] = true
+	// Build table mask using the goldmark AST.
+	tableMask := astTableMask(doc)
+	// Remove table entries that are actually inside code blocks.
+	for i := range tableMask {
+		if codeBlockMask[i] {
+			tableMask[i] = false
 		}
 	}
 
-	// Build heading mask.
-	headingMask := make([]bool, len(doc.Lines))
-	n := len(doc.Lines)
-	for i, line := range doc.Lines {
+	// Build heading mask using the goldmark AST.
+	headingMask := astHeadingMask(doc)
+	// Remove heading entries that are actually inside code blocks.
+	for i := range headingMask {
 		if codeBlockMask[i] {
-			continue
-		}
-		trimmed := strings.TrimLeft(line, " ")
-		// ATX heading.
-		if len(trimmed) > 0 && trimmed[0] == '#' {
-			headingMask[i] = true
-			continue
-		}
-		// Setext heading: non-blank line followed by ==== or ----.
-		if i+1 < n && !codeBlockMask[i+1] {
-			next := strings.TrimSpace(doc.Lines[i+1])
-			if len(next) > 0 && (strings.Trim(next, "=") == "" || strings.Trim(next, "-") == "") {
-				if strings.TrimSpace(line) != "" {
-					headingMask[i] = true
-					headingMask[i+1] = true
-				}
-			}
+			headingMask[i] = false
 		}
 	}
 
