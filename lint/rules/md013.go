@@ -228,12 +228,13 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 			if !r.Stern && linkRefDefLines[i] {
 				continue
 			}
-			// Skip "link only" lines that have an inline URL in the source.
-			// These lines cannot be reformatted because the URL is the unavoidable
-			// cause of the length. Reference-link-only lines (no URL in source)
-			// are NOT exempted here; they fall through to the URL/trailing-word
-			// checks below, matching markdownlint behaviour.
-			if !r.Stern && linkOnlyLines[i+1] && len(urlLens.inlineLinkURLLens[i+1]) > 0 {
+			// Skip "link only" lines: lines whose non-whitespace content
+			// consists entirely of links or images cannot be reformatted,
+			// so they are always exempt. This applies to both inline links
+			// (where the URL appears on the line) and reference links
+			// (where the URL lives in a separate definition), matching
+			// markdownlint behaviour.
+			if !r.Stern && linkOnlyLines[i+1] {
 				continue
 			}
 			// Table rows that contain any resolved link or image node are exempt.
@@ -560,14 +561,26 @@ func md013LinkOnlyLines(doc *lint.Document) map[int]bool {
 				}
 			}
 		case ast.KindText:
-			// If this Text node is a direct child of a link or image, it is the
-			// link/image label text – not bare paragraph content.
-			p := n.Parent()
-			if p != nil && (p.Kind() == ast.KindLink || p.Kind() == ast.KindImage) {
+			// If this Text node is inside a link or image at any depth
+			// (e.g. inside a code span that is itself inside a link), it
+			// is link/image content – not bare paragraph content.
+			insideLinkOrImage := false
+			for anc := n.Parent(); anc != nil; anc = anc.Parent() {
+				if anc.Kind() == ast.KindLink || anc.Kind() == ast.KindImage {
+					insideLinkOrImage = true
+					break
+				}
+			}
+			if insideLinkOrImage {
 				break
 			}
 			t, ok := n.(*ast.Text)
 			if !ok {
+				break
+			}
+			// Skip empty text segments (e.g. paragraph-end markers generated
+			// by the goldmark parser at line breaks adjacent to inline nodes).
+			if t.Segment.Start == t.Segment.Stop {
 				break
 			}
 			lineNum := countLine(doc.Source, t.Segment.Start)
