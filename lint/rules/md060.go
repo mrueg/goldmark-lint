@@ -196,7 +196,7 @@ func rowCompactTightViolations(line, ruleID string, lineNum int) (compact, tight
 func (r MD060) Check(doc *lint.Document) []lint.Violation {
 	style := r.Style
 	if style == "" {
-		style = "consistent"
+		style = "any"
 	}
 
 	mask := fencedCodeBlockMask(doc.Lines)
@@ -249,10 +249,8 @@ func (r MD060) Check(doc *lint.Document) []lint.Violation {
 			}
 		}
 	case "consistent":
-		// docStyle is the document-level style set by the first non-"other" row
-		// across all tables. All subsequent non-"other" rows in all tables must match.
-		docStyle := ""
 		for _, t := range tables {
+			firstStyle := ""
 			for row := t[0]; row <= t[1]; row++ {
 				line := doc.Lines[row]
 				if isTableDelimiterRow(line) {
@@ -262,16 +260,16 @@ func (r MD060) Check(doc *lint.Document) []lint.Violation {
 				if actual == "other" {
 					continue
 				}
-				if docStyle == "" {
-					docStyle = actual
+				if firstStyle == "" {
+					firstStyle = actual
 					continue
 				}
-				if actual != docStyle {
+				if actual != firstStyle {
 					violations = append(violations, lint.Violation{
 						Rule:    r.ID(),
 						Line:    row + 1,
 						Column:  1,
-						Message: fmt.Sprintf("Table column style [Expected: %s; Actual: %s]", docStyle, actual),
+						Message: fmt.Sprintf("Table column style [Expected: %s; Actual: %s]", firstStyle, actual),
 					})
 				}
 			}
