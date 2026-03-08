@@ -155,6 +155,23 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 		for i, line := range doc.Lines {
 			if label := linkRefLabel(line); label != "" {
 				linkRefDefLines[i] = true
+				// Also exempt the following line if it is the title continuation
+				// of a multi-line link reference definition.  CommonMark allows
+				// the optional title to appear on the line immediately after the
+				// destination:
+				//   [label]: url
+				//   "title on next line"
+				// CommonMark titles can be delimited by "...", '...', or (...).
+				// Detecting the opening delimiter character is sufficient: this
+				// line can only appear here as a link title because it
+				// immediately follows a recognised link reference definition
+				// line, so false-positive paragraph text is not a concern.
+				if i+1 < len(doc.Lines) {
+					next := strings.TrimLeft(doc.Lines[i+1], " \t")
+					if len(next) > 0 && (next[0] == '"' || next[0] == '\'' || next[0] == '(') {
+						linkRefDefLines[i+1] = true
+					}
+				}
 			}
 		}
 		// Collect 1-based line numbers of table rows that contain a link or image.

@@ -46,11 +46,16 @@ func (r MD012) Check(doc *lint.Document) []lint.Violation {
 	}
 	var violations []lint.Violation
 	consecutive := 0
-	mask := fencedCodeBlockMask(doc.Lines)
+	fencedMask := fencedCodeBlockMask(doc.Lines)
 
 	// Build a mask for indented code block lines using the goldmark AST.
 	// Blank lines inside indented code blocks should not trigger MD012.
 	indentMask := indentedCodeBlockMask(doc)
+
+	// HTML block lines are also exempt: blank lines inside HTML blocks (e.g.
+	// <div>…</div>) are rendered as-is by the browser and are not a markdown
+	// formatting concern.
+	htmlMask := htmlBlockLineMask(doc)
 
 	for i, line := range doc.Lines {
 		// Skip front-matter lines (they were stripped to blank lines by stripFrontMatterAt).
@@ -58,8 +63,8 @@ func (r MD012) Check(doc *lint.Document) []lint.Violation {
 			consecutive = 0
 			continue
 		}
-		if mask[i] || indentMask[i] {
-			// Reset consecutive blank count inside code blocks (treat as non-blank).
+		if fencedMask[i] || indentMask[i] || htmlMask[i] {
+			// Reset consecutive blank count inside code/HTML blocks (treat as non-blank).
 			consecutive = 0
 			continue
 		}

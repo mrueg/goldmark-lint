@@ -92,11 +92,35 @@ func isBlockLevelBreaker(line string) bool {
 	return false
 }
 
+// firstBlockLine recursively walks the children of n to find the first
+// block-level node that has source line information, and returns its 1-based
+// line number. Returns 0 if none is found.
+func firstBlockLine(n ast.Node, source []byte) int {
+	if n == nil {
+		return 0
+	}
+	if n.Type() == ast.TypeBlock && n.Lines() != nil && n.Lines().Len() > 0 {
+		return countLine(source, n.Lines().At(0).Start)
+	}
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		if line := firstBlockLine(c, source); line > 0 {
+			return line
+		}
+	}
+	return 0
+}
+
+// isListMarkerOnlyLine reports whether line consists solely of a list marker
+// (with optional leading spaces but NO content after the marker). This covers
+// empty list items written as bare "- ", "* ", "+ " or "1." that have nothing
+// after the marker and may be followed by a nested list on the next line.
+var listMarkerOnlyRE = regexp.MustCompile(`^( *)(?:[-*+]|\d+[.)])[ \t]*$`)
+
 // listItemFirstLine returns the 1-based source line number of the first content
 // line of the given list item. The direct children of a ListItem are always
 // block-level nodes (TextBlock, Paragraph, nested List, etc.) so it is safe to
 // call Lines() on them.
-func listItemFirstLine(item *ast.ListItem, source []byte) int {
+func listItemFirstLine(item *ast.ListItem, source []byte, lines []string) int {
 	child := item.FirstChild()
 	if child == nil {
 		return 0
@@ -104,7 +128,27 @@ func listItemFirstLine(item *ast.ListItem, source []byte) int {
 	if child.Lines() != nil && child.Lines().Len() > 0 {
 		return countLine(source, child.Lines().At(0).Start)
 	}
-	return 0
+
+	// Fallback: the first child has no line information (e.g. when the list
+	// item contains only a nested list with no preceding text).  Walk deeper
+	// to find the first block with lines.
+	deepLine := firstBlockLine(child, source)
+	if deepLine <= 0 {
+		return 0
+	}
+
+	// If the line immediately before deepLine looks like a bare list marker
+	// (e.g. "-" or "- "), the outer list item's marker is on that line.
+	if deepLine >= 2 && deepLine-1 <= len(lines) {
+		prevLine := lines[deepLine-2] // 0-based
+		if listItemRE.MatchString(prevLine) || listMarkerOnlyRE.MatchString(prevLine) {
+			return deepLine - 1
+		}
+	}
+
+	// Otherwise the outer marker and the inner content share the same source
+	// line (e.g. "- - nested item").
+	return deepLine
 }
 
 // md032LeadingSpaces counts the number of leading space/tab characters in line.
@@ -204,13 +248,13 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
-		firstLine := listItemFirstLine(firstItem, doc.Source)
+		firstLine := listItemFirstLine(firstItem, doc.Source, lines)
 		if firstLine <= 0 {
 			return ast.WalkContinue, nil
 		}
 		firstLineIdx := firstLine - 1 // 0-based
 
-		lastItemLine := listItemFirstLine(lastItem, doc.Source)
+		lastItemLine := listItemFirstLine(lastItem, doc.Source, lines)
 		if lastItemLine <= 0 {
 			// Cannot determine the last item's position; skip this list.
 			return ast.WalkContinue, nil
