@@ -19,10 +19,15 @@ jobs:
         with:
           go-version-file: .go-version
           cache: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+      - name: Install markdownlint-cli2
+        run: npm install -g markdownlint-cli2
       - name: Install hyperfine
         run: |
-          wget -q https://github.com/sharkdp/hyperfine/releases/download/v1.19.0/hyperfine_1.19.0_amd64.deb
-          echo "5ffe6996aefbbf547f383116eea53569263cc7cf6598ee53f0081e37b702055d  hyperfine_1.19.0_amd64.deb" | sha256sum --check
-          sudo dpkg -i hyperfine_1.19.0_amd64.deb
+          wget -q https://github.com/sharkdp/hyperfine/releases/download/v1.20.0/hyperfine_1.20.0_amd64.deb
+          echo "e0391897ffb490af8a6b64e0e4281ac2c8e10cbcbb875bd22a376f44cdb263ab  hyperfine_1.20.0_amd64.deb" | sha256sum --check
+          sudo dpkg -i hyperfine_1.20.0_amd64.deb
       - name: Run benchmarks (no cache)
         run: ./bench/bench.sh --no-cache
