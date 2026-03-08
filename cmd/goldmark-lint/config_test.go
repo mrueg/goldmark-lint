@@ -333,6 +333,69 @@ func TestIsRuleEnabled_SeverityWarning(t *testing.T) {
 	}
 }
 
+func TestIsRuleEnabled_TagFalse(t *testing.T) {
+	// "whitespace": false should disable whitespace-tagged rules.
+	cfg := map[string]interface{}{"whitespace": false}
+	for _, id := range []string{"MD009", "MD010", "MD012", "MD027", "MD028", "MD030", "MD037", "MD038", "MD039"} {
+		if isRuleEnabled(id, cfg) {
+			t.Errorf("expected %s to be disabled by whitespace:false", id)
+		}
+	}
+}
+
+func TestIsRuleEnabled_TagTrue(t *testing.T) {
+	// "whitespace": true should not disable rules (they remain enabled by default).
+	cfg := map[string]interface{}{"whitespace": true}
+	if !isRuleEnabled("MD009", cfg) {
+		t.Error("expected MD009 to remain enabled when whitespace:true")
+	}
+}
+
+func TestIsRuleEnabled_TagFalseOverriddenByID(t *testing.T) {
+	// Explicit rule ID takes precedence over tag.
+	cfg := map[string]interface{}{"whitespace": false, "MD009": true}
+	if !isRuleEnabled("MD009", cfg) {
+		t.Error("expected MD009 to be enabled: explicit ID overrides tag")
+	}
+	if isRuleEnabled("MD010", cfg) {
+		t.Error("expected MD010 to be disabled: no explicit ID override")
+	}
+}
+
+func TestIsRuleEnabled_AliasFalse(t *testing.T) {
+	// Alias name should disable the rule.
+	cfg := map[string]interface{}{"no-hard-tabs": false}
+	if isRuleEnabled("MD010", cfg) {
+		t.Error("expected MD010 to be disabled by no-hard-tabs:false")
+	}
+}
+
+func TestIsRuleEnabled_AliasTrue(t *testing.T) {
+	// Alias with true should enable the rule.
+	cfg := map[string]interface{}{"default": false, "no-hard-tabs": true}
+	if !isRuleEnabled("MD010", cfg) {
+		t.Error("expected MD010 to be enabled by no-hard-tabs:true despite default:false")
+	}
+}
+
+func TestIsRuleEnabled_IDOverridesAlias(t *testing.T) {
+	// Explicit rule ID takes precedence over alias.
+	cfg := map[string]interface{}{"no-hard-tabs": false, "MD010": true}
+	if !isRuleEnabled("MD010", cfg) {
+		t.Error("expected MD010 to be enabled: explicit ID overrides alias")
+	}
+}
+
+func TestIsRuleEnabled_DefaultFalseTagEnabled(t *testing.T) {
+	// "default": false with a tag set to true only disables the tag-level check;
+	// rules still fall back to "default" (false) if not explicitly enabled.
+	cfg := map[string]interface{}{"default": false, "whitespace": true}
+	// MD009 is whitespace-tagged but not explicitly enabled → disabled by default
+	if isRuleEnabled("MD009", cfg) {
+		t.Error("expected MD009 to be disabled: default:false and no explicit ID")
+	}
+}
+
 func TestGetRuleSeverity_Default(t *testing.T) {
 	cfg := map[string]interface{}{}
 	if got := getRuleSeverity("MD013", cfg); got != "error" {

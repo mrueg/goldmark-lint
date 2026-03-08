@@ -177,6 +177,46 @@ func TestMD013_StrictFlagsNonWrappable(t *testing.T) {
 	}
 }
 
+func TestMD013_LinkOnlyLineWithCodeSpanExempt(t *testing.T) {
+	// A line whose only content is a single inline link is a "link-only" line
+	// and should not be flagged, even when the link text contains code spans.
+	src := "* [`cargo doc` should render crate examples and link to them on main documentation page](https://github.com/rust-lang/cargo/issues/2760)\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for link-only line with code span, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD013_ReferenceOnlyLineExempt(t *testing.T) {
+	// A line whose only content is a single reference link should be exempt,
+	// matching markdownlint behaviour (the link cannot be reformatted).
+	src := "[ref]: https://example.com\n\n[This reference link label is long enough to make the line exceed the 80 char limit][ref]\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for reference-link-only line, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD013_MultilineImageAltTextExempt(t *testing.T) {
+	// Lines that form the alt-text of a multi-line image are link-only
+	// content and should not be flagged.
+	src := "![A diagram showing a function with one let statement that is long enough to exceed eighty\nand a visualisation of how long x and temp live before and after this change.](diagram.svg)\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for multi-line image alt text, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD013_LinkInTextNotExempt(t *testing.T) {
+	// A line that has bare text before or after a link is NOT link-only
+	// and should be flagged when it exceeds the limit.
+	src := "See the [documentation](https://example.com) for more details about this very very long line.\n"
+	v := lintString(t, rules.MD013{LineLength: 80}, src)
+	if len(v) == 0 {
+		t.Errorf("expected a violation for non-link-only long line, got none")
+	}
+}
+
 func TestMD022_Valid(t *testing.T) {
 	src := "# Heading\n\nParagraph\n"
 	v := lintString(t, rules.MD022{}, src)

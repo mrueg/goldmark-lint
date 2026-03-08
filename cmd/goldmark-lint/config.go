@@ -316,9 +316,9 @@ var allRuleMeta = map[string]ruleMeta{
 func isRuleEnabled(id string, cfg map[string]interface{}) bool {
 	// 1. Explicit rule ID.
 	if val, ok := cfg[id]; ok {
-		switch val.(type) {
+		switch v := val.(type) {
 		case bool:
-			return val.(bool)
+			return v
 		default:
 			// string ("warning") or map (options) → rule is enabled.
 			return true
