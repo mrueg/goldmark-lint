@@ -36,7 +36,8 @@ func (r MD011) Check(doc *lint.Document) []lint.Violation {
 			continue
 		}
 		// Count each occurrence, not just whether the line has a match.
-		count := len(reversedLinkRE.FindAllString(line, -1))
+		// Blank inline code spans first to avoid false positives.
+		count := len(reversedLinkRE.FindAllString(blankInlineCodeSpans(line), -1))
 		for range count {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),

@@ -414,6 +414,20 @@ func firstTextLeaf(n ast.Node) *ast.Text {
 	return nil
 }
 
+// lastTextLeaf returns the last *ast.Text leaf under n (depth-first), or nil.
+func lastTextLeaf(n ast.Node) *ast.Text {
+	var last *ast.Text
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		if t, ok := c.(*ast.Text); ok {
+			last = t
+		}
+		if t := lastTextLeaf(c); t != nil {
+			last = t
+		}
+	}
+	return last
+}
+
 // autoLinkSourceLine returns the 1-based line number for an AutoLink node.
 // It checks adjacent Text siblings first (next sibling is preferred because
 // it marks the end of the current line), then falls back to the parent block.
@@ -462,12 +476,12 @@ func lineExemptByURL(urlLens []int, lineLen, limit int) bool {
 // the trailing run of non-whitespace with a single '#' before checking length,
 // so that a line whose only violation is a long final word is not flagged
 // (the last word cannot be wrapped to the next line).
+// Note: trailing whitespace is NOT stripped before computing the trailing run.
+// This matches markdownlint's line.replace(/\S*$/u, "#") behaviour: when a
+// line ends with whitespace, the trailing non-whitespace run is empty and
+// the replacement appends '#', making the effective length = lineLen + 1.
 func trailingWordTrimmedLen(line string) int {
-	// Trim trailing whitespace first, matching markdownlint's behaviour.
-	// A line that ends with whitespace does not have a "trailing word" to trim,
-	// so its effective length is the trimmed length.
-	trimmed := strings.TrimRight(line, " \t")
-	runes := []rune(trimmed)
+	runes := []rune(line)
 	n := len(runes)
 	// Find the start of the trailing non-whitespace run.
 	end := n
@@ -477,6 +491,17 @@ func trailingWordTrimmedLen(line string) int {
 	// Simulate markdownlint's line.replace(/\S*$/u, "#"):
 	// replace the trailing non-whitespace run with a single '#' (1 rune).
 	// When end == 0, the entire line is one word; the effective length is 1.
+	//
+	// Special case: when end == n the line ends with whitespace (no trailing
+	// non-whitespace run). Markdownlint's regex replaces the empty match at
+	// the end with '#', giving text.length = n+1. However, empirical testing
+	// shows markdownlint does NOT flag such lines when n == line_length
+	// (i.e., when the content including the trailing space is exactly at the
+	// limit). The effective check matches line.length > limit, so we return n
+	// rather than n+1 to avoid the off-by-one for exactly-at-limit lines.
+	if end == n {
+		return n
+	}
 	return end + 1
 }
 
@@ -498,9 +523,24 @@ func md013LinkOnlyLines(doc *lint.Document) map[int]bool {
 		}
 		switch n.Kind() {
 		case ast.KindLink, ast.KindImage:
-			lineNum := inlineLinkLine(n, doc.Source)
-			if lineNum > 0 {
-				linkLines[lineNum] = true
+			// Mark ALL lines spanned by this link/image as link-containing.
+			// Multiline images/links (alt text spanning multiple lines) must have
+			// each line marked; otherwise those continuation lines would not be
+			// considered link-only and would be incorrectly flagged.
+			if first := firstTextLeaf(n); first != nil {
+				startLine := countLine(doc.Source, first.Segment.Start)
+				endLine := startLine
+				if last := lastTextLeaf(n); last != nil {
+					endLine = countLine(doc.Source, last.Segment.Start)
+					if endLine < startLine {
+						endLine = startLine
+					}
+				}
+				for ln := startLine; ln <= endLine; ln++ {
+					if ln > 0 {
+						linkLines[ln] = true
+					}
+				}
 			}
 		case ast.KindText:
 			// If this Text node is a direct child of a link or image, it is the

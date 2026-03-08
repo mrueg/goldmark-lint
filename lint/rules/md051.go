@@ -20,8 +20,9 @@ func (r MD051) ID() string          { return "MD051" }
 func (r MD051) Aliases() []string   { return []string{"link-fragments"} }
 func (r MD051) Description() string { return "Link fragments should be valid" }
 
+
 // md051FragRE matches internal links with fragments: [text](#fragment).
-var md051FragRE = regexp.MustCompile(`\[([^\]]*)\]\(#([^)]*)\)`)
+var md051FragRE = regexp.MustCompile(`\[([^\]]*)]\(#([^)"]*)`)
 
 // md051DefFragRE matches reference link definitions with fragment destinations.
 var md051DefFragRE = regexp.MustCompile(`(?m)^\[[^\]]*\]:\s+#([^\s]*)`)
@@ -95,7 +96,7 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 		return ast.WalkContinue, nil
 	})
 
-	for i, line := range doc.Lines {
+		for i, line := range doc.Lines {
 		if extMask[i] {
 			continue
 		}
@@ -131,6 +132,80 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 			}
 		}
 	}
+	// Use AST walk to find multiline inline links with fragment destinations.
+	// The regex scan above only detects single-line inline links. Multiline
+	// inline links like "[text\ntext2](#frag)" require the AST to find the
+	// start line, and a source-level check to confirm the link is inline
+	// (not a reference link).
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		link, ok := n.(*ast.Link)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+		dest := string(link.Destination)
+		if !strings.HasPrefix(dest, "#") {
+			return ast.WalkContinue, nil
+		}
+		// Determine the line where the link starts (first text leaf or first line
+		// of the parent block).
+		var startLine int
+		var endLine int
+		if t := firstTextLeaf(link); t != nil {
+			startLine = countLine(doc.Source, t.Segment.Start)
+			if tl := lastTextLeaf(link); tl != nil {
+				endLine = countLine(doc.Source, tl.Segment.Stop)
+			} else {
+				endLine = startLine
+			}
+		} else {
+			return ast.WalkContinue, nil
+		}
+		// Skip single-line inline links: already handled by the regex scan above.
+		if startLine == endLine {
+			return ast.WalkContinue, nil
+		}
+		// Multi-line link: verify it is an inline link (destination appears in
+		// source) to avoid processing reference links whose URLs are elsewhere.
+		// For inline links "[text...\n...text2](#frag)", the closing ](dest) must
+		// appear on a source line after the text.
+		destBytes := link.Destination
+		isInline := false
+		for ln := endLine; ln <= endLine+1 && ln <= len(doc.Lines); ln++ {
+			if strings.Contains(doc.Lines[ln-1], "]("+string(destBytes)) {
+				isInline = true
+				break
+			}
+		}
+		if !isInline {
+			return ast.WalkContinue, nil
+		}
+		fragment := dest[1:]
+		if fragment == "top" {
+			return ast.WalkContinue, nil
+		}
+		if md051LineRefRE.MatchString(fragment) {
+			return ast.WalkContinue, nil
+		}
+		if ignoredRE != nil && ignoredRE.MatchString(fragment) {
+			return ast.WalkContinue, nil
+		}
+		checkFrag := fragment
+		if r.IgnoreCase {
+			checkFrag = strings.ToLower(fragment)
+		}
+		if !anchors[checkFrag] {
+			violations = append(violations, lint.Violation{
+				Rule:    r.ID(),
+				Line:    startLine,
+				Column:  1,
+				Message: "Link fragments should be valid [Fragment: #" + fragment + "]",
+			})
+		}
+		return ast.WalkContinue, nil
+	})
 
 	// Also check reference link definitions with fragment destinations.
 	for i, line := range doc.Lines {
