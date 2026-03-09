@@ -25,6 +25,9 @@ select rules.
   - [`--list-rules`](#--list-rules)
   - [`--summary`](#--summary)
   - [`--watch`](#--watch)
+- [Performance & Conformance](#performance--conformance)
+  - [Benchmark](#benchmark)
+  - [Conformance](#conformance)
 - [Rules](#rules)
 - [License](#license)
 
@@ -503,6 +506,104 @@ for keeping a terminal open while editing Markdown:
 
 ```sh
 goldmark-lint --watch '**/*.md'
+```
+
+## Performance & Conformance
+
+The numbers below were produced by running [`bench/bench.sh`](bench/bench.sh)
+and [`bench/conform.sh`](bench/conform.sh) against two real-world corpora at
+fixed commits.
+
+### Benchmark
+
+**Corpus:** same two repositories as the conformance run:
+
+- [rust-lang/rfcs](https://github.com/rust-lang/rfcs) `c143e315` — 636 files
+- [tldr-pages/tldr](https://github.com/tldr-pages/tldr) `05c563d1` — 33,769 files
+- **Total: 34,405 Markdown files**
+
+Measured with [hyperfine](https://github.com/sharkdp/hyperfine)
+(10 runs, 3 warmup runs). goldmark-lint's content cache was enabled (default).
+
+| Tool               | Mean       | Min        | Max        |
+|--------------------|------------|------------|------------|
+| goldmark-lint      | 7.941 s    | 7.898 s    | 8.054 s    |
+| markdownlint-cli2  | 46.866 s   | 45.376 s   | 48.124 s   |
+
+**goldmark-lint is ~5.9× faster than markdownlint-cli2** on this corpus.
+
+To reproduce:
+
+```sh
+./bench/bench.sh
+```
+
+### Conformance
+
+**Corpus:** two real-world repositories at fixed commits:
+
+- [rust-lang/rfcs](https://github.com/rust-lang/rfcs) `c143e315` — 636 files
+- [tldr-pages/tldr](https://github.com/tldr-pages/tldr) `05c563d1` — 33,769 files
+- **Total: 34,405 Markdown files**
+
+Both tools were run with default settings and their per-rule violation counts
+compared. A delta of `0` means the tools agree exactly on that rule.
+
+| Rule  | goldmark-lint | markdownlint-cli2 | delta |
+|-------|-------------:|------------------:|------:|
+| MD001 | 16 | 16 | +0 |
+| MD003 | 3 | 3 | +0 |
+| MD004 | 4,585 | 4,585 | +0 |
+| MD005 | 11 | 11 | +0 |
+| MD007 | 1,241 | 1,241 | +0 |
+| MD009 | 412 | 413 | -1 |
+| MD010 | 124 | 124 | +0 |
+| MD011 | 5 | 5 | +0 |
+| MD012 | 856 | 856 | +0 |
+| MD013 | 13,004 | 13,001 | +3 |
+| MD014 | 13 | 13 | +0 |
+| MD019 | 2 | 2 | +0 |
+| MD020 | 2 | 2 | +0 |
+| MD022 | 3,166 | 3,166 | +0 |
+| MD024 | 91 | 91 | +0 |
+| MD026 | 99 | 99 | +0 |
+| MD027 | 15 | 15 | +0 |
+| MD028 | 58 | 58 | +0 |
+| MD029 | 78 | 78 | +0 |
+| MD030 | 54 | 54 | +0 |
+| MD031 | 908 | 908 | +0 |
+| MD032 | 539 | 562 | -23 |
+| MD033 | 200 | 200 | +0 |
+| MD034 | 294 | 293 | +1 |
+| MD035 | 3 | 3 | +0 |
+| MD036 | 63 | 63 | +0 |
+| MD038 | 18 | 18 | +0 |
+| MD039 | 3 | 3 | +0 |
+| MD040 | 536 | 536 | +0 |
+| MD041 | 621 | 621 | +0 |
+| MD045 | 2 | 2 | +0 |
+| MD046 | 137 | 141 | -4 |
+| MD047 | 8 | 8 | +0 |
+| MD049 | 346 | 346 | +0 |
+| MD050 | 24 | 24 | +0 |
+| MD051 | 233 | 233 | +0 |
+| MD052 | 10 | 10 | +0 |
+| MD053 | 3,220 | 3,220 | +0 |
+| MD055 | 71 | 71 | +0 |
+| MD056 | 6 | 6 | +0 |
+| MD058 | 48 | 48 | +0 |
+| MD059 | 71 | 71 | +0 |
+| MD060 | 2,065 | 2,151 | -86 |
+| **TOTAL** | **33,261** | **33,371** | **118** |
+
+37 out of 43 rules produce identical violation counts. The remaining 6 rules
+have a combined delta of 118 violations (< 0.4% of the total), reflecting minor
+edge-case differences in rule interpretation.
+
+To reproduce:
+
+```sh
+./bench/conform.sh
 ```
 
 ## Rules
