@@ -29,6 +29,57 @@ func normalizeHR(line string) string {
 	return strings.TrimSpace(line)
 }
 
+// Fix applies MD035 to source by replacing all horizontal rules with the
+// required style. If style is "consistent", the first HR's style is used.
+func (r MD035) Fix(source []byte) []byte {
+	style := r.Style
+	if style == "" {
+		style = "consistent"
+	}
+
+	lines := strings.Split(string(source), "\n")
+	mask := fencedCodeBlockMask(lines)
+	firstStyle := ""
+	expected := style
+
+	// First pass: determine the expected style for "consistent".
+	if style == "consistent" {
+		for i, line := range lines {
+			if !mask[i] && isHR(line) {
+				firstStyle = normalizeHR(line)
+				break
+			}
+		}
+		if firstStyle != "" {
+			expected = firstStyle
+		}
+	}
+
+	if expected == "consistent" {
+		// No HRs found; nothing to do.
+		return source
+	}
+
+	// Second pass: replace non-conforming HRs.
+	changed := false
+	for i, line := range lines {
+		if mask[i] || !isHR(line) {
+			continue
+		}
+		actual := normalizeHR(line)
+		if actual != expected {
+			// Preserve any leading whitespace.
+			leading := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+			lines[i] = leading + expected
+			changed = true
+		}
+	}
+	if !changed {
+		return source
+	}
+	return []byte(strings.Join(lines, "\n"))
+}
+
 func (r MD035) Check(doc *lint.Document) []lint.Violation {
 	style := r.Style
 	if style == "" {

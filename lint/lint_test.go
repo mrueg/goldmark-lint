@@ -2981,3 +2981,209 @@ func TestMD013_MultiLineLinkRefDef_TitleLineExempt(t *testing.T) {
 		t.Errorf("expected no violations for link ref def title line, got %d: %v", len(v), v)
 	}
 }
+
+func TestMD001_Fix_SkipLevel(t *testing.T) {
+src := "# Heading 1\n\n### Heading 3\n"
+got := fixString(t, rules.MD001{}, src)
+want := "# Heading 1\n\n## Heading 3\n"
+if got != want {
+t.Errorf("MD001 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD001_Fix_NoViolation(t *testing.T) {
+src := "# Heading 1\n\n## Heading 2\n\n### Heading 3\n"
+got := fixString(t, rules.MD001{}, src)
+if got != src {
+t.Errorf("MD001 Fix() modified valid source: got %q, want %q", got, src)
+}
+}
+
+func TestMD001_Fix_MultiSkip(t *testing.T) {
+src := "# H1\n\n#### H4\n"
+got := fixString(t, rules.MD001{}, src)
+want := "# H1\n\n## H4\n"
+if got != want {
+t.Errorf("MD001 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD004_Fix_Dash(t *testing.T) {
+src := "* item 1\n* item 2\n"
+got := fixString(t, rules.MD004{Style: "dash"}, src)
+want := "- item 1\n- item 2\n"
+if got != want {
+t.Errorf("MD004 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD004_Fix_Asterisk(t *testing.T) {
+src := "- item 1\n- item 2\n"
+got := fixString(t, rules.MD004{Style: "asterisk"}, src)
+want := "* item 1\n* item 2\n"
+if got != want {
+t.Errorf("MD004 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD004_Fix_Consistent(t *testing.T) {
+src := "- item 1\n* item 2\n+ item 3\n"
+got := fixString(t, rules.MD004{Style: "consistent"}, src)
+want := "- item 1\n- item 2\n- item 3\n"
+if got != want {
+t.Errorf("MD004 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD004_Fix_NoChange(t *testing.T) {
+src := "- item 1\n- item 2\n"
+got := fixString(t, rules.MD004{Style: "dash"}, src)
+if got != src {
+t.Errorf("MD004 Fix() modified valid source: got %q, want %q", got, src)
+}
+}
+
+func TestMD022_Fix_AddBlanksAboveBelow(t *testing.T) {
+src := "Some text\n# Heading\nMore text\n"
+got := fixString(t, rules.MD022{}, src)
+want := "Some text\n\n# Heading\n\nMore text\n"
+if got != want {
+t.Errorf("MD022 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD022_Fix_NoChange(t *testing.T) {
+src := "Some text\n\n# Heading\n\nMore text\n"
+got := fixString(t, rules.MD022{}, src)
+if got != src {
+t.Errorf("MD022 Fix() modified valid source: got %q, want %q", got, src)
+}
+}
+
+func TestMD022_Fix_FirstLine(t *testing.T) {
+// First heading needs no blank line above when it's the first content.
+src := "# Heading\n\nSome text\n"
+got := fixString(t, rules.MD022{}, src)
+if got != src {
+t.Errorf("MD022 Fix() modified valid first-line heading: got %q, want %q", got, src)
+}
+}
+
+func TestMD028_Fix_RemoveBlanks(t *testing.T) {
+src := "> quote 1\n\n> quote 2\n"
+got := fixString(t, rules.MD028{}, src)
+want := "> quote 1\n> quote 2\n"
+if got != want {
+t.Errorf("MD028 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD028_Fix_NoChange(t *testing.T) {
+src := "> quote 1\n> quote 2\n"
+got := fixString(t, rules.MD028{}, src)
+if got != src {
+t.Errorf("MD028 Fix() modified valid source: got %q, want %q", got, src)
+}
+}
+
+func TestMD028_Fix_NonBlockquoteBlanksPreserved(t *testing.T) {
+src := "> quote\n\nNot a blockquote\n"
+got := fixString(t, rules.MD028{}, src)
+if got != src {
+t.Errorf("MD028 Fix() should not remove blank before non-blockquote: got %q, want %q", got, src)
+}
+}
+
+func TestMD034_Fix_WrapBareURL(t *testing.T) {
+src := "Visit https://example.com for info\n"
+got := fixString(t, rules.MD034{}, src)
+want := "Visit <https://example.com> for info\n"
+if got != want {
+t.Errorf("MD034 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD034_Fix_NoChangeLink(t *testing.T) {
+src := "Visit [example](https://example.com) for info\n"
+got := fixString(t, rules.MD034{}, src)
+if got != src {
+t.Errorf("MD034 Fix() should not modify URL inside link: got %q, want %q", got, src)
+}
+}
+
+func TestMD034_Fix_AlreadyAutoLink(t *testing.T) {
+src := "Visit <https://example.com> for info\n"
+got := fixString(t, rules.MD034{}, src)
+if got != src {
+t.Errorf("MD034 Fix() should not re-wrap already wrapped URL: got %q, want %q", got, src)
+}
+}
+
+func TestMD035_Fix_Consistent(t *testing.T) {
+src := "---\n\ntext\n\n***\n"
+got := fixString(t, rules.MD035{}, src)
+want := "---\n\ntext\n\n---\n"
+if got != want {
+t.Errorf("MD035 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD035_Fix_Explicit(t *testing.T) {
+src := "---\n\ntext\n\n* * *\n"
+got := fixString(t, rules.MD035{Style: "---"}, src)
+want := "---\n\ntext\n\n---\n"
+if got != want {
+t.Errorf("MD035 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD035_Fix_NoChange(t *testing.T) {
+src := "---\n\ntext\n\n---\n"
+got := fixString(t, rules.MD035{Style: "---"}, src)
+if got != src {
+t.Errorf("MD035 Fix() modified valid source: got %q, want %q", got, src)
+}
+}
+
+func TestMD046_Fix_ToFenced(t *testing.T) {
+src := "Text\n\n    code line 1\n    code line 2\n\nMore text\n"
+got := fixString(t, rules.MD046{Style: "fenced"}, src)
+want := "Text\n\n```\ncode line 1\ncode line 2\n```\n\nMore text\n"
+if got != want {
+t.Errorf("MD046 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD046_Fix_NoChange(t *testing.T) {
+src := "Text\n\n```\ncode\n```\n\nMore text\n"
+got := fixString(t, rules.MD046{Style: "fenced"}, src)
+if got != src {
+t.Errorf("MD046 Fix() modified valid fenced source: got %q, want %q", got, src)
+}
+}
+
+func TestMD055_Fix_AddLeadingTrailing(t *testing.T) {
+src := "Header 1 | Header 2\n--- | ---\nCell 1 | Cell 2\n"
+got := fixString(t, rules.MD055{Style: "leading_and_trailing"}, src)
+want := "| Header 1 | Header 2 |\n| --- | --- |\n| Cell 1 | Cell 2 |\n"
+if got != want {
+t.Errorf("MD055 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD055_Fix_RemoveLeadingTrailing(t *testing.T) {
+src := "| Header 1 | Header 2 |\n| --- | --- |\n| Cell 1 | Cell 2 |\n"
+got := fixString(t, rules.MD055{Style: "no_leading_or_trailing"}, src)
+want := "Header 1 | Header 2\n--- | ---\nCell 1 | Cell 2\n"
+if got != want {
+t.Errorf("MD055 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD055_Fix_NoChange(t *testing.T) {
+src := "| Header 1 | Header 2 |\n| --- | --- |\n| Cell 1 | Cell 2 |\n"
+got := fixString(t, rules.MD055{Style: "leading_and_trailing"}, src)
+if got != src {
+t.Errorf("MD055 Fix() modified valid source: got %q, want %q", got, src)
+}
+}

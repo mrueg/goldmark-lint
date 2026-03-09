@@ -22,6 +22,114 @@ func (r MD022) ID() string          { return "MD022" }
 func (r MD022) Aliases() []string   { return []string{"blanks-around-headings"} }
 func (r MD022) Description() string { return "Headings should be surrounded by blank lines" }
 
+// Fix applies MD022 to source by adding blank lines around headings.
+func (r MD022) Fix(source []byte) []byte {
+	linesAboveFor := func(level int) int {
+		v := r.LinesAbove.Get(level)
+		if v == 0 {
+			return 1
+		}
+		return v
+	}
+	linesBelowFor := func(level int) int {
+		v := r.LinesBelow.Get(level)
+		if v == 0 {
+			return 1
+		}
+		return v
+	}
+
+	lines := strings.Split(string(source), "\n")
+	// Build fenced code block mask.
+	mask := fencedCodeBlockMask(lines)
+
+	// Identify heading lines and their levels.
+	// Only ATX headings are fixed (setext headings are more complex).
+	type headingInfo struct {
+		idx   int
+		level int
+	}
+	var headings []headingInfo
+	for i, line := range lines {
+		if mask[i] {
+			continue
+		}
+		// ATX heading: optional leading spaces (up to 3), then 1-6 '#' chars, then space.
+		stripped := strings.TrimLeft(line, " ")
+		if len(stripped) == 0 || stripped[0] != '#' {
+			// Check for setext heading (= or - underline).
+			continue
+		}
+		// Count '#' chars.
+		j := 0
+		for j < len(stripped) && stripped[j] == '#' {
+			j++
+		}
+		if j > 6 {
+			continue
+		}
+		if j < len(stripped) && stripped[j] != ' ' {
+			continue
+		}
+		headings = append(headings, headingInfo{i, j})
+	}
+
+	// Process headings in reverse order to preserve indices.
+	for k := len(headings) - 1; k >= 0; k-- {
+		h := headings[k]
+		linesAbove := linesAboveFor(h.level)
+		linesBelow := linesBelowFor(h.level)
+
+		// Determine the end of the heading (for setext headings there's an underline, but
+		// ATX headings are single-line).
+		headEnd := h.idx
+
+		// Add blank lines below if needed.
+		if headEnd+1 < len(lines) {
+			blankBelow := 0
+			for j := headEnd + 1; j < len(lines) && strings.TrimSpace(lines[j]) == ""; j++ {
+				blankBelow++
+			}
+			if blankBelow < linesBelow {
+				// Insert blank lines after the heading.
+				insert := make([]string, linesBelow-blankBelow)
+				newLines := make([]string, 0, len(lines)+(linesBelow-blankBelow))
+				newLines = append(newLines, lines[:headEnd+1]...)
+				newLines = append(newLines, insert...)
+				newLines = append(newLines, lines[headEnd+1:]...)
+				lines = newLines
+				// Rebuild mask.
+				mask = fencedCodeBlockMask(lines)
+			}
+		}
+
+		// Add blank lines above if needed (only if this is not the first line).
+		if h.idx > 0 {
+			blankAbove := 0
+			for j := h.idx - 1; j >= 0 && strings.TrimSpace(lines[j]) == ""; j-- {
+				blankAbove++
+			}
+			if blankAbove < linesAbove {
+				// Insert blank lines before the heading.
+				insert := make([]string, linesAbove-blankAbove)
+				newLines := make([]string, 0, len(lines)+(linesAbove-blankAbove))
+				newLines = append(newLines, lines[:h.idx]...)
+				newLines = append(newLines, insert...)
+				newLines = append(newLines, lines[h.idx:]...)
+				lines = newLines
+				// Rebuild mask.
+				mask = fencedCodeBlockMask(lines)
+			}
+		}
+	}
+
+	result := strings.Join(lines, "\n")
+	if result == string(source) {
+		return source
+	}
+	return []byte(result)
+}
+
 func (r MD022) Check(doc *lint.Document) []lint.Violation {
 	linesAboveFor := func(level int) int {
 		v := r.LinesAbove.Get(level)

@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
 	"github.com/yuin/goldmark/ast"
@@ -17,6 +18,121 @@ type MD004 struct {
 func (r MD004) ID() string          { return "MD004" }
 func (r MD004) Aliases() []string   { return []string{"ul-style"} }
 func (r MD004) Description() string { return "Unordered list style" }
+
+// Fix applies MD004 to source by replacing unordered list markers with the required character.
+func (r MD004) Fix(source []byte) []byte {
+	style := r.Style
+	if style == "" {
+		style = "consistent"
+	}
+
+	lines := strings.Split(string(source), "\n")
+	mask := fencedCodeBlockMask(lines)
+
+	// Determine the first marker (for "consistent" style).
+	firstMarker := byte(0)
+	if style == "consistent" {
+		for i, line := range lines {
+			if mask[i] {
+				continue
+			}
+			if m := unorderedListMarkerAt(line); m != 0 {
+				firstMarker = m
+				break
+			}
+		}
+	}
+
+	changed := false
+	// For "sublist", track nesting depth.
+	sublistMarkers := []byte{'-', '*', '+'}
+	depth := 0
+	// depthStack tracks the indent levels to determine nesting.
+	type indentEntry struct{ indent int }
+	var depthStack []indentEntry
+
+	for i, line := range lines {
+		if mask[i] {
+			depth = 0
+			depthStack = nil
+			continue
+		}
+		m := unorderedListMarkerAt(line)
+		if m == 0 {
+			if strings.TrimSpace(line) == "" {
+				// blank line resets sublist depth tracking
+				depthStack = nil
+				depth = 0
+			}
+			continue
+		}
+
+		var expected byte
+		switch style {
+		case "asterisk":
+			expected = '*'
+		case "plus":
+			expected = '+'
+		case "dash":
+			expected = '-'
+		case "consistent":
+			if firstMarker == 0 {
+				firstMarker = m
+			}
+			expected = firstMarker
+		case "sublist":
+			// Determine nesting level by indent.
+			indent := 0
+			for indent < len(line) && line[indent] == ' ' {
+				indent++
+			}
+			// Pop stack entries deeper than current indent.
+			for len(depthStack) > 0 && depthStack[len(depthStack)-1].indent >= indent {
+				depthStack = depthStack[:len(depthStack)-1]
+			}
+			depth = len(depthStack)
+			depthStack = append(depthStack, indentEntry{indent})
+			expected = sublistMarkers[depth%len(sublistMarkers)]
+		}
+
+		if expected != 0 && m != expected {
+			// Replace the marker character on this line.
+			idx := strings.IndexByte(line, m)
+			if idx >= 0 {
+				bs := []byte(line)
+				bs[idx] = expected
+				lines[i] = string(bs)
+				changed = true
+			}
+		}
+	}
+	if !changed {
+		return source
+	}
+	return []byte(strings.Join(lines, "\n"))
+}
+
+// unorderedListMarkerAt returns the unordered list marker byte for line if it
+// is a list item line (e.g. "- item", "* item", "+ item"), otherwise 0.
+func unorderedListMarkerAt(line string) byte {
+	i := 0
+	// Allow up to 3 leading spaces.
+	for i < len(line) && i < 3 && line[i] == ' ' {
+		i++
+	}
+	if i >= len(line) {
+		return 0
+	}
+	m := line[i]
+	if m != '-' && m != '*' && m != '+' {
+		return 0
+	}
+	// Must be followed by a space.
+	if i+1 >= len(line) || line[i+1] != ' ' {
+		return 0
+	}
+	return m
+}
 
 func (r MD004) Check(doc *lint.Document) []lint.Violation {
 	style := r.Style
