@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # bench.sh — benchmark goldmark-lint vs markdownlint-cli2
 #
-# Uses rust-lang/rfcs at a fixed commit as the test corpus (580+ Markdown files).
+# Uses two corpora at fixed commits as the benchmark data sets:
+#   - rust-lang/rfcs (580+ Markdown files)
+#   - tldr-pages/tldr (2000+ Markdown files)
 #
 # Requirements:
 #   - git, go
@@ -23,10 +25,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Fixed commit in rust-lang/rfcs used as the benchmark corpus.
+# Fixed commit in rust-lang/rfcs used as the first benchmark corpus.
 RFCS_REPO="https://github.com/rust-lang/rfcs"
 RFCS_COMMIT="c143e315774f746d667c5eecd95a8ed999e8a729"
 RFCS_DIR="${SCRIPT_DIR}/rfcs"
+
+# Fixed commit in tldr-pages/tldr used as the second benchmark corpus.
+TLDR_REPO="https://github.com/tldr-pages/tldr"
+TLDR_COMMIT="9065929da2c76803b11cf8fafa77e561d46b86d5"
+TLDR_DIR="${SCRIPT_DIR}/tldr"
 
 GOLDMARK_BIN="${REPO_ROOT}/bench/goldmark-lint"
 
@@ -89,6 +96,28 @@ MD_COUNT=$(find "${RFCS_DIR}" -name '*.md' | wc -l | tr -d ' ')
 info "Corpus: ${MD_COUNT} Markdown files in ${RFCS_DIR}"
 
 # ---------------------------------------------------------------------------
+# Clone / update the tldr corpus at the fixed commit
+# ---------------------------------------------------------------------------
+if [[ ! -d "${TLDR_DIR}/.git" ]]; then
+  info "Cloning tldr-pages/tldr corpus (shallow)…"
+  git clone -q --filter=blob:none --no-checkout "${TLDR_REPO}" "${TLDR_DIR}"
+  git -c advice.detachedHead=false -C "${TLDR_DIR}" checkout -q "${TLDR_COMMIT}"
+else
+  current=$(git -C "${TLDR_DIR}" rev-parse HEAD)
+  if [[ "${current}" != "${TLDR_COMMIT}" ]]; then
+    info "Updating tldr corpus to ${TLDR_COMMIT}…"
+    git -C "${TLDR_DIR}" fetch -q origin "${TLDR_COMMIT}"
+    git -c advice.detachedHead=false -C "${TLDR_DIR}" checkout -q "${TLDR_COMMIT}"
+  else
+    info "tldr corpus already at ${TLDR_COMMIT}."
+  fi
+fi
+
+# Count Markdown files in the tldr corpus.
+TLDR_MD_COUNT=$(find "${TLDR_DIR}" -name '*.md' | wc -l | tr -d ' ')
+info "Corpus: ${TLDR_MD_COUNT} Markdown files in ${TLDR_DIR}"
+
+# ---------------------------------------------------------------------------
 # Build goldmark-lint
 # ---------------------------------------------------------------------------
 info "Building goldmark-lint…"
@@ -141,52 +170,55 @@ fi
 # ---------------------------------------------------------------------------
 # Run benchmarks
 # ---------------------------------------------------------------------------
-cd "${RFCS_DIR}"
+for CORPUS_DIR in "${RFCS_DIR}" "${TLDR_DIR}"; do
+  info "Benchmarking corpus: ${CORPUS_DIR}"
+  cd "${CORPUS_DIR}"
 
-if [[ "${HAS_HYPERFINE}" -eq 1 ]]; then
-  info "Using hyperfine (runs=${RUNS}, warmup=${WARMUP})…"
+  if [[ "${HAS_HYPERFINE}" -eq 1 ]]; then
+    info "Using hyperfine (runs=${RUNS}, warmup=${WARMUP})…"
 
-  HYPERFINE_ARGS=(
-    --runs "${RUNS}"
-    --warmup "${WARMUP}"
-    --shell bash
-    --command-name "goldmark-lint"
-    "${GOLDMARK_CMD}"
-  )
-
-  if [[ "${HAS_MARKDOWNLINT}" -eq 1 ]]; then
-    HYPERFINE_ARGS+=(
-      --command-name "markdownlint-cli2"
-      "${MARKDOWNLINT_CMD}"
+    HYPERFINE_ARGS=(
+      --runs "${RUNS}"
+      --warmup "${WARMUP}"
+      --shell bash
+      --command-name "goldmark-lint"
+      "${GOLDMARK_CMD}"
     )
+
+    if [[ "${HAS_MARKDOWNLINT}" -eq 1 ]]; then
+      HYPERFINE_ARGS+=(
+        --command-name "markdownlint-cli2"
+        "${MARKDOWNLINT_CMD}"
+      )
+    else
+      warn "markdownlint-cli2 not found on PATH — skipping comparison."
+      warn "Install it with: npm install -g markdownlint-cli2"
+    fi
+
+    hyperfine "${HYPERFINE_ARGS[@]}" --ignore-failure
+
   else
-    warn "markdownlint-cli2 not found on PATH — skipping comparison."
-    warn "Install it with: npm install -g markdownlint-cli2"
-  fi
-
-  hyperfine "${HYPERFINE_ARGS[@]}" --ignore-failure
-
-else
-  warn "hyperfine not found — falling back to shell 'time'."
-  warn "Install hyperfine for more accurate results: https://github.com/sharkdp/hyperfine"
-  echo
-
-  run_timed() {
-    local label="$1"
-    local cmd="$2"
-    echo "--- ${label} ---"
-    # Suppress command stdout/stderr; keep time output visible on stderr.
-    # The || true prevents set -e from exiting when lint finds violations.
-    { time ${cmd} >/dev/null 2>&1 || true; } 2>&1
+    warn "hyperfine not found — falling back to shell 'time'."
+    warn "Install hyperfine for more accurate results: https://github.com/sharkdp/hyperfine"
     echo
-  }
 
-  run_timed "goldmark-lint" run_goldmark
+    run_timed() {
+      local label="$1"
+      local cmd="$2"
+      echo "--- ${label} ---"
+      # Suppress command stdout/stderr; keep time output visible on stderr.
+      # The || true prevents set -e from exiting when lint finds violations.
+      { time ${cmd} >/dev/null 2>&1 || true; } 2>&1
+      echo
+    }
 
-  if [[ "${HAS_MARKDOWNLINT}" -eq 1 ]]; then
-    run_timed "markdownlint-cli2" run_markdownlint
-  else
-    warn "markdownlint-cli2 not found on PATH — skipping comparison."
-    warn "Install it with: npm install -g markdownlint-cli2"
+    run_timed "goldmark-lint" run_goldmark
+
+    if [[ "${HAS_MARKDOWNLINT}" -eq 1 ]]; then
+      run_timed "markdownlint-cli2" run_markdownlint
+    else
+      warn "markdownlint-cli2 not found on PATH — skipping comparison."
+      warn "Install it with: npm install -g markdownlint-cli2"
+    fi
   fi
-fi
+done
