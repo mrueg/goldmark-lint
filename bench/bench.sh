@@ -32,7 +32,7 @@ RFCS_DIR="${SCRIPT_DIR}/rfcs"
 
 # Fixed commit in tldr-pages/tldr used as the second benchmark corpus.
 TLDR_REPO="https://github.com/tldr-pages/tldr"
-TLDR_COMMIT="9065929da2c76803b11cf8fafa77e561d46b86d5"
+TLDR_COMMIT="05c563d1ecb0fe5c1f0de9d3348baa04f3b8b29d"
 TLDR_DIR="${SCRIPT_DIR}/tldr"
 
 GOLDMARK_BIN="${REPO_ROOT}/bench/goldmark-lint"
@@ -129,33 +129,33 @@ info "Built: ${GOLDMARK_BIN}"
 # by name when building hyperfine command strings.
 # ---------------------------------------------------------------------------
 
-# run_goldmark lints the corpus with the local goldmark-lint build.
-# The glob pattern **/*.md is passed as a literal argument; goldmark-lint
-# performs its own expansion via filepath.Glob (and falls back to a walk for
-# patterns containing **).
+# run_goldmark lints both corpora with the local goldmark-lint build in a
+# single invocation.  Both glob patterns are passed as literal arguments;
+# goldmark-lint performs its own expansion via filepath.Glob (and falls back
+# to a walk for patterns containing **).
 run_goldmark() {
   if [[ "${NO_CACHE}" -eq 1 ]]; then
-    "${GOLDMARK_BIN}" --no-cache '**/*.md'
+    "${GOLDMARK_BIN}" --no-cache 'rfcs/**/*.md' 'tldr/**/*.md'
   else
-    "${GOLDMARK_BIN}" '**/*.md'
+    "${GOLDMARK_BIN}" 'rfcs/**/*.md' 'tldr/**/*.md'
   fi
 }
 
-# run_markdownlint lints the corpus with markdownlint-cli2.
+# run_markdownlint lints both corpora with markdownlint-cli2.
 run_markdownlint() {
-  markdownlint-cli2 '**/*.md'
+  markdownlint-cli2 'rfcs/**/*.md' 'tldr/**/*.md'
 }
 
 # Command strings used by hyperfine (--shell bash).  The single quotes around
-# **/*.md are interpreted by the bash subprocess, preventing shell glob
-# expansion so that each tool receives the raw pattern and performs its own
-# expansion — matching exactly what a user would type on the command line.
+# the glob patterns are interpreted by the bash subprocess, preventing shell
+# glob expansion so that each tool receives the raw patterns and performs its
+# own expansion — matching exactly what a user would type on the command line.
 GOLDMARK_EXTRA=""
 if [[ "${NO_CACHE}" -eq 1 ]]; then
   GOLDMARK_EXTRA=" --no-cache"
 fi
-GOLDMARK_CMD="${GOLDMARK_BIN}${GOLDMARK_EXTRA} '**/*.md'"
-MARKDOWNLINT_CMD="markdownlint-cli2 '**/*.md'"
+GOLDMARK_CMD="${GOLDMARK_BIN}${GOLDMARK_EXTRA} 'rfcs/**/*.md' 'tldr/**/*.md'"
+MARKDOWNLINT_CMD="markdownlint-cli2 'rfcs/**/*.md' 'tldr/**/*.md'"
 
 HAS_HYPERFINE=0
 if command -v hyperfine &>/dev/null; then
@@ -168,57 +168,54 @@ if command -v markdownlint-cli2 &>/dev/null; then
 fi
 
 # ---------------------------------------------------------------------------
-# Run benchmarks
+# Run benchmarks against both corpora in a single invocation
 # ---------------------------------------------------------------------------
-for CORPUS_DIR in "${RFCS_DIR}" "${TLDR_DIR}"; do
-  info "Benchmarking corpus: ${CORPUS_DIR}"
-  cd "${CORPUS_DIR}"
+cd "${SCRIPT_DIR}"
 
-  if [[ "${HAS_HYPERFINE}" -eq 1 ]]; then
-    info "Using hyperfine (runs=${RUNS}, warmup=${WARMUP})…"
+if [[ "${HAS_HYPERFINE}" -eq 1 ]]; then
+  info "Using hyperfine (runs=${RUNS}, warmup=${WARMUP})…"
 
-    HYPERFINE_ARGS=(
-      --runs "${RUNS}"
-      --warmup "${WARMUP}"
-      --shell bash
-      --command-name "goldmark-lint"
-      "${GOLDMARK_CMD}"
+  HYPERFINE_ARGS=(
+    --runs "${RUNS}"
+    --warmup "${WARMUP}"
+    --shell bash
+    --command-name "goldmark-lint"
+    "${GOLDMARK_CMD}"
+  )
+
+  if [[ "${HAS_MARKDOWNLINT}" -eq 1 ]]; then
+    HYPERFINE_ARGS+=(
+      --command-name "markdownlint-cli2"
+      "${MARKDOWNLINT_CMD}"
     )
-
-    if [[ "${HAS_MARKDOWNLINT}" -eq 1 ]]; then
-      HYPERFINE_ARGS+=(
-        --command-name "markdownlint-cli2"
-        "${MARKDOWNLINT_CMD}"
-      )
-    else
-      warn "markdownlint-cli2 not found on PATH — skipping comparison."
-      warn "Install it with: npm install -g markdownlint-cli2"
-    fi
-
-    hyperfine "${HYPERFINE_ARGS[@]}" --ignore-failure
-
   else
-    warn "hyperfine not found — falling back to shell 'time'."
-    warn "Install hyperfine for more accurate results: https://github.com/sharkdp/hyperfine"
-    echo
-
-    run_timed() {
-      local label="$1"
-      local cmd="$2"
-      echo "--- ${label} ---"
-      # Suppress command stdout/stderr; keep time output visible on stderr.
-      # The || true prevents set -e from exiting when lint finds violations.
-      { time ${cmd} >/dev/null 2>&1 || true; } 2>&1
-      echo
-    }
-
-    run_timed "goldmark-lint" run_goldmark
-
-    if [[ "${HAS_MARKDOWNLINT}" -eq 1 ]]; then
-      run_timed "markdownlint-cli2" run_markdownlint
-    else
-      warn "markdownlint-cli2 not found on PATH — skipping comparison."
-      warn "Install it with: npm install -g markdownlint-cli2"
-    fi
+    warn "markdownlint-cli2 not found on PATH — skipping comparison."
+    warn "Install it with: npm install -g markdownlint-cli2"
   fi
-done
+
+  hyperfine "${HYPERFINE_ARGS[@]}" --ignore-failure
+
+else
+  warn "hyperfine not found — falling back to shell 'time'."
+  warn "Install hyperfine for more accurate results: https://github.com/sharkdp/hyperfine"
+  echo
+
+  run_timed() {
+    local label="$1"
+    local cmd="$2"
+    echo "--- ${label} ---"
+    # Suppress command stdout/stderr; keep time output visible on stderr.
+    # The || true prevents set -e from exiting when lint finds violations.
+    { time ${cmd} >/dev/null 2>&1 || true; } 2>&1
+    echo
+  }
+
+  run_timed "goldmark-lint" run_goldmark
+
+  if [[ "${HAS_MARKDOWNLINT}" -eq 1 ]]; then
+    run_timed "markdownlint-cli2" run_markdownlint
+  else
+    warn "markdownlint-cli2 not found on PATH — skipping comparison."
+    warn "Install it with: npm install -g markdownlint-cli2"
+  fi
+fi
