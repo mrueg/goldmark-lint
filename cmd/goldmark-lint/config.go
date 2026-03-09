@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -25,7 +26,9 @@ type GlobOverride struct {
 type ConfigFile struct {
 	Extends          string                 `yaml:"extends"          json:"extends"`
 	Config           map[string]interface{} `yaml:"config"           json:"config"`
+	Rules            map[string]interface{} `yaml:"rules"            json:"rules"`
 	Ignores          []string               `yaml:"ignores"          json:"ignores"`
+	IgnorePatterns   []string               `yaml:"ignorePatterns"   json:"ignorePatterns"`
 	Overrides        []GlobOverride         `yaml:"overrides"        json:"overrides"`
 	OutputFormatters []interface{}          `yaml:"outputFormatters" json:"outputFormatters"`
 	NoInlineConfig   bool                   `yaml:"noInlineConfig"   json:"noInlineConfig"`
@@ -131,6 +134,16 @@ func loadConfigResolved(path string, visited map[string]bool) (*ConfigFile, erro
 		return nil, fmt.Errorf("unsupported config file format: %s", path)
 	}
 
+	// "rules" is an alias for "config"; merge rules into config (config takes priority).
+	if len(cfg.Rules) > 0 {
+		if cfg.Config == nil {
+			cfg.Config = cfg.Rules
+		} else {
+			cfg.Config = mergeConfigs(cfg.Rules, cfg.Config)
+		}
+		cfg.Rules = nil
+	}
+
 	if cfg.Extends == "" {
 		return &cfg, nil
 	}
@@ -168,6 +181,7 @@ func loadConfigResolved(path string, visited map[string]bool) (*ConfigFile, erro
 		Gitignore:        mergeGitignore(baseCfg.Gitignore, cfg.Gitignore),
 		Config:           mergeConfigs(baseCfg.Config, cfg.Config),
 		Ignores:          append(baseCfg.Ignores, cfg.Ignores...),
+		IgnorePatterns:   append(baseCfg.IgnorePatterns, cfg.IgnorePatterns...),
 		Overrides:        append(baseCfg.Overrides, cfg.Overrides...),
 		OutputFormatters: outputFormatters,
 	}
@@ -555,6 +569,20 @@ func effectiveConfigForFile(base map[string]interface{}, overrides []GlobOverrid
 // isIgnored reports whether path matches any of the ignore glob patterns.
 func isIgnored(path string, patterns []string) bool {
 	return matchesAnyPattern(path, patterns)
+}
+
+// isIgnoredByPattern reports whether path matches any of the compiled regex patterns.
+func isIgnoredByPattern(path string, patterns []*regexp.Regexp) bool {
+	if len(patterns) == 0 {
+		return false
+	}
+	normalized := filepath.ToSlash(filepath.Clean(path))
+	for _, re := range patterns {
+		if re.MatchString(normalized) {
+			return true
+		}
+	}
+	return false
 }
 
 // gitignoreIsEnabled reports whether the gitignore config value is enabled

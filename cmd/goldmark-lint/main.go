@@ -52,12 +52,12 @@ Config file:
 - Also reads .markdownlint.yaml (or .yml, .jsonc, .json), which uses the
   simpler rule-only format (compatible with vscode-markdownlint).
   .markdownlint-cli2.* files take priority when both are present.
-- Supports "config" (rule enable/disable and options), "ignores",
-  "overrides" (per-glob rule config overrides), "extends" (inherit
-  configuration from another config file), "outputFormatters", "globs"
-  (default input globs), "fix" (enable --fix from config), "frontMatter"
-  (custom front matter regex), and "gitignore" (auto-ignore .gitignore
-  entries) keys.
+- Supports "config" (or "rules", an alias) for rule enable/disable and options,
+  "ignores", "ignorePatterns" (regex-based file ignoring), "overrides" (per-glob
+  rule config overrides), "extends" (inherit configuration from another config
+  file), "outputFormatters", "globs" (default input globs), "fix" (enable --fix
+  from config), "frontMatter" (custom front matter regex), and "gitignore"
+  (auto-ignore .gitignore entries) keys.
 
 Exit codes:
 - 0: Linting was successful and there were no errors
@@ -149,6 +149,7 @@ func main() {
 
 	var ruleCfg map[string]interface{}
 	var ignores []string
+	var ignorePatterns []string
 	var overrides []GlobOverride
 	var noInlineConfig bool
 	// effectiveFix is true when --fix is passed on CLI or fix:true is in config.
@@ -156,6 +157,7 @@ func main() {
 	if cfg != nil {
 		ruleCfg = cfg.Config
 		ignores = cfg.Ignores
+		ignorePatterns = cfg.IgnorePatterns
 		overrides = cfg.Overrides
 		noInlineConfig = cfg.NoInlineConfig
 		if cfg.Fix {
@@ -199,6 +201,17 @@ func main() {
 			os.Exit(2)
 		}
 		linter.FrontMatterRegexp = re
+	}
+
+	// ignorePatterns: compile and validate each regex pattern at startup.
+	ignorePatternRegexps := make([]*regexp.Regexp, 0, len(ignorePatterns))
+	for _, p := range ignorePatterns {
+		re, err := regexp.Compile(p)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: invalid ignorePattern regex %q: %v\n", p, err)
+			os.Exit(2)
+		}
+		ignorePatternRegexps = append(ignorePatternRegexps, re)
 	}
 
 	// Load cache (skip when --no-cache, fix, fix-dry-run, or watch is used).
@@ -255,7 +268,7 @@ func main() {
 			files = []string{pattern}
 		}
 		for _, file := range files {
-			if !isIgnored(file, ignores) {
+			if !isIgnored(file, ignores) && !isIgnoredByPattern(file, ignorePatternRegexps) {
 				allFiles = append(allFiles, file)
 			}
 		}
