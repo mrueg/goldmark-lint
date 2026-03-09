@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -1488,5 +1489,273 @@ func TestCLI_FrontMatter_InvalidRegex(t *testing.T) {
 	}
 	if exitErr.ExitCode() != 2 {
 		t.Errorf("invalid frontMatter regex exit code = %d, want 2", exitErr.ExitCode())
+	}
+}
+
+// TestLoadConfig_RulesAlias verifies that "rules" is treated as an alias for "config".
+func TestLoadConfig_RulesAlias_YAML(t *testing.T) {
+	dir := t.TempDir()
+	content := `
+rules:
+  MD001: false
+  MD013:
+    line_length: 100
+`
+	cfgPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Config == nil {
+		t.Fatal("expected non-nil config.Config after rules alias normalization")
+	}
+	if v, ok := cfg.Config["MD001"]; !ok || v != false {
+		t.Errorf("MD001 = %v, want false (from rules alias)", v)
+	}
+	md013, ok := cfg.Config["MD013"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("MD013 config not a map, got %T", cfg.Config["MD013"])
+	}
+	if md013["line_length"] != 100 {
+		t.Errorf("MD013.line_length = %v, want 100 (from rules alias)", md013["line_length"])
+	}
+}
+
+// TestLoadConfig_RulesAlias_JSON verifies that "rules" alias works in JSON format.
+func TestLoadConfig_RulesAlias_JSON(t *testing.T) {
+	dir := t.TempDir()
+	content := `{"rules":{"MD001":false,"MD013":{"line_length":100}}}`
+	cfgPath := filepath.Join(dir, ".markdownlint-cli2.json")
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Config == nil {
+		t.Fatal("expected non-nil config.Config after rules alias normalization")
+	}
+	if v, ok := cfg.Config["MD001"]; !ok || v != false {
+		t.Errorf("MD001 = %v, want false (from rules alias)", v)
+	}
+}
+
+// TestLoadConfig_RulesAlias_ConfigTakesPriority verifies that when both "rules"
+// and "config" are present, "config" takes priority for the same key.
+func TestLoadConfig_RulesAlias_ConfigTakesPriority(t *testing.T) {
+	dir := t.TempDir()
+	content := `
+rules:
+  MD001: false
+  MD013:
+    line_length: 80
+config:
+  MD013:
+    line_length: 120
+`
+	cfgPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Config == nil {
+		t.Fatal("expected non-nil config.Config")
+	}
+	// MD001 comes from rules (not overridden by config)
+	if v, ok := cfg.Config["MD001"]; !ok || v != false {
+		t.Errorf("MD001 = %v, want false (from rules)", v)
+	}
+	// MD013.line_length should be 120 from config, not 80 from rules
+	md013, ok := cfg.Config["MD013"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("MD013 config not a map, got %T", cfg.Config["MD013"])
+	}
+	if md013["line_length"] != 120 {
+		t.Errorf("MD013.line_length = %v, want 120 (config overrides rules)", md013["line_length"])
+	}
+}
+
+// TestIsIgnoredByPattern tests the regex-based ignore helper.
+func TestIsIgnoredByPattern(t *testing.T) {
+	tests := []struct {
+		path     string
+		patterns []string
+		want     bool
+	}{
+		{"vendor/foo.md", []string{`vendor/`}, true},
+		{"docs/foo.md", []string{`vendor/`}, false},
+		{"CHANGELOG.md", []string{`CHANGELOG`}, true},
+		{"docs/CHANGELOG.md", []string{`^CHANGELOG`}, false}, // anchored to start
+		{"docs/CHANGELOG.md", []string{`CHANGELOG`}, true},
+		{"test_file.md", []string{`test_`}, true},
+		{"readme.md", []string{`test_`}, false},
+		{"foo.md", []string{}, false},
+	}
+	for _, tt := range tests {
+		var regexps []*regexp.Regexp
+		for _, p := range tt.patterns {
+			re, err := regexp.Compile(p)
+			if err != nil {
+				t.Fatalf("failed to compile pattern %q: %v", p, err)
+			}
+			regexps = append(regexps, re)
+		}
+		got := isIgnoredByPattern(tt.path, regexps)
+		if got != tt.want {
+			t.Errorf("isIgnoredByPattern(%q, %v) = %v, want %v", tt.path, tt.patterns, got, tt.want)
+		}
+	}
+}
+
+// TestLoadConfig_IgnorePatterns verifies that "ignorePatterns" is loaded correctly.
+func TestLoadConfig_IgnorePatterns_YAML(t *testing.T) {
+	dir := t.TempDir()
+	content := `
+ignorePatterns:
+  - "vendor/"
+  - "_test\\.md$"
+`
+	cfgPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.IgnorePatterns) != 2 {
+		t.Fatalf("ignorePatterns = %v, want 2 entries", cfg.IgnorePatterns)
+	}
+	if cfg.IgnorePatterns[0] != `vendor/` {
+		t.Errorf("ignorePatterns[0] = %q, want %q", cfg.IgnorePatterns[0], `vendor/`)
+	}
+}
+
+// TestLoadConfig_IgnorePatterns_Extends verifies that ignorePatterns are merged when using extends.
+func TestLoadConfig_IgnorePatterns_Extends(t *testing.T) {
+	dir := t.TempDir()
+
+	baseContent := "ignorePatterns:\n  - \"vendor/\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "base.yaml"), []byte(baseContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	childContent := "extends: base.yaml\nignorePatterns:\n  - \"_test\"\n"
+	childPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(childPath, []byte(childContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(childPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.IgnorePatterns) != 2 {
+		t.Fatalf("ignorePatterns = %v, want 2 entries", cfg.IgnorePatterns)
+	}
+	if cfg.IgnorePatterns[0] != "vendor/" || cfg.IgnorePatterns[1] != "_test" {
+		t.Errorf("ignorePatterns = %v, want [vendor/, _test]", cfg.IgnorePatterns)
+	}
+}
+
+// TestCLI_RulesAlias verifies that using "rules" key works the same as "config".
+func TestCLI_RulesAlias(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// Use "rules" key to disable MD041 (which requires a top-level heading).
+	cfgContent := "rules:\n  MD041: false\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// File that would violate MD041
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("Not a heading\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 when MD041 is disabled via rules alias, got: %v", err)
+	}
+}
+
+// TestCLI_IgnorePatterns verifies that ignorePatterns excludes matching files.
+func TestCLI_IgnorePatterns(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// Config that ignores files matching "_draft" regex pattern.
+	cfgContent := "ignorePatterns:\n  - \"_draft\"\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// File with a violation but matching the ignore pattern.
+	draftFile := filepath.Join(dir, "post_draft.md")
+	if err := os.WriteFile(draftFile, []byte("no heading here\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, draftFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 when file is excluded by ignorePatterns, got: %v", err)
+	}
+}
+
+// TestCLI_IgnorePatterns_NonMatchingFile verifies that files NOT matching ignorePatterns are linted.
+func TestCLI_IgnorePatterns_NonMatchingFile(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// Config that only ignores "_draft" files.
+	cfgContent := "ignorePatterns:\n  - \"_draft\"\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Regular file that does NOT match the ignore pattern but has a violation.
+	regularFile := filepath.Join(dir, "post.md")
+	if err := os.WriteFile(regularFile, []byte("no heading here\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, regularFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err == nil {
+		t.Error("expected non-zero exit for file with violations not matching ignorePatterns, got exit 0")
+	}
+}
+
+// TestCLI_IgnorePatterns_InvalidRegex verifies that an invalid ignorePattern regex causes exit 2.
+func TestCLI_IgnorePatterns_InvalidRegex(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Heading\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Config with invalid ignorePattern regex.
+	cfgContent := "ignorePatterns:\n  - \"[invalid\"\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = dir
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected non-zero exit for invalid ignorePattern regex, got nil error")
+	}
+	if exitErr.ExitCode() != 2 {
+		t.Errorf("invalid ignorePattern regex exit code = %d, want 2", exitErr.ExitCode())
 	}
 }
