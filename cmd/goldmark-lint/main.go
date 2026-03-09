@@ -41,6 +41,7 @@ Optional parameters:
 - --no-cache         disable reading/writing the .goldmark-lint-cache file
 - --no-globs         ignore the globs config key at runtime
 - --output-format    output format: default, json, junit, tap, sarif, github (default: default)
+- --quiet / -q       suppress all output except violations
 - --summary           print a count-per-rule breakdown after linting
 - --watch            re-lint files whenever they change (runs until Ctrl+C)
 - --help             writes this message to the console and exits without doing anything else
@@ -77,6 +78,8 @@ func main() {
 	noCache := flag.Bool("no-cache", false, "disable reading/writing the cache file")
 	noGlobs := flag.Bool("no-globs", false, "ignore the globs config key at runtime")
 	outputFormat := flag.String("output-format", "", "output format: default, json, junit, tap, sarif, github")
+	quiet := flag.Bool("quiet", false, "suppress all output except violations")
+	flag.BoolVar(quiet, "q", false, "suppress all output except violations")
 	summary := flag.Bool("summary", false, "print a count-per-rule breakdown after linting")
 	watch := flag.Bool("watch", false, "re-lint files whenever they change (runs until Ctrl+C)")
 	flag.Parse()
@@ -355,7 +358,7 @@ func main() {
 	}
 
 	// --fix-dry-run: output a unified diff for every file that would be changed.
-	if *fixDryRun {
+	if *fixDryRun && !*quiet {
 		color := isColorEnabled(os.Stdout)
 		for i, file := range allFiles {
 			r := results[i]
@@ -432,7 +435,7 @@ func main() {
 	}
 
 	// Print per-rule summary if requested.
-	if *summary {
+	if *summary && !*quiet {
 		formatSummary(allViolations, os.Stderr)
 	}
 
@@ -451,7 +454,11 @@ func main() {
 	// affect the exit code – the process exits 0 on interrupt (Ctrl+C) since
 	// watch mode is an interactive session, not a one-shot check.
 	if *watch {
-		runWatch(allFiles, func(changed []string) {
+		var watchStatusOut io.Writer = os.Stderr
+		if *quiet {
+			watchStatusOut = io.Discard
+		}
+		runWatch(allFiles, watchStatusOut, func(changed []string) {
 			var watchViolations []fileViolation
 			for _, file := range changed {
 				source, err := os.ReadFile(file)
