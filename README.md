@@ -327,6 +327,15 @@ This line's MD009 violation is suppressed. <!-- markdownlint-disable-line MD009 
 <!-- markdownlint-disable-file MD001 -->
 MD001 is suppressed for the entire file regardless of comment position.
 
+<!-- markdownlint-enable-file MD001 -->
+Re-enables a file-level disable for the remainder of the file.
+
+<!-- markdownlint-capture -->
+<!-- markdownlint-disable MD001 -->
+Capture the current disable state, then disable MD001.
+<!-- markdownlint-restore -->
+Disable state is restored to what it was at the capture point.
+
 <!-- markdownlint-configure-file { "MD001": false } -->
 File-level rule configuration via JSON.
 ```
@@ -390,10 +399,13 @@ Omit the rule ID to disable/enable all rules. Rule aliases (e.g.
 - stdin support: lint with `goldmark-lint -` or format with `goldmark-lint --format`.
 - Watch mode (`--watch`): re-lint files on every change, running until interrupted.
 - Configuration file discovery: searches from the current directory up to the filesystem root.
-- Supports `.markdownlint-cli2.yaml` and `.markdownlint.yaml` config formats.
+- Supports `.markdownlint-cli2.yaml` and `.markdownlint.yaml` config formats (YAML, JSON, and JSONC with comment stripping).
 - Config inheritance via `extends` for composable configuration.
 - Per-glob rule overrides via `overrides` for fine-grained control.
-- Inline disable comments (`markdownlint-disable`, `markdownlint-disable-next-line`, etc.).
+- Rules configurable by ID, alias (e.g. `no-hard-tabs`), or tag (e.g. `whitespace: false` disables all whitespace-tagged rules).
+- Warning severity: set a rule to `"warning"` for informational violations that don't fail the build; combine with `--fail-on-warning` to override.
+- `noInlineConfig` config key to globally disable inline `markdownlint-disable` comments.
+- Inline disable comments (`markdownlint-disable`, `markdownlint-disable-next-line`, `markdownlint-disable-line`, `markdownlint-disable-file`, `markdownlint-enable-file`, `markdownlint-capture`/`restore`, `markdownlint-configure-file`).
 - Multiple output formats via `--output-format`: default text, JSON, JUnit XML, TAP, SARIF, and GitHub Actions annotations.
 - Colored terminal output: violations and diffs use ANSI colors when writing to a TTY (suppressed by `NO_COLOR`).
 - Result caching via `.goldmark-lint-cache` to speed up repeated runs.
