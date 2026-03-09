@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
 	"github.com/yuin/goldmark/ast"
@@ -19,6 +20,61 @@ func (r MD001) ID() string          { return "MD001" }
 func (r MD001) Aliases() []string   { return []string{"heading-increment"} }
 func (r MD001) Description() string {
 	return "Heading levels should only increment by one level at a time"
+}
+
+// Fix applies MD001 to source by reducing heading levels that skip more than
+// one level. For example, if an h1 is followed by an h3, the h3 is reduced
+// to h2. Subsequent headings are also adjusted to maintain valid increments.
+func (r MD001) Fix(source []byte) []byte {
+	lines := strings.Split(string(source), "\n")
+	mask := fencedCodeBlockMask(lines)
+
+	// Determine if front matter counts as h1.
+	prevLevel := 0
+	// We process front matter in the Linter, so here we just handle the raw source.
+	// Since Fix is called on the non-front-matter portion, we start at prevLevel=0.
+	// However, to match the Check behavior with FrontMatterTitle, we can't easily
+	// detect front matter here. We'll start fresh and not assume front matter title.
+
+	changed := false
+	for i, line := range lines {
+		if mask[i] {
+			continue
+		}
+		// Detect ATX heading.
+		stripped := strings.TrimLeft(line, " ")
+		if len(stripped) == 0 || stripped[0] != '#' {
+			continue
+		}
+		j := 0
+		for j < len(stripped) && stripped[j] == '#' {
+			j++
+		}
+		if j > 6 {
+			continue
+		}
+		if j < len(stripped) && stripped[j] != ' ' {
+			continue
+		}
+		level := j
+
+		if prevLevel > 0 && level > prevLevel+1 {
+			// Reduce this heading level to prevLevel+1.
+			newLevel := prevLevel + 1
+			// Find the position of the '#' block in the original line.
+			leadingSpaces := len(line) - len(stripped)
+			newLine := line[:leadingSpaces] + strings.Repeat("#", newLevel) + stripped[j:]
+			lines[i] = newLine
+			level = newLevel
+			changed = true
+		}
+		prevLevel = level
+	}
+
+	if !changed {
+		return source
+	}
+	return []byte(strings.Join(lines, "\n"))
 }
 
 func (r MD001) Check(doc *lint.Document) []lint.Violation {

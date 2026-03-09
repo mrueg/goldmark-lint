@@ -18,6 +18,57 @@ func isBlockquoteLine(line string) bool {
 	return strings.HasPrefix(strings.TrimLeft(line, " "), ">")
 }
 
+// Fix applies MD028 to source by removing blank lines inside blockquotes.
+func (r MD028) Fix(source []byte) []byte {
+	lines := strings.Split(string(source), "\n")
+	fencedMask := fencedCodeBlockMask(lines)
+	n := len(lines)
+
+	// Mark lines to remove: blank lines that appear between blockquote sections.
+	remove := make([]bool, n)
+	i := 0
+	for i < n {
+		if fencedMask[i] || !isBlockquoteLine(lines[i]) {
+			i++
+			continue
+		}
+		// Find end of this blockquote run.
+		end := i
+		for end+1 < n && !fencedMask[end+1] && isBlockquoteLine(lines[end+1]) {
+			end++
+		}
+		// Collect blank lines immediately after.
+		j := end + 1
+		var blanks []int
+		for j < n && !fencedMask[j] && strings.TrimSpace(lines[j]) == "" {
+			blanks = append(blanks, j)
+			j++
+		}
+		// If immediately followed by another blockquote, remove the blank lines.
+		if len(blanks) > 0 && j < n && !fencedMask[j] && isBlockquoteLine(lines[j]) {
+			for _, bl := range blanks {
+				remove[bl] = true
+			}
+		}
+		i = end + 1
+	}
+
+	// Build result without removed lines.
+	changed := false
+	var result []string
+	for i, line := range lines {
+		if remove[i] {
+			changed = true
+			continue
+		}
+		result = append(result, line)
+	}
+	if !changed {
+		return source
+	}
+	return []byte(strings.Join(result, "\n"))
+}
+
 func (r MD028) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	fencedMask := fencedCodeBlockMask(doc.Lines)

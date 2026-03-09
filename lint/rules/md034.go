@@ -22,6 +22,77 @@ var bareURLRE = regexp.MustCompile(`https?://[^\s<>()\[\]{}'"` + "`" + `]+`)
 // inlineLinkRE matches inline markdown links [text](url) for stripping from scanned content.
 var inlineLinkRE = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
 
+// Fix applies MD034 to source by wrapping bare URLs in angle brackets.
+func (r MD034) Fix(source []byte) []byte {
+	lines := strings.Split(string(source), "\n")
+	fencedMask := fencedCodeBlockMask(lines)
+
+	changed := false
+	for i, line := range lines {
+		if fencedMask[i] {
+			continue
+		}
+
+		// Skip indented code block lines (4+ spaces at start after a blank line).
+		// Simple heuristic: skip lines with 4+ leading spaces preceded by a blank line.
+		if i > 0 && strings.TrimSpace(lines[i-1]) == "" {
+			if len(line) >= 4 && line[0] == ' ' && line[1] == ' ' && line[2] == ' ' && line[3] == ' ' {
+				continue
+			}
+		}
+
+		// Blank out code spans so we don't wrap URLs inside them.
+		blanked := blankCodeSpans(line)
+
+		// Find bare URL positions in the blanked line.
+		matches := bareURLRE.FindAllStringIndex(blanked, -1)
+		if len(matches) == 0 {
+			continue
+		}
+
+		// Build the new line by inserting < > around URLs that are truly bare.
+		var newLine strings.Builder
+		prev := 0
+		lineChanged := false
+		for _, loc := range matches {
+			start, end := loc[0], loc[1]
+			// Check the character before the URL in the original line.
+			if start > 0 {
+				ch := line[start-1]
+				// Skip if URL is already inside angle brackets, link syntax,
+				// or attribute quotes.
+				if ch == '<' || ch == '(' || ch == '"' || ch == '\'' {
+					newLine.WriteString(line[prev:end])
+					prev = end
+					continue
+				}
+			}
+			// Also check if the original char at start is '<' (already wrapped).
+			if start > 0 && line[start-1] == '<' {
+				newLine.WriteString(line[prev:end])
+				prev = end
+				continue
+			}
+			// Wrap this URL.
+			newLine.WriteString(line[prev:start])
+			newLine.WriteByte('<')
+			newLine.WriteString(line[start:end])
+			newLine.WriteByte('>')
+			prev = end
+			lineChanged = true
+		}
+		if lineChanged {
+			newLine.WriteString(line[prev:])
+			lines[i] = newLine.String()
+			changed = true
+		}
+	}
+	if !changed {
+		return source
+	}
+	return []byte(strings.Join(lines, "\n"))
+}
+
 func (r MD034) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	// Track reported (lineNum, url) pairs to avoid duplicate violations.
