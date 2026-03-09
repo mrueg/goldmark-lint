@@ -512,9 +512,9 @@ Rules that are implemented in goldmark-lint are marked ✅. Rules marked 🔧 al
 
 | Rule | Description | Status |
 |------|-------------|--------|
-| [MD001](https://github.com/DavidAnson/markdownlint/blob/main/doc/md001.md) | Heading levels should only increment by one level at a time | ✅ |
+| [MD001](https://github.com/DavidAnson/markdownlint/blob/main/doc/md001.md) | Heading levels should only increment by one level at a time | ✅ 🔧 |
 | [MD003](https://github.com/DavidAnson/markdownlint/blob/main/doc/md003.md) | Heading style | ✅ |
-| [MD004](https://github.com/DavidAnson/markdownlint/blob/main/doc/md004.md) | Unordered list style | ✅ |
+| [MD004](https://github.com/DavidAnson/markdownlint/blob/main/doc/md004.md) | Unordered list style | ✅ 🔧 |
 | [MD005](https://github.com/DavidAnson/markdownlint/blob/main/doc/md005.md) | Inconsistent indentation for list items at the same level | ✅ |
 | [MD007](https://github.com/DavidAnson/markdownlint/blob/main/doc/md007.md) | Unordered list indentation | ✅ |
 | [MD009](https://github.com/DavidAnson/markdownlint/blob/main/doc/md009.md) | Trailing spaces | ✅ 🔧 |
@@ -527,20 +527,20 @@ Rules that are implemented in goldmark-lint are marked ✅. Rules marked 🔧 al
 | [MD019](https://github.com/DavidAnson/markdownlint/blob/main/doc/md019.md) | Multiple spaces after hash on ATX style heading | ✅ 🔧 |
 | [MD020](https://github.com/DavidAnson/markdownlint/blob/main/doc/md020.md) | No space inside hashes on closed ATX style heading | ✅ 🔧 |
 | [MD021](https://github.com/DavidAnson/markdownlint/blob/main/doc/md021.md) | Multiple spaces inside hashes on closed ATX style heading | ✅ 🔧 |
-| [MD022](https://github.com/DavidAnson/markdownlint/blob/main/doc/md022.md) | Headings should be surrounded by blank lines | ✅ |
+| [MD022](https://github.com/DavidAnson/markdownlint/blob/main/doc/md022.md) | Headings should be surrounded by blank lines | ✅ 🔧 |
 | [MD023](https://github.com/DavidAnson/markdownlint/blob/main/doc/md023.md) | Headings must start at the beginning of the line | ✅ 🔧 |
 | [MD024](https://github.com/DavidAnson/markdownlint/blob/main/doc/md024.md) | Multiple headings with the same content | ✅ |
 | [MD025](https://github.com/DavidAnson/markdownlint/blob/main/doc/md025.md) | Multiple top-level headings in the same document | ✅ |
 | [MD026](https://github.com/DavidAnson/markdownlint/blob/main/doc/md026.md) | Trailing punctuation in heading | ✅ 🔧 |
 | [MD027](https://github.com/DavidAnson/markdownlint/blob/main/doc/md027.md) | Multiple spaces after blockquote symbol | ✅ 🔧 |
-| [MD028](https://github.com/DavidAnson/markdownlint/blob/main/doc/md028.md) | Blank line inside blockquote | ✅ |
+| [MD028](https://github.com/DavidAnson/markdownlint/blob/main/doc/md028.md) | Blank line inside blockquote | ✅ 🔧 |
 | [MD029](https://github.com/DavidAnson/markdownlint/blob/main/doc/md029.md) | Ordered list item prefix | ✅ 🔧 |
 | [MD030](https://github.com/DavidAnson/markdownlint/blob/main/doc/md030.md) | Spaces after list markers | ✅ 🔧 |
 | [MD031](https://github.com/DavidAnson/markdownlint/blob/main/doc/md031.md) | Fenced code blocks should be surrounded by blank lines | ✅ 🔧 |
 | [MD032](https://github.com/DavidAnson/markdownlint/blob/main/doc/md032.md) | Lists should be surrounded by blank lines | ✅ 🔧 |
 | [MD033](https://github.com/DavidAnson/markdownlint/blob/main/doc/md033.md) | Inline HTML | ✅ |
-| [MD034](https://github.com/DavidAnson/markdownlint/blob/main/doc/md034.md) | Bare URL used | ✅ |
-| [MD035](https://github.com/DavidAnson/markdownlint/blob/main/doc/md035.md) | Horizontal rule style | ✅ |
+| [MD034](https://github.com/DavidAnson/markdownlint/blob/main/doc/md034.md) | Bare URL used | ✅ 🔧 |
+| [MD035](https://github.com/DavidAnson/markdownlint/blob/main/doc/md035.md) | Horizontal rule style | ✅ 🔧 |
 | [MD036](https://github.com/DavidAnson/markdownlint/blob/main/doc/md036.md) | Emphasis used instead of a heading | ✅ |
 | [MD037](https://github.com/DavidAnson/markdownlint/blob/main/doc/md037.md) | Spaces inside emphasis markers | ✅ 🔧 |
 | [MD038](https://github.com/DavidAnson/markdownlint/blob/main/doc/md038.md) | Spaces inside code span elements | ✅ 🔧 |
@@ -551,7 +551,7 @@ Rules that are implemented in goldmark-lint are marked ✅. Rules marked 🔧 al
 | [MD043](https://github.com/DavidAnson/markdownlint/blob/main/doc/md043.md) | Required heading structure | ✅ |
 | [MD044](https://github.com/DavidAnson/markdownlint/blob/main/doc/md044.md) | Proper names should have the correct capitalization | ✅ 🔧 |
 | [MD045](https://github.com/DavidAnson/markdownlint/blob/main/doc/md045.md) | Images should have alternate text (alt text) | ✅ |
-| [MD046](https://github.com/DavidAnson/markdownlint/blob/main/doc/md046.md) | Code block style | ✅ |
+| [MD046](https://github.com/DavidAnson/markdownlint/blob/main/doc/md046.md) | Code block style | ✅ 🔧 |
 | [MD047](https://github.com/DavidAnson/markdownlint/blob/main/doc/md047.md) | Files should end with a single newline character | ✅ 🔧 |
 | [MD048](https://github.com/DavidAnson/markdownlint/blob/main/doc/md048.md) | Code fence style | ✅ 🔧 |
 | [MD049](https://github.com/DavidAnson/markdownlint/blob/main/doc/md049.md) | Emphasis style | ✅ 🔧 |
@@ -560,7 +560,7 @@ Rules that are implemented in goldmark-lint are marked ✅. Rules marked 🔧 al
 | [MD052](https://github.com/DavidAnson/markdownlint/blob/main/doc/md052.md) | Reference links and images should use a label that is defined | ✅ |
 | [MD053](https://github.com/DavidAnson/markdownlint/blob/main/doc/md053.md) | Link and image reference definitions should be needed | ✅ 🔧 |
 | [MD054](https://github.com/DavidAnson/markdownlint/blob/main/doc/md054.md) | Link and image style | ✅ |
-| [MD055](https://github.com/DavidAnson/markdownlint/blob/main/doc/md055.md) | Table pipe style | ✅ |
+| [MD055](https://github.com/DavidAnson/markdownlint/blob/main/doc/md055.md) | Table pipe style | ✅ 🔧 |
 | [MD056](https://github.com/DavidAnson/markdownlint/blob/main/doc/md056.md) | Table column count | ✅ |
 | [MD058](https://github.com/DavidAnson/markdownlint/blob/main/doc/md058.md) | Tables should be surrounded by blank lines | ✅ 🔧 |
 | [MD059](https://github.com/DavidAnson/markdownlint/blob/main/doc/md059.md) | Link text should be descriptive | ✅ |
