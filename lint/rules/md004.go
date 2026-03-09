@@ -53,7 +53,6 @@ func (r MD004) Fix(source []byte) []byte {
 
 	for i, line := range lines {
 		if mask[i] {
-			depth = 0
 			depthStack = nil
 			continue
 		}
@@ -62,7 +61,6 @@ func (r MD004) Fix(source []byte) []byte {
 			if strings.TrimSpace(line) == "" {
 				// blank line resets sublist depth tracking
 				depthStack = nil
-				depth = 0
 			}
 			continue
 		}

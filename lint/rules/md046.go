@@ -29,22 +29,10 @@ func (r MD046) Fix(source []byte) []byte {
 
 	// Determine effective style for "consistent".
 	if style == "consistent" {
-		inFence := false
-		fenceChar := byte(0)
-		fenceLen := 0
 		for i, line := range lines {
-			if !inFence {
-				if isFence, fc, fl := detectFence(line); isFence {
-					inFence = true
-					fenceChar = fc
-					fenceLen = fl
-					style = "fenced"
-					break
-				}
-			} else {
-				if isFence, fc, fl := detectFence(line); isFence && fc == fenceChar && fl >= fenceLen {
-					inFence = false
-				}
+			if isFence, _, _ := detectFence(line); isFence {
+				style = "fenced"
+				break
 			}
 			// Check for indented code block (4+ spaces after blank line).
 			if i > 0 && strings.TrimSpace(lines[i-1]) == "" {

@@ -98,8 +98,6 @@ func (r MD022) Fix(source []byte) []byte {
 				newLines = append(newLines, insert...)
 				newLines = append(newLines, lines[headEnd+1:]...)
 				lines = newLines
-				// Rebuild mask.
-				mask = fencedCodeBlockMask(lines)
 			}
 		}
 
@@ -117,8 +115,6 @@ func (r MD022) Fix(source []byte) []byte {
 				newLines = append(newLines, insert...)
 				newLines = append(newLines, lines[h.idx:]...)
 				lines = newLines
-				// Rebuild mask.
-				mask = fencedCodeBlockMask(lines)
 			}
 		}
 	}
