@@ -459,6 +459,100 @@ func TestCLI_Summary_NoViolations(t *testing.T) {
 }
 
 
+func TestCLI_Quiet_SuppressesSummary(t *testing.T) {
+	bin := buildBinary(t)
+	testfile := filepath.Join("..", "..", "testdata", "md001_invalid.md")
+	if _, err := os.Stat(testfile); err != nil {
+		t.Skip("testdata not available")
+	}
+
+	// Without --quiet, --summary prints "Summary:" to stderr.
+	cmd := exec.Command(bin, "--summary", testfile)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	_ = cmd.Run()
+	if !strings.Contains(stderr.String(), "Summary:") {
+		t.Fatalf("expected 'Summary:' without --quiet, got: %s", stderr.String())
+	}
+
+	// With --quiet, --summary output is suppressed.
+	cmd2 := exec.Command(bin, "--quiet", "--summary", testfile)
+	var stderr2 strings.Builder
+	cmd2.Stderr = &stderr2
+	_ = cmd2.Run()
+	if strings.Contains(stderr2.String(), "Summary:") {
+		t.Errorf("expected no 'Summary:' with --quiet, got: %s", stderr2.String())
+	}
+}
+
+func TestCLI_Quiet_ShortFlag(t *testing.T) {
+	bin := buildBinary(t)
+	testfile := filepath.Join("..", "..", "testdata", "md001_invalid.md")
+	if _, err := os.Stat(testfile); err != nil {
+		t.Skip("testdata not available")
+	}
+
+	// -q (short flag) should suppress summary just like --quiet.
+	cmd := exec.Command(bin, "-q", "--summary", testfile)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	_ = cmd.Run()
+	if strings.Contains(stderr.String(), "Summary:") {
+		t.Errorf("expected no 'Summary:' with -q, got: %s", stderr.String())
+	}
+}
+
+func TestCLI_Quiet_KeepsViolations(t *testing.T) {
+	bin := buildBinary(t)
+	testfile := filepath.Join("..", "..", "testdata", "md001_invalid.md")
+	if _, err := os.Stat(testfile); err != nil {
+		t.Skip("testdata not available")
+	}
+
+	// --quiet must not suppress violation output.
+	cmd := exec.Command(bin, "--quiet", testfile)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected non-zero exit for file with violations, got nil error")
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Errorf("--quiet exit code = %d, want 1", exitErr.ExitCode())
+	}
+	// Violations should still appear on stderr.
+	if !strings.Contains(stderr.String(), "MD001") {
+		t.Errorf("expected violation output with --quiet, got: %s", stderr.String())
+	}
+}
+
+func TestCLI_Quiet_SuppressesFixDryRunDiff(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// File with trailing spaces (MD009) – a fixable violation.
+	content := "# Heading\n\nContent   \nNo newline at end"
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without --quiet the diff is printed to stdout.
+	cmd := exec.Command(bin, "--fix-dry-run", mdFile)
+	out, _ := cmd.Output()
+	if !strings.Contains(string(out), "diff --git") {
+		t.Fatalf("expected diff output without --quiet, got: %s", out)
+	}
+
+	// With --quiet the diff is suppressed.
+	cmd2 := exec.Command(bin, "--quiet", "--fix-dry-run", mdFile)
+	out2, _ := cmd2.Output()
+	if strings.Contains(string(out2), "diff --git") {
+		t.Errorf("expected no diff output with --quiet, got: %s", out2)
+	}
+}
+
 func TestCLI_Watch(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("signal-based test not supported on Windows")

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,8 +13,9 @@ const watchInterval = 500 * time.Millisecond
 
 // runWatch polls allFiles for modification-time changes every watchInterval and
 // calls relintFn with each batch of changed files. It runs until the process
-// receives an interrupt or SIGTERM signal.
-func runWatch(allFiles []string, relintFn func(files []string)) {
+// receives an interrupt or SIGTERM signal. Status messages are written to w;
+// pass io.Discard to suppress them (e.g. when --quiet is set).
+func runWatch(allFiles []string, w io.Writer, relintFn func(files []string)) {
 	// Seed initial modification times.
 	mtimes := make(map[string]time.Time, len(allFiles))
 	for _, f := range allFiles {
@@ -26,7 +28,7 @@ func runWatch(allFiles []string, relintFn func(files []string)) {
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
 
-	fmt.Fprintf(os.Stderr, "Watching %d file(s) for changes... (press Ctrl+C to stop)\n", len(allFiles))
+	fmt.Fprintf(w, "Watching %d file(s) for changes... (press Ctrl+C to stop)\n", len(allFiles))
 
 	ticker := time.NewTicker(watchInterval)
 	defer ticker.Stop()
