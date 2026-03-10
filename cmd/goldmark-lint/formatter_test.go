@@ -617,6 +617,60 @@ func TestFormatSummary_SortedByCountDesc(t *testing.T) {
 	}
 }
 
+func TestFormatSummaryJSON_Output(t *testing.T) {
+	violations := makeViolations()
+	var buf bytes.Buffer
+	formatSummaryJSON(violations, &buf)
+	var got map[string]int
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("formatSummaryJSON produced invalid JSON: %v\noutput: %s", err, buf.String())
+	}
+	if got["MD001"] != 1 {
+		t.Errorf("expected MD001 count 1, got %d", got["MD001"])
+	}
+	if got["MD013"] != 1 {
+		t.Errorf("expected MD013 count 1, got %d", got["MD013"])
+	}
+}
+
+func TestFormatSummaryJSON_Empty(t *testing.T) {
+	var buf bytes.Buffer
+	formatSummaryJSON(nil, &buf)
+	var got map[string]int
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("formatSummaryJSON produced invalid JSON for empty input: %v\noutput: %s", err, buf.String())
+	}
+	if len(got) != 0 {
+		t.Errorf("expected empty JSON object for no violations, got: %v", got)
+	}
+}
+
+func TestFormatSummaryJSON_MultipleCounts(t *testing.T) {
+	violations := []fileViolation{
+		{
+			File: "a.md",
+			Violations: []lint.Violation{
+				{Rule: "MD001", Line: 1, Column: 1, Message: "msg"},
+				{Rule: "MD013", Line: 2, Column: 1, Message: "msg"},
+				{Rule: "MD013", Line: 3, Column: 1, Message: "msg"},
+				{Rule: "MD013", Line: 4, Column: 1, Message: "msg"},
+			},
+		},
+	}
+	var buf bytes.Buffer
+	formatSummaryJSON(violations, &buf)
+	var got map[string]int
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("formatSummaryJSON produced invalid JSON: %v\noutput: %s", err, buf.String())
+	}
+	if got["MD001"] != 1 {
+		t.Errorf("expected MD001 count 1, got %d", got["MD001"])
+	}
+	if got["MD013"] != 3 {
+		t.Errorf("expected MD013 count 3, got %d", got["MD013"])
+	}
+}
+
 
 func TestFormatGitHubActions_Output(t *testing.T) {
 	violations := makeViolations()

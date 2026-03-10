@@ -433,7 +433,11 @@ func main() {
 
 	// Print per-rule summary if requested.
 	if *summary {
-		formatSummary(allViolations, os.Stderr)
+		if *outputFormat == "json" {
+			formatSummaryJSON(allViolations, os.Stdout)
+		} else {
+			formatSummary(allViolations, os.Stderr)
+		}
 	}
 
 	// Persist updated cache entries.

@@ -385,6 +385,20 @@ func formatSummary(violations []fileViolation, w io.Writer) {
 	}
 }
 
+// formatSummaryJSON writes a count-per-rule summary as a JSON object to w.
+// The object maps rule IDs to their violation counts, e.g. {"MD001":2,"MD013":5}.
+func formatSummaryJSON(violations []fileViolation, w io.Writer) {
+	counts := make(map[string]int)
+	for _, fv := range violations {
+		for _, v := range fv.Violations {
+			counts[v.Rule]++
+		}
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(counts)
+}
+
 // outputFormatterSpec holds a format name and optional outfile for a single formatter run.
 type outputFormatterSpec struct {
 	format  string // "default", "json", "junit", "tap", or "sarif"

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -455,6 +456,42 @@ func TestCLI_Summary_NoViolations(t *testing.T) {
 	// No summary printed when there are no violations.
 	if strings.Contains(stderr.String(), "Summary:") {
 		t.Errorf("expected no summary output for zero violations, got: %s", stderr.String())
+	}
+}
+
+func TestCLI_Summary_JSONFormat(t *testing.T) {
+	bin := buildBinary(t)
+	testfile := filepath.Join("..", "..", "testdata", "md001_invalid.md")
+	if _, err := os.Stat(testfile); err != nil {
+		t.Skip("testdata not available")
+	}
+
+	cmd := exec.Command(bin, "--summary", "--output-format", "json", testfile)
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	_ = cmd.Run()
+
+	// The JSON summary should appear on stdout, not stderr.
+	if strings.Contains(stderr.String(), "Summary:") {
+		t.Errorf("expected no human-readable 'Summary:' on stderr with --output-format json, got: %s", stderr.String())
+	}
+
+	// stdout should contain a valid JSON object with rule counts.
+	outStr := stdout.String()
+	// stdout contains both the violations JSON array and the summary JSON object;
+	// find the last JSON object (the summary).
+	lastBrace := strings.LastIndex(outStr, "{")
+	if lastBrace == -1 {
+		t.Fatalf("expected JSON summary object on stdout, got: %s", outStr)
+	}
+	summaryJSON := outStr[lastBrace:]
+	var counts map[string]int
+	if err := json.Unmarshal([]byte(summaryJSON), &counts); err != nil {
+		t.Fatalf("summary JSON on stdout is not a valid JSON object: %v\noutput: %s", err, outStr)
+	}
+	if counts["MD001"] == 0 {
+		t.Errorf("expected MD001 count > 0 in JSON summary, got: %v", counts)
 	}
 }
 
