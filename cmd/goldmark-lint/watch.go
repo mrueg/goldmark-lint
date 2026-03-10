@@ -28,7 +28,7 @@ func runWatch(allFiles []string, w io.Writer, relintFn func(files []string)) {
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
 
-	fmt.Fprintf(w, "Watching %d file(s) for changes... (press Ctrl+C to stop)\n", len(allFiles))
+	_, _ = fmt.Fprintf(w, "Watching %d file(s) for changes... (press Ctrl+C to stop)\n", len(allFiles))
 
 	ticker := time.NewTicker(watchInterval)
 	defer ticker.Stop()
