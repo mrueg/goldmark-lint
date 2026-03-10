@@ -614,10 +614,10 @@ Rules that are implemented in goldmark-lint are marked ✅. Rules marked 🔧 al
 | Rule | Description | Status |
 |------|-------------|--------|
 | [MD001](https://github.com/DavidAnson/markdownlint/blob/main/doc/md001.md) | Heading levels should only increment by one level at a time | ✅ 🔧 |
-| [MD003](https://github.com/DavidAnson/markdownlint/blob/main/doc/md003.md) | Heading style | ✅ |
+| [MD003](https://github.com/DavidAnson/markdownlint/blob/main/doc/md003.md) | Heading style | ✅ 🔧 |
 | [MD004](https://github.com/DavidAnson/markdownlint/blob/main/doc/md004.md) | Unordered list style | ✅ 🔧 |
-| [MD005](https://github.com/DavidAnson/markdownlint/blob/main/doc/md005.md) | Inconsistent indentation for list items at the same level | ✅ |
-| [MD007](https://github.com/DavidAnson/markdownlint/blob/main/doc/md007.md) | Unordered list indentation | ✅ |
+| [MD005](https://github.com/DavidAnson/markdownlint/blob/main/doc/md005.md) | Inconsistent indentation for list items at the same level | ✅ 🔧 |
+| [MD007](https://github.com/DavidAnson/markdownlint/blob/main/doc/md007.md) | Unordered list indentation | ✅ 🔧 |
 | [MD009](https://github.com/DavidAnson/markdownlint/blob/main/doc/md009.md) | Trailing spaces | ✅ 🔧 |
 | [MD010](https://github.com/DavidAnson/markdownlint/blob/main/doc/md010.md) | Hard tabs | ✅ 🔧 |
 | [MD011](https://github.com/DavidAnson/markdownlint/blob/main/doc/md011.md) | Reversed link syntax | ✅ 🔧 |
@@ -639,14 +639,14 @@ Rules that are implemented in goldmark-lint are marked ✅. Rules marked 🔧 al
 | [MD030](https://github.com/DavidAnson/markdownlint/blob/main/doc/md030.md) | Spaces after list markers | ✅ 🔧 |
 | [MD031](https://github.com/DavidAnson/markdownlint/blob/main/doc/md031.md) | Fenced code blocks should be surrounded by blank lines | ✅ 🔧 |
 | [MD032](https://github.com/DavidAnson/markdownlint/blob/main/doc/md032.md) | Lists should be surrounded by blank lines | ✅ 🔧 |
-| [MD033](https://github.com/DavidAnson/markdownlint/blob/main/doc/md033.md) | Inline HTML | ✅ |
+| [MD033](https://github.com/DavidAnson/markdownlint/blob/main/doc/md033.md) | Inline HTML | ✅ 🔧 |
 | [MD034](https://github.com/DavidAnson/markdownlint/blob/main/doc/md034.md) | Bare URL used | ✅ 🔧 |
 | [MD035](https://github.com/DavidAnson/markdownlint/blob/main/doc/md035.md) | Horizontal rule style | ✅ 🔧 |
-| [MD036](https://github.com/DavidAnson/markdownlint/blob/main/doc/md036.md) | Emphasis used instead of a heading | ✅ |
+| [MD036](https://github.com/DavidAnson/markdownlint/blob/main/doc/md036.md) | Emphasis used instead of a heading | ✅ 🔧 |
 | [MD037](https://github.com/DavidAnson/markdownlint/blob/main/doc/md037.md) | Spaces inside emphasis markers | ✅ 🔧 |
 | [MD038](https://github.com/DavidAnson/markdownlint/blob/main/doc/md038.md) | Spaces inside code span elements | ✅ 🔧 |
 | [MD039](https://github.com/DavidAnson/markdownlint/blob/main/doc/md039.md) | Spaces inside link text | ✅ 🔧 |
-| [MD040](https://github.com/DavidAnson/markdownlint/blob/main/doc/md040.md) | Fenced code blocks should have a language specified | ✅ |
+| [MD040](https://github.com/DavidAnson/markdownlint/blob/main/doc/md040.md) | Fenced code blocks should have a language specified | ✅ 🔧 |
 | [MD041](https://github.com/DavidAnson/markdownlint/blob/main/doc/md041.md) | First line in a file should be a top-level heading | ✅ |
 | [MD042](https://github.com/DavidAnson/markdownlint/blob/main/doc/md042.md) | No empty links | ✅ |
 | [MD043](https://github.com/DavidAnson/markdownlint/blob/main/doc/md043.md) | Required heading structure | ✅ |
@@ -665,7 +665,7 @@ Rules that are implemented in goldmark-lint are marked ✅. Rules marked 🔧 al
 | [MD056](https://github.com/DavidAnson/markdownlint/blob/main/doc/md056.md) | Table column count | ✅ |
 | [MD058](https://github.com/DavidAnson/markdownlint/blob/main/doc/md058.md) | Tables should be surrounded by blank lines | ✅ 🔧 |
 | [MD059](https://github.com/DavidAnson/markdownlint/blob/main/doc/md059.md) | Link text should be descriptive | ✅ |
-| [MD060](https://github.com/DavidAnson/markdownlint/blob/main/doc/md060.md) | Table column style | ✅ |
+| [MD060](https://github.com/DavidAnson/markdownlint/blob/main/doc/md060.md) | Table column style | ✅ 🔧 |
 
 ## License
 

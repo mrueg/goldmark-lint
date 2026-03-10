@@ -27,6 +27,97 @@ func (r MD007) Description() string { return "Unordered list indentation" }
 // unorderedListMarkers holds the valid unordered list marker bytes.
 const unorderedListMarkers = "*-+"
 
+// Fix normalises leading-space indentation for unordered list items so that
+// each nesting level is exactly r.Indent spaces deeper than its parent (or
+// r.StartIndent for the top level when StartIndented is true).
+//
+// Nesting depth is determined by a stack: the depth of each item is the
+// number of ancestor items currently on the stack (items with strictly smaller
+// actual indentation).  The stack stores the EXPECTED indentation so that
+// subsequent items are measured against the corrected values.
+//
+// Items inside blockquotes are skipped.  Ordered-list items are ignored (they
+// reset the stack on a blank line but are otherwise left alone).
+func (r MD007) Fix(source []byte) []byte {
+	indent := r.Indent
+	if indent == 0 {
+		indent = 2
+	}
+	startIndent := 0
+	if r.StartIndented {
+		startIndent = r.StartIndent
+		if startIndent == 0 {
+			startIndent = indent
+		}
+	}
+
+	lines := strings.Split(string(source), "\n")
+	mask := fencedCodeBlockMask(lines)
+	changed := false
+
+	// nestingStack stores the EXPECTED indentation of each nesting level seen
+	// so far.  We push the EXPECTED value (not the actual) so that later items
+	// are stacked relative to the corrected position.
+	var nestingStack []int
+
+	for i, line := range lines {
+		if mask[i] {
+			continue
+		}
+
+		stripped := strings.TrimLeft(line, " ")
+
+		// Skip lines that belong to a blockquote.
+		if len(stripped) > 0 && stripped[0] == '>' {
+			nestingStack = nil
+			continue
+		}
+
+		spaces := len(line) - len(stripped)
+		rest := stripped
+
+		isUnordered := len(rest) >= 2 &&
+			strings.IndexByte(unorderedListMarkers, rest[0]) >= 0 &&
+			rest[1] == ' '
+
+		if !isUnordered {
+			if strings.TrimSpace(line) == "" {
+				nestingStack = nil
+			} else if spaces == 0 {
+				// Non-blank, non-list content at column 0 ends the list context.
+				nestingStack = nil
+			}
+			continue
+		}
+
+		// Pop stack entries for items that are at the same or higher level
+		// (i.e., the current item is NOT deeper than those entries).
+		for len(nestingStack) > 0 && nestingStack[len(nestingStack)-1] >= spaces {
+			nestingStack = nestingStack[:len(nestingStack)-1]
+		}
+
+		nesting := len(nestingStack)
+		expectedIndent := nesting * indent
+		if r.StartIndented {
+			expectedIndent = startIndent + nesting*indent
+		}
+
+		// Always push the EXPECTED indentation so that nested items reference
+		// the corrected depth.
+		nestingStack = append(nestingStack, expectedIndent)
+
+		if spaces != expectedIndent {
+			lines[i] = strings.Repeat(" ", expectedIndent) + rest
+			changed = true
+		}
+	}
+
+	if !changed {
+		return source
+	}
+	return []byte(strings.Join(lines, "\n"))
+}
+
 func (r MD007) Check(doc *lint.Document) []lint.Violation {
 	indent := r.Indent
 	if indent == 0 {

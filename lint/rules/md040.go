@@ -19,6 +19,64 @@ func (r MD040) ID() string          { return "MD040" }
 func (r MD040) Aliases() []string   { return []string{"fenced-code-language"} }
 func (r MD040) Description() string { return "Fenced code blocks should have a language specified" }
 
+// Fix adds "text" as the language specifier to fenced code blocks that have no
+// language specified. Blocks that already have a language (even a disallowed one)
+// are not modified, and the language_only / allowed_languages constraints are not
+// enforced by this fix.
+func (r MD040) Fix(source []byte) []byte {
+	lines := strings.Split(string(source), "\n")
+
+	inFence := false
+	fenceChar := byte(0)
+	fenceLen := 0
+	changed := false
+
+	for i, line := range lines {
+		trimmed := strings.TrimLeft(line, " ")
+		indent := len(line) - len(trimmed)
+
+		if !inFence {
+			if indent > 3 || len(trimmed) < 3 {
+				continue
+			}
+			fc := trimmed[0]
+			if fc != '`' && fc != '~' {
+				continue
+			}
+			j := 0
+			for j < len(trimmed) && trimmed[j] == fc {
+				j++
+			}
+			if j < 3 {
+				continue
+			}
+			inFence = true
+			fenceChar = fc
+			fenceLen = j
+
+			info := strings.TrimSpace(trimmed[j:])
+			if info == "" {
+				// No language: insert "text".
+				lines[i] = line[:indent] + strings.Repeat(string(fc), j) + " text"
+				changed = true
+			}
+		} else {
+			j := 0
+			for j < len(trimmed) && trimmed[j] == fenceChar {
+				j++
+			}
+			if j >= fenceLen && strings.TrimSpace(trimmed[j:]) == "" && len(trimmed) > 0 {
+				inFence = false
+			}
+		}
+	}
+
+	if !changed {
+		return source
+	}
+	return []byte(strings.Join(lines, "\n"))
+}
+
 func (r MD040) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 

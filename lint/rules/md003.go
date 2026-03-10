@@ -19,6 +19,230 @@ func (r MD003) ID() string          { return "MD003" }
 func (r MD003) Aliases() []string   { return []string{"heading-style"} }
 func (r MD003) Description() string { return "Heading style" }
 
+// md003IsSetextUnderline reports whether s is a setext heading underline:
+// a non-empty string consisting entirely of '=' or '-' characters.
+func md003IsSetextUnderline(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	ch := s[0]
+	if ch != '=' && ch != '-' {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		if s[i] != ch {
+			return false
+		}
+	}
+	return true
+}
+
+// md003ParseATX tries to parse line as an ATX heading.
+// Returns (level, text, actualStyle, ok).
+// actualStyle is "atx" or "atx_closed".
+func md003ParseATX(line string) (level int, text, actualStyle string, ok bool) {
+	stripped := strings.TrimLeft(line, " ")
+	leadingSpaces := len(line) - len(stripped)
+	if leadingSpaces > 3 || len(stripped) == 0 || stripped[0] != '#' {
+		return 0, "", "", false
+	}
+	j := 0
+	for j < len(stripped) && stripped[j] == '#' {
+		j++
+	}
+	if j < 1 || j > 6 {
+		return 0, "", "", false
+	}
+	if j >= len(stripped) || stripped[j] != ' ' {
+		return 0, "", "", false
+	}
+	level = j
+	textPart := strings.TrimRight(stripped[j+1:], " ")
+	actualStyle = "atx"
+	// Check for closed ATX: ends with one or more '#' preceded by a space.
+	if len(textPart) > 0 && textPart[len(textPart)-1] == '#' {
+		k := len(textPart) - 1
+		for k > 0 && textPart[k] == '#' {
+			k--
+		}
+		if textPart[k] == ' ' {
+			actualStyle = "atx_closed"
+			textPart = strings.TrimRight(textPart[:k], " ")
+		}
+	}
+	return level, textPart, actualStyle, true
+}
+
+// Fix rewrites all headings in source to use the required style.
+//
+// Conversions supported:
+//   - ATX  ↔  ATX closed  (add/remove trailing "##" marker)
+//   - ATX  ↔  Setext       (add/remove underline line; only for h1/h2)
+//   - ATX closed ↔ Setext
+//
+// Headings are collected in a forward pass and then processed in reverse order
+// so that inserting or removing lines does not invalidate earlier line indices.
+func (r MD003) Fix(source []byte) []byte {
+	style := r.Style
+	if style == "" {
+		style = "consistent"
+	}
+
+	lines := strings.Split(string(source), "\n")
+	mask := fencedCodeBlockMask(lines)
+
+	type hdgInfo struct {
+		lineIdx      int    // 0-based line index of the heading content (ATX) or text (setext)
+		underlineIdx int    // setext underline line index, or -1
+		level        int
+		text         string
+		actualStyle  string // "atx", "atx_closed", or "setext"
+	}
+
+	var hdgs []hdgInfo
+
+	for i := 0; i < len(lines); i++ {
+		if mask[i] {
+			continue
+		}
+		line := lines[i]
+
+		// Try ATX.
+		if level, text, actual, ok := md003ParseATX(line); ok {
+			hdgs = append(hdgs, hdgInfo{
+				lineIdx:      i,
+				underlineIdx: -1,
+				level:        level,
+				text:         text,
+				actualStyle:  actual,
+			})
+			continue
+		}
+
+		// Try setext underline: current line is all '=' or '-', previous non-mask
+		// line is non-empty and non-ATX.
+		if i > 0 && !mask[i-1] {
+			trimLine := strings.TrimSpace(line)
+			if md003IsSetextUnderline(trimLine) {
+				prev := lines[i-1]
+				prevStripped := strings.TrimSpace(prev)
+				// Previous line must be non-empty and not an ATX heading.
+				prevTrimLeft := strings.TrimLeft(prev, " ")
+				if prevStripped != "" && (len(prevTrimLeft) == 0 || prevTrimLeft[0] != '#') {
+					level := 1
+					if trimLine[0] == '-' {
+						level = 2
+					}
+					hdgs = append(hdgs, hdgInfo{
+						lineIdx:      i - 1,
+						underlineIdx: i,
+						level:        level,
+						text:         prevStripped,
+						actualStyle:  "setext",
+					})
+				}
+			}
+		}
+	}
+
+	if len(hdgs) == 0 {
+		return source
+	}
+
+	// Determine "consistent" target style from the first heading.
+	if style == "consistent" {
+		style = hdgs[0].actualStyle
+	}
+
+	changed := false
+
+	// Process in reverse order to keep earlier line indices valid when we
+	// insert or delete lines.
+	for hi := len(hdgs) - 1; hi >= 0; hi-- {
+		h := hdgs[hi]
+
+		// Resolve the expected style for this specific heading.
+		expected := style
+		switch style {
+		case "setext_with_atx":
+			if h.level <= 2 {
+				expected = "setext"
+			} else {
+				expected = "atx"
+			}
+		case "setext_with_atx_closed":
+			if h.level <= 2 {
+				expected = "setext"
+			} else {
+				expected = "atx_closed"
+			}
+		case "setext":
+			if h.level > 2 {
+				expected = "atx" // setext cannot represent h3+
+			}
+		}
+
+		if h.actualStyle == expected {
+			continue
+		}
+		changed = true
+
+		origLine := lines[h.lineIdx]
+		leadingSpaces := len(origLine) - len(strings.TrimLeft(origLine, " "))
+		indent := strings.Repeat(" ", leadingSpaces)
+		hashes := strings.Repeat("#", h.level)
+
+		switch expected {
+		case "atx":
+			if h.actualStyle == "setext" {
+				// Remove underline, prepend '#'.
+				lines[h.lineIdx] = indent + hashes + " " + h.text
+				lines = append(lines[:h.underlineIdx], lines[h.underlineIdx+1:]...)
+			} else {
+				// atx_closed → atx: remove trailing hashes.
+				lines[h.lineIdx] = indent + hashes + " " + h.text
+			}
+
+		case "atx_closed":
+			if h.actualStyle == "setext" {
+				lines[h.lineIdx] = indent + hashes + " " + h.text + " " + hashes
+				lines = append(lines[:h.underlineIdx], lines[h.underlineIdx+1:]...)
+			} else {
+				// atx (or setext already handled) → atx_closed.
+				lines[h.lineIdx] = indent + hashes + " " + h.text + " " + hashes
+			}
+
+		case "setext":
+			// Only h1 and h2 can be setext (h3+ fall through to atx above).
+			underlineChar := "="
+			if h.level == 2 {
+				underlineChar = "-"
+			}
+			textLen := len([]rune(h.text))
+			if textLen < 3 {
+				textLen = 3
+			}
+			underline := indent + strings.Repeat(underlineChar, textLen)
+
+			if h.actualStyle != "setext" {
+				// ATX or ATX_closed → setext: replace heading line and insert underline.
+				lines[h.lineIdx] = indent + h.text
+				// Insert underline immediately after the content line.
+				newLines := make([]string, 0, len(lines)+1)
+				newLines = append(newLines, lines[:h.lineIdx+1]...)
+				newLines = append(newLines, underline)
+				newLines = append(newLines, lines[h.lineIdx+1:]...)
+				lines = newLines
+			}
+		}
+	}
+
+	if !changed {
+		return source
+	}
+	return []byte(strings.Join(lines, "\n"))
+}
+
 // headingStyleOf returns "atx", "atx_closed", or "setext" for the given heading node by
 // looking back in the source to find the start of the line: if it starts
 // with '#' it is ATX (possibly closed), otherwise it is setext.

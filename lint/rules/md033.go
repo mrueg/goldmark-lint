@@ -22,6 +22,57 @@ func (r MD033) ID() string          { return "MD033" }
 func (r MD033) Aliases() []string   { return []string{"no-inline-html"} }
 func (r MD033) Description() string { return "Inline HTML" }
 
+// md033AnyTagRE matches HTML comments, opening tags (with optional attributes),
+// closing tags, and self-closing tags on a single line.
+var md033AnyTagRE = regexp.MustCompile(`<!--.*?-->|</?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?\s*/?>`)
+
+// Fix removes all disallowed HTML tags from source. Allowed elements (and
+// table_allowed_elements) are left in place; HTML comments are always kept.
+// Only single-line tags are processed; multi-line opening tags are not handled.
+func (r MD033) Fix(source []byte) []byte {
+	lines := strings.Split(string(source), "\n")
+	mask := fencedCodeBlockMask(lines)
+	changed := false
+
+	for i, line := range lines {
+		if mask[i] {
+			continue
+		}
+		newLine := md033AnyTagRE.ReplaceAllStringFunc(line, func(match string) string {
+			// Always keep HTML comments.
+			if strings.HasPrefix(match, "<!--") {
+				return match
+			}
+			// Extract the tag name.
+			inner := match[1:] // strip leading '<'
+			if len(inner) > 0 && inner[0] == '/' {
+				inner = inner[1:] // strip '/' for closing tags
+			}
+			j := 0
+			for j < len(inner) && (inner[j] == '-' || (inner[j] >= '0' && inner[j] <= '9') || (inner[j] >= 'a' && inner[j] <= 'z') || (inner[j] >= 'A' && inner[j] <= 'Z')) {
+				j++
+			}
+			if j == 0 {
+				return match
+			}
+			tagName := strings.ToLower(inner[:j])
+			if r.isAllowed(tagName) || r.isTableAllowed(tagName) {
+				return match
+			}
+			return ""
+		})
+		if newLine != line {
+			lines[i] = newLine
+			changed = true
+		}
+	}
+
+	if !changed {
+		return source
+	}
+	return []byte(strings.Join(lines, "\n"))
+}
+
 // htmlOpenTagRE matches opening HTML tags (not closing tags like </div>).
 // Used to scan HTML block content for individual opening tags.
 var htmlOpenTagRE = regexp.MustCompile(`<([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^>]*)?/?>`)

@@ -27,6 +27,89 @@ func (r MD036) punct() string {
 	return r.Punctuation
 }
 
+// md036EmphasisText tries to extract the inner text of a line that consists
+// entirely of a single emphasis span (*text*, **text**, _text_, or __text__).
+// Returns ("", 0, false) if the line does not match.
+func md036EmphasisText(line string) (text string, level int, ok bool) {
+	if len(line) == 0 {
+		return "", 0, false
+	}
+	marker := line[0]
+	if marker != '*' && marker != '_' {
+		return "", 0, false
+	}
+	count := 0
+	for count < len(line) && line[count] == marker {
+		count++
+	}
+	if count > 2 {
+		return "", 0, false
+	}
+	// Line must end with the same marker repeated the same number of times.
+	if len(line) < count*2+1 {
+		return "", 0, false
+	}
+	for k := 0; k < count; k++ {
+		if line[len(line)-1-k] != marker {
+			return "", 0, false
+		}
+	}
+	inner := line[count : len(line)-count]
+	// Inner text must not start or end with the marker itself.
+	if len(inner) == 0 || inner[0] == marker || inner[len(inner)-1] == marker {
+		return "", 0, false
+	}
+	return inner, count, true
+}
+
+// Fix converts emphasis-only paragraphs that would trigger MD036 to ATX
+// headings. Bold (**text**) and italic (*text*) are both converted to ## headings.
+// Only top-level lines (no leading spaces) outside fenced code blocks are fixed;
+// emphasis inside blockquotes, lists, or multi-line paragraphs is left unchanged.
+func (r MD036) Fix(source []byte) []byte {
+	lines := strings.Split(string(source), "\n")
+	mask := fencedCodeBlockMask(lines)
+	punct := r.punct()
+	changed := false
+
+	for i, line := range lines {
+		if mask[i] {
+			continue
+		}
+
+		// Only handle lines with no leading spaces (top-level paragraphs).
+		// Lines inside lists or blockquotes will have leading spaces or '>' prefix.
+		if len(line) == 0 || line[0] == ' ' || line[0] == '\t' || line[0] == '>' || line[0] == '#' {
+			continue
+		}
+
+		// The line must not look like a list item.
+		rest := strings.TrimLeft(line, " ")
+		if len(rest) >= 2 && (rest[0] == '-' || rest[0] == '*' || rest[0] == '+') && rest[1] == ' ' {
+			continue
+		}
+
+		text, _, ok := md036EmphasisText(line)
+		if !ok {
+			continue
+		}
+
+		// Skip if text ends with punctuation.
+		runes := []rune(text)
+		if len(runes) == 0 || strings.ContainsRune(punct, runes[len(runes)-1]) {
+			continue
+		}
+
+		lines[i] = "## " + text
+		changed = true
+	}
+
+	if !changed {
+		return source
+	}
+	return []byte(strings.Join(lines, "\n"))
+}
+
 func (r MD036) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 	punct := r.punct()
