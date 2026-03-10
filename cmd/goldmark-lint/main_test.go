@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -550,6 +551,109 @@ func TestCLI_Quiet_SuppressesFixDryRunDiff(t *testing.T) {
 	out2, _ := cmd2.Output()
 	if strings.Contains(string(out2), "diff --git") {
 		t.Errorf("expected no diff output with --quiet, got: %s", out2)
+	}
+}
+
+func TestCLI_Summary_NonDefaultFormats(t *testing.T) {
+	bin := buildBinary(t)
+	testfile := filepath.Join("..", "..", "testdata", "md001_invalid.md")
+	if _, err := os.Stat(testfile); err != nil {
+		t.Skip("testdata not available")
+	}
+
+	tests := []struct {
+		format string
+		check  func(t *testing.T, outStr string)
+	}{
+		{
+			format: "json",
+			check: func(t *testing.T, outStr string) {
+				// The summary is a JSON object appended after the violations array.
+				lastNewlineBrace := strings.LastIndex(outStr, "\n{")
+				if lastNewlineBrace == -1 {
+					t.Fatalf("expected JSON summary object on stdout, got: %s", outStr)
+				}
+				var counts map[string]int
+				if err := json.Unmarshal([]byte(outStr[lastNewlineBrace+1:]), &counts); err != nil {
+					t.Fatalf("summary is not a valid JSON object: %v\noutput: %s", err, outStr)
+				}
+				if counts["MD001"] == 0 {
+					t.Errorf("expected MD001 count > 0 in JSON summary, got: %v", counts)
+				}
+			},
+		},
+		{
+			format: "junit",
+			check: func(t *testing.T, outStr string) {
+				// Summary is a JUnit XML testsuite appended after the violations testsuite.
+				// Expect the summary testsuite name and an MD001 testcase.
+				if !strings.Contains(outStr, "markdownlint-summary") {
+					t.Errorf("expected 'markdownlint-summary' testsuite in junit summary, got: %s", outStr)
+				}
+				if !strings.Contains(outStr, "MD001") {
+					t.Errorf("expected 'MD001' testcase in junit summary, got: %s", outStr)
+				}
+			},
+		},
+		{
+			format: "tap",
+			check: func(t *testing.T, outStr string) {
+				// Summary is a TAP block appended after the violations TAP block.
+				if !strings.Contains(outStr, "MD001") {
+					t.Errorf("expected 'MD001' in tap summary, got: %s", outStr)
+				}
+				// TAP summary should say "not ok" with the rule and violation count.
+				if !strings.Contains(outStr, "violation") {
+					t.Errorf("expected 'violation' in tap summary, got: %s", outStr)
+				}
+			},
+		},
+		{
+			format: "sarif",
+			check: func(t *testing.T, outStr string) {
+				// SARIF uses JSON summary: a JSON object appended after the SARIF document.
+				lastNewlineBrace := strings.LastIndex(outStr, "\n{")
+				if lastNewlineBrace == -1 {
+					t.Fatalf("expected JSON summary object on stdout after sarif, got: %s", outStr)
+				}
+				var counts map[string]int
+				if err := json.Unmarshal([]byte(outStr[lastNewlineBrace+1:]), &counts); err != nil {
+					t.Fatalf("sarif summary is not a valid JSON object: %v\noutput: %s", err, outStr)
+				}
+				if counts["MD001"] == 0 {
+					t.Errorf("expected MD001 count > 0 in sarif JSON summary, got: %v", counts)
+				}
+			},
+		},
+		{
+			format: "github",
+			check: func(t *testing.T, outStr string) {
+				// Summary is ::notice workflow commands, one per rule.
+				if !strings.Contains(outStr, "::notice::MD001:") {
+					t.Errorf("expected '::notice::MD001:' in github summary, got: %s", outStr)
+				}
+				if !strings.Contains(outStr, "violation") {
+					t.Errorf("expected 'violation' in github summary, got: %s", outStr)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.format, func(t *testing.T) {
+			cmd := exec.Command(bin, "--summary", "--output-format", tt.format, testfile)
+			var stdout, stderr strings.Builder
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+			_ = cmd.Run()
+
+			// No human-readable summary table on stderr for non-default formats.
+			if strings.Contains(stderr.String(), "Summary:") {
+				t.Errorf("expected no human-readable 'Summary:' on stderr with --output-format %s, got: %s", tt.format, stderr.String())
+			}
+
+			tt.check(t, stdout.String())
+		})
 	}
 }
 

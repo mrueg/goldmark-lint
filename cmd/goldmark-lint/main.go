@@ -511,12 +511,26 @@ func run(_ context.Context, cmd *cli.Command) error {
 		default:
 			formatDefault(allViolations, w)
 		}
-		closeFile()
-	}
 
-	// Print per-rule summary if requested.
-	if summary && !quiet {
-		formatSummary(allViolations, os.Stderr)
+		// Print per-rule summary if requested, using the same format and writer.
+		if summary && !quiet {
+			switch spec.format {
+			case "json":
+				formatSummaryJSON(allViolations, w)
+			case "junit":
+				formatSummaryJUnit(allViolations, w)
+			case "tap":
+				formatSummaryTAP(allViolations, w)
+			case "sarif":
+				formatSummaryJSON(allViolations, w)
+			case "github":
+				formatSummaryGitHub(allViolations, w)
+			default:
+				formatSummary(allViolations, os.Stderr)
+			}
+		}
+
+		closeFile()
 	}
 
 	// Persist updated cache entries.
