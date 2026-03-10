@@ -614,89 +614,94 @@ func TestCLI_FixDryRun_MutualExclusion(t *testing.T) {
 
 func TestCLI_Completion_Bash(t *testing.T) {
 	bin := buildBinary(t)
-	cmd := exec.Command(bin, "--completion", "bash")
+	cmd := exec.Command(bin, "completion", "bash")
 	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("--completion bash exited with error: %v", err)
+		t.Fatalf("completion bash exited with error: %v", err)
 	}
 	s := string(out)
 	if !strings.Contains(s, "goldmark-lint") {
 		t.Error("bash completion output missing 'goldmark-lint'")
 	}
-	if !strings.Contains(s, "--output-format") {
-		t.Error("bash completion output missing '--output-format'")
-	}
-	if !strings.Contains(s, "--config") {
-		t.Error("bash completion output missing '--config'")
-	}
-	// Verify all output-format values are present.
-	for _, format := range []string{"default", "json", "junit", "tap", "sarif", "github"} {
-		if !strings.Contains(s, format) {
-			t.Errorf("bash completion output missing output-format value %q", format)
-		}
+	if len(s) < 100 {
+		t.Errorf("bash completion output suspiciously short (%d bytes)", len(s))
 	}
 }
 
 func TestCLI_Completion_Zsh(t *testing.T) {
 	bin := buildBinary(t)
-	cmd := exec.Command(bin, "--completion", "zsh")
+	cmd := exec.Command(bin, "completion", "zsh")
 	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("--completion zsh exited with error: %v", err)
+		t.Fatalf("completion zsh exited with error: %v", err)
 	}
 	s := string(out)
 	if !strings.Contains(s, "goldmark-lint") {
 		t.Error("zsh completion output missing 'goldmark-lint'")
 	}
-	if !strings.Contains(s, "--output-format") {
-		t.Error("zsh completion output missing '--output-format'")
-	}
-	if !strings.Contains(s, "--config") {
-		t.Error("zsh completion output missing '--config'")
-	}
-	// Verify all output-format values are present.
-	for _, format := range []string{"default", "json", "junit", "tap", "sarif", "github"} {
-		if !strings.Contains(s, format) {
-			t.Errorf("zsh completion output missing output-format value %q", format)
-		}
+	if len(s) < 100 {
+		t.Errorf("zsh completion output suspiciously short (%d bytes)", len(s))
 	}
 }
 
 func TestCLI_Completion_Fish(t *testing.T) {
 	bin := buildBinary(t)
-	cmd := exec.Command(bin, "--completion", "fish")
+	cmd := exec.Command(bin, "completion", "fish")
 	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("--completion fish exited with error: %v", err)
+		t.Fatalf("completion fish exited with error: %v", err)
 	}
 	s := string(out)
 	if !strings.Contains(s, "goldmark-lint") {
 		t.Error("fish completion output missing 'goldmark-lint'")
 	}
-	if !strings.Contains(s, "--output-format") {
-		t.Error("fish completion output missing '--output-format'")
+	if len(s) < 100 {
+		t.Errorf("fish completion output suspiciously short (%d bytes)", len(s))
 	}
-	if !strings.Contains(s, "--config") {
-		t.Error("fish completion output missing '--config'")
+}
+
+func TestCLI_Completion_Powershell(t *testing.T) {
+	bin := buildBinary(t)
+	cmd := exec.Command(bin, "completion", "powershell")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("completion powershell exited with error: %v", err)
 	}
-	// Verify all output-format values are present.
+	s := string(out)
+	if !strings.Contains(s, "goldmark-lint") {
+		t.Error("powershell completion output missing 'goldmark-lint'")
+	}
+	if len(s) < 100 {
+		t.Errorf("powershell completion output suspiciously short (%d bytes)", len(s))
+	}
+}
+
+// TestCLI_Completion_FlagValues verifies that the completion engine knows the
+// valid values for --output-format and returns them via the hidden __complete
+// subcommand that Cobra exposes for dynamic shell completion.
+func TestCLI_Completion_FlagValues(t *testing.T) {
+	bin := buildBinary(t)
+	// Cobra's dynamic completion is triggered by "<binary> __complete --flag <prefix>".
+	cmd := exec.Command(bin, "__complete", "--output-format", "")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("__complete --output-format exited with error: %v", err)
+	}
+	s := string(out)
 	for _, format := range []string{"default", "json", "junit", "tap", "sarif", "github"} {
 		if !strings.Contains(s, format) {
-			t.Errorf("fish completion output missing output-format value %q", format)
+			t.Errorf("__complete --output-format output missing value %q", format)
 		}
 	}
 }
 
-func TestCLI_Completion_InvalidShell(t *testing.T) {
+func TestCLI_Completion_ShowsHelp(t *testing.T) {
+	// With Cobra's built-in completion command, running 'completion' without a
+	// shell argument shows the subcommand help and exits 0.
 	bin := buildBinary(t)
-	cmd := exec.Command(bin, "--completion", "powershell")
-	err := cmd.Run()
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
-		t.Fatalf("expected non-zero exit for unknown shell, got nil error")
-	}
-	if exitErr.ExitCode() != 2 {
-		t.Errorf("--completion powershell exit code = %d, want 2", exitErr.ExitCode())
+	cmd := exec.Command(bin, "completion")
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 for 'completion' without a shell arg, got: %v", err)
 	}
 }
 

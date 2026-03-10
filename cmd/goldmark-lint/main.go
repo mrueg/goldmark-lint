@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -14,39 +13,41 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/spf13/cobra"
 )
 
 // version is set at build time via -ldflags.
 var version = "dev"
 
-const helpText = `goldmark-lint
+func newRootCmd() *cobra.Command {
+	var (
+		configPath    string
+		failOnWarning bool
+		fix           bool
+		fixDryRun     bool
+		format        bool
+		listRules     bool
+		noCache       bool
+		noGlobs       bool
+		outputFormat  string
+		summary       bool
+		watch         bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "goldmark-lint [glob ...] [-]",
+		Short: "A fast Markdown linter based on the goldmark parser",
+		Long: `goldmark-lint
 https://github.com/mrueg/goldmark-lint
 
 Syntax: goldmark-lint glob0 [glob1] [...] [globN] [--fix] [--help] [--version]
         goldmark-lint - (read from stdin)
         goldmark-lint --format (read stdin, apply fixes, write stdout)
-        goldmark-lint --completion bash|zsh|fish (print shell completion script)
 
 Glob expressions:
 - * matches any number of characters, but not /
 - ? matches a single character, but not /
 - ** matches any number of characters, including /
-
-Optional parameters:
-- --completion       generate shell completion script: bash, zsh, fish
-- --config           path to config file (overrides auto-discovery)
-- --fail-on-warning  exit with code 1 even when all violations are warnings
-- --fix              updates files to resolve fixable issues
-- --fix-dry-run      show a diff of changes --fix would make, without modifying files
-- --format           read stdin, apply fixes, write stdout
-- --list-rules       print a table of all rules with their aliases, enabled/disabled state, and options
-- --no-cache         disable reading/writing the .goldmark-lint-cache file
-- --no-globs         ignore the globs config key at runtime
-- --output-format    output format: default, json, junit, tap, sarif, github (default: default)
-- --summary           print a count-per-rule breakdown after linting
-- --watch            re-lint files whenever they change (runs until Ctrl+C)
-- --help             writes this message to the console and exits without doing anything else
-- --version          prints the version and exits
 
 Config file:
 - Reads .markdownlint-cli2.yaml (or .yml, .jsonc, .json) from the current
@@ -64,439 +65,446 @@ Config file:
 Exit codes:
 - 0: Linting was successful and there were no errors
 - 1: Linting was successful and there were errors
-- 2: Linting was not successful due to a problem or failure
-`
-
-func main() {
-	completion := flag.String("completion", "", "generate shell completion script: bash, zsh, fish")
-	configPath := flag.String("config", "", "path to config file (overrides auto-discovery)")
-	failOnWarning := flag.Bool("fail-on-warning", false, "exit with code 1 even when all violations are warnings")
-	fix := flag.Bool("fix", false, "updates files to resolve fixable issues")
-	fixDryRun := flag.Bool("fix-dry-run", false, "show a diff of changes --fix would make, without modifying files")
-	format := flag.Bool("format", false, "read stdin, apply fixes, write stdout")
-	help := flag.Bool("help", false, "writes help message and exits")
-	listRules := flag.Bool("list-rules", false, "print a table of all rules with their aliases, enabled/disabled state, and options")
-	ver := flag.Bool("version", false, "prints the version and exits")
-	noCache := flag.Bool("no-cache", false, "disable reading/writing the cache file")
-	noGlobs := flag.Bool("no-globs", false, "ignore the globs config key at runtime")
-	outputFormat := flag.String("output-format", "", "output format: default, json, junit, tap, sarif, github")
-	summary := flag.Bool("summary", false, "print a count-per-rule breakdown after linting")
-	watch := flag.Bool("watch", false, "re-lint files whenever they change (runs until Ctrl+C)")
-	flag.Parse()
-
-	if *help {
-		fmt.Print(helpText)
-		os.Exit(0)
-	}
-
-	if *ver {
-		fmt.Println(version)
-		os.Exit(0)
-	}
-
-	if *completion != "" {
-		if err := writeCompletion(os.Stdout, *completion); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(2)
-		}
-		os.Exit(0)
-	}
-
-	if *fix && *fixDryRun {
-		fmt.Fprintln(os.Stderr, "Error: --fix and --fix-dry-run are mutually exclusive")
-		os.Exit(2)
-	}
-
-	// Validate --output-format flag if specified.
-	if *outputFormat != "" {
-		switch *outputFormat {
-		case "default", "json", "junit", "tap", "sarif", "github":
-		default:
-			fmt.Fprintf(os.Stderr, "Error: unknown output format %q; supported formats: default, json, junit, tap, sarif, github\n", *outputFormat)
-			os.Exit(2)
-		}
-	}
-
-	// Auto-discover config file starting from the current working directory,
-	// or use the explicitly specified --config path.
-	var cfg *ConfigFile
-	cwd, _ := os.Getwd()
-	if *configPath != "" {
-		loaded, err := loadConfig(*configPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading config %s: %v\n", *configPath, err)
-			os.Exit(2)
-		}
-		cfg = loaded
-	} else if cwd != "" {
-		if cfgPath := findConfigFile(cwd); cfgPath != "" {
-			loaded, err := loadConfig(cfgPath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error loading config %s: %v\n", cfgPath, err)
+- 2: Linting was not successful due to a problem or failure`,
+		Version:       version,
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		Args:          cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if fix && fixDryRun {
+				fmt.Fprintln(os.Stderr, "Error: --fix and --fix-dry-run are mutually exclusive")
 				os.Exit(2)
 			}
-			cfg = loaded
-		}
-	}
 
-	// Determine the effective input globs: CLI args take priority, then config globs.
-	// When --no-globs is set, config globs are ignored.
-	inputGlobs := flag.Args()
-	if len(inputGlobs) == 0 && !*noGlobs && cfg != nil && len(cfg.Globs) > 0 {
-		inputGlobs = cfg.Globs
-	}
-	if *listRules {
-		var ruleCfgForList map[string]interface{}
-		if cfg != nil {
-			ruleCfgForList = cfg.Config
-		}
-		printRulesTable(os.Stdout, ruleCfgForList)
-		os.Exit(0)
-	}
-	if len(inputGlobs) == 0 && !*format {
-		fmt.Fprint(os.Stderr, helpText)
-		os.Exit(2)
-	}
-
-	var ruleCfg map[string]interface{}
-	var ignores []string
-	var overrides []GlobOverride
-	var noInlineConfig bool
-	// effectiveFix is true when --fix is passed on CLI or fix:true is in config.
-	effectiveFix := *fix
-	if cfg != nil {
-		ruleCfg = cfg.Config
-		ignores = cfg.Ignores
-		overrides = cfg.Overrides
-		noInlineConfig = cfg.NoInlineConfig
-		if cfg.Fix {
-			effectiveFix = true
-		}
-		// gitignore: read .gitignore files and add patterns to ignores.
-		if gitignoreIsEnabled(cfg.Gitignore) && cwd != "" {
-			pattern := gitignoreGlobPattern(cfg.Gitignore)
-			if pattern == "" {
-				// bool true: walk from cwd up to the git repository root.
-				ignores = append(ignores, collectGitignorePatterns(cwd)...)
-			} else {
-				// string: use the glob pattern to find gitignore files.
-				for _, f := range findFilesMatchingGlob(cwd, pattern) {
-					ignores = append(ignores, parseGitignore(f)...)
-				}
-			}
-		}
-	}
-
-	// Determine the formatter specs to use.
-	// CLI flag takes priority; then config outputFormatters; then default.
-	var formatterSpecs []outputFormatterSpec
-	if *outputFormat != "" {
-		formatterSpecs = []outputFormatterSpec{{format: *outputFormat}}
-	} else if cfg != nil && len(cfg.OutputFormatters) > 0 {
-		formatterSpecs = parseOutputFormatters(cfg.OutputFormatters)
-	}
-	if len(formatterSpecs) == 0 {
-		formatterSpecs = []outputFormatterSpec{{format: "default"}}
-	}
-
-	// Default linter (used when no overrides are defined or override doesn't match).
-	linter := newLinterFromConfig(ruleCfg)
-	linter.NoInlineConfig = noInlineConfig
-	// frontMatter: set custom front matter regexp on linter if configured.
-	if cfg != nil && cfg.FrontMatter != "" {
-		re, err := regexp.Compile(cfg.FrontMatter)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: invalid frontMatter regex %q: %v\n", cfg.FrontMatter, err)
-			os.Exit(2)
-		}
-		linter.FrontMatterRegexp = re
-	}
-
-	// Load cache (skip when --no-cache, fix, fix-dry-run, or watch is used).
-	useCache := !*noCache && !effectiveFix && !*fixDryRun && !*watch
-	cache := make(lintCache)
-	if useCache && cwd != "" {
-		cache = loadCache(cwd)
-	}
-
-	// --format: read stdin, apply fixes, write stdout, then exit.
-	if *format {
-		source, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
-			os.Exit(2)
-		}
-		fixed := linter.Fix(source)
-		if _, err := os.Stdout.Write(fixed); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing stdout: %v\n", err)
-			os.Exit(2)
-		}
-		os.Exit(0)
-	}
-
-	exitCode := 0
-
-	// allViolations collects violations from all sources for the final formatter run.
-	var allViolations []fileViolation
-
-	// Handle stdin ("-") sequentially – stdin cannot be parallelised.
-	// Stdin can only be requested via CLI args (not config globs).
-	for _, pattern := range flag.Args() {
-		if pattern != "-" {
-			continue
-		}
-		source, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
-			exitCode = 2
-			continue
-		}
-		violations := linter.Lint(source)
-		allViolations = append(allViolations, fileViolation{File: "stdin", Violations: violations})
-	}
-
-	// Collect all non-stdin files in order so that output remains deterministic.
-	var allFiles []string
-	for _, pattern := range inputGlobs {
-		if pattern == "-" {
-			continue
-		}
-		files, err := doublestar.FilepathGlob(pattern)
-		if err != nil || len(files) == 0 {
-			files = []string{pattern}
-		}
-		for _, file := range files {
-			if !isIgnored(file, ignores) {
-				allFiles = append(allFiles, file)
-			}
-		}
-	}
-
-	// fileResult carries the outcome of processing a single file.
-	type fileResult struct {
-		violations []lint.Violation
-		err        error
-		errCode    int
-		original   []byte // non-nil when --fix-dry-run: the content before fixing
-		fixed      []byte // non-nil when --fix-dry-run: the content after fixing
-	}
-
-	results := make([]fileResult, len(allFiles))
-	newEntries := make(lintCache) // updated cache entries collected from goroutines
-	var mu sync.Mutex             // protects newEntries
-
-	// Bound the number of concurrent goroutines to avoid resource exhaustion
-	// on large repositories. Using GOMAXPROCS as the concurrency limit ensures
-	// we keep all CPUs busy without spawning more goroutines than useful.
-	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
-	var wg sync.WaitGroup
-	for i, file := range allFiles {
-		wg.Add(1)
-		go func(i int, file string) {
-			defer wg.Done()
-			sem <- struct{}{} // acquire a slot; limits concurrent work
-			defer func() { <-sem }() // release slot on exit
-
-			source, err := os.ReadFile(file)
-			if err != nil {
-				results[i] = fileResult{err: err, errCode: 2}
-				return
-			}
-
-			hash := hashContent(source)
-
-			// Cache hit: file unchanged, replay cached violations.
-			if useCache {
-				if entry, ok := cache[file]; ok && entry.Hash == hash {
-					results[i] = fileResult{violations: entry.Violations}
-					return
+			// Validate --output-format flag if specified.
+			if outputFormat != "" {
+				switch outputFormat {
+				case "default", "json", "junit", "tap", "sarif", "github":
+				default:
+					fmt.Fprintf(os.Stderr, "Error: unknown output format %q; supported formats: default, json, junit, tap, sarif, github\n", outputFormat)
+					os.Exit(2)
 				}
 			}
 
-			// Determine the effective linter for this file.
-			fileLinter := linter
-			if len(overrides) > 0 {
-				fileCfg := effectiveConfigForFile(ruleCfg, overrides, file)
-				fileLinter = newLinterFromConfig(fileCfg)
-				fileLinter.NoInlineConfig = noInlineConfig
-				fileLinter.FrontMatterRegexp = linter.FrontMatterRegexp
-			}
-
-			// Apply fixes if requested.
-			var origContent, fixedContent []byte
-			if effectiveFix {
-				fixedContent = fileLinter.Fix(source)
-				if err := os.WriteFile(file, fixedContent, 0644); err != nil {
-					results[i] = fileResult{err: err, errCode: 2}
-					return
-				}
-				source = fixedContent
-				hash = hashContent(source)
-			} else if *fixDryRun {
-				fixedContent = fileLinter.Fix(source)
-				origContent = source
-				source = fixedContent
-				hash = hashContent(source)
-			}
-
-			violations := fileLinter.Lint(source)
-			results[i] = fileResult{violations: violations, original: origContent, fixed: fixedContent}
-
-			// Store the new cache entry.
-			if useCache {
-				mu.Lock()
-				newEntries[file] = cacheEntry{Hash: hash, Violations: violations}
-				mu.Unlock()
-			}
-		}(i, file)
-	}
-	wg.Wait()
-
-	// Collect file results in original order for deterministic output.
-	for i, file := range allFiles {
-		r := results[i]
-		if r.err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", file, r.err)
-			if r.errCode > exitCode {
-				exitCode = r.errCode
-			}
-			continue
-		}
-		allViolations = append(allViolations, fileViolation{File: file, Violations: r.violations})
-	}
-
-	// --fix-dry-run: output a unified diff for every file that would be changed.
-	if *fixDryRun {
-		color := isColorEnabled(os.Stdout)
-		for i, file := range allFiles {
-			r := results[i]
-			if r.original != nil {
-				formatFileDiff(file, r.original, r.fixed, os.Stdout, color)
-			}
-		}
-	}
-
-	// Apply per-violation severity so formatters can use it.
-	for i := range allViolations {
-		for j := range allViolations[i].Violations {
-			allViolations[i].Violations[j].Severity = getRuleSeverity(allViolations[i].Violations[j].Rule, ruleCfg)
-		}
-	}
-
-	// Calculate violation-based exit code (only upgrade, never downgrade from 2).
-	if exitCode < 1 {
-		for _, fv := range allViolations {
-			for _, v := range fv.Violations {
-				if v.Severity != "warning" || *failOnWarning {
-					exitCode = 1
-					break
-				}
-			}
-			if exitCode == 1 {
-				break
-			}
-		}
-	}
-
-	// Run each configured formatter.
-	for _, spec := range formatterSpecs {
-		var w io.Writer
-		var closeFile func()
-		if spec.outfile != "" {
-			f, err := os.Create(spec.outfile)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error creating output file %s: %v\n", spec.outfile, err)
-				if exitCode < 2 {
-					exitCode = 2
-				}
-				continue
-			}
-			w = f
-			closeFile = func() {
-				if err := f.Close(); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: could not close output file %s: %v\n", spec.outfile, err)
-				}
-			}
-		} else if spec.format == "default" {
-			w = os.Stderr
-			closeFile = func() {}
-		} else {
-			w = os.Stdout
-			closeFile = func() {}
-		}
-
-		switch spec.format {
-		case "json":
-			formatJSON(allViolations, w)
-		case "junit":
-			formatJUnit(allViolations, w)
-		case "tap":
-			formatTAP(allViolations, w)
-		case "sarif":
-			formatSARIF(allViolations, w)
-		case "github":
-			formatGitHubActions(allViolations, w)
-		default:
-			formatDefault(allViolations, w)
-		}
-		closeFile()
-	}
-
-	// Print per-rule summary if requested.
-	if *summary {
-		formatSummary(allViolations, os.Stderr)
-	}
-
-	// Persist updated cache entries.
-	if useCache && cwd != "" && len(newEntries) > 0 {
-		for k, v := range newEntries {
-			cache[k] = v
-		}
-		if err := saveCache(cwd, cache); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not save cache: %v\n", err)
-		}
-	}
-
-	// --watch: after the initial lint run, poll files for changes and re-lint.
-	// Violations found during watch cycles are printed to stderr but do not
-	// affect the exit code – the process exits 0 on interrupt (Ctrl+C) since
-	// watch mode is an interactive session, not a one-shot check.
-	if *watch {
-		runWatch(allFiles, func(changed []string) {
-			var watchViolations []fileViolation
-			for _, file := range changed {
-				source, err := os.ReadFile(file)
+			// Auto-discover config file starting from the current working directory,
+			// or use the explicitly specified --config path.
+			var cfg *ConfigFile
+			cwd, _ := os.Getwd()
+			if configPath != "" {
+				loaded, err := loadConfig(configPath)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", file, err)
+					fmt.Fprintf(os.Stderr, "Error loading config %s: %v\n", configPath, err)
+					os.Exit(2)
+				}
+				cfg = loaded
+			} else if cwd != "" {
+				if cfgPath := findConfigFile(cwd); cfgPath != "" {
+					loaded, err := loadConfig(cfgPath)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "Error loading config %s: %v\n", cfgPath, err)
+						os.Exit(2)
+					}
+					cfg = loaded
+				}
+			}
+
+			// Determine the effective input globs: CLI args take priority, then config globs.
+			// When --no-globs is set, config globs are ignored.
+			inputGlobs := args
+			if len(inputGlobs) == 0 && !noGlobs && cfg != nil && len(cfg.Globs) > 0 {
+				inputGlobs = cfg.Globs
+			}
+			if listRules {
+				var ruleCfgForList map[string]interface{}
+				if cfg != nil {
+					ruleCfgForList = cfg.Config
+				}
+				printRulesTable(os.Stdout, ruleCfgForList)
+				os.Exit(0)
+			}
+			if len(inputGlobs) == 0 && !format {
+				_ = cmd.Help()
+				os.Exit(2)
+			}
+
+			var ruleCfg map[string]interface{}
+			var ignores []string
+			var overrides []GlobOverride
+			var noInlineConfig bool
+			// effectiveFix is true when --fix is passed on CLI or fix:true is in config.
+			effectiveFix := fix
+			if cfg != nil {
+				ruleCfg = cfg.Config
+				ignores = cfg.Ignores
+				overrides = cfg.Overrides
+				noInlineConfig = cfg.NoInlineConfig
+				if cfg.Fix {
+					effectiveFix = true
+				}
+				// gitignore: read .gitignore files and add patterns to ignores.
+				if gitignoreIsEnabled(cfg.Gitignore) && cwd != "" {
+					pattern := gitignoreGlobPattern(cfg.Gitignore)
+					if pattern == "" {
+						// bool true: walk from cwd up to the git repository root.
+						ignores = append(ignores, collectGitignorePatterns(cwd)...)
+					} else {
+						// string: use the glob pattern to find gitignore files.
+						for _, f := range findFilesMatchingGlob(cwd, pattern) {
+							ignores = append(ignores, parseGitignore(f)...)
+						}
+					}
+				}
+			}
+
+			// Determine the formatter specs to use.
+			// CLI flag takes priority; then config outputFormatters; then default.
+			var formatterSpecs []outputFormatterSpec
+			if outputFormat != "" {
+				formatterSpecs = []outputFormatterSpec{{format: outputFormat}}
+			} else if cfg != nil && len(cfg.OutputFormatters) > 0 {
+				formatterSpecs = parseOutputFormatters(cfg.OutputFormatters)
+			}
+			if len(formatterSpecs) == 0 {
+				formatterSpecs = []outputFormatterSpec{{format: "default"}}
+			}
+
+			// Default linter (used when no overrides are defined or override doesn't match).
+			linter := newLinterFromConfig(ruleCfg)
+			linter.NoInlineConfig = noInlineConfig
+			// frontMatter: set custom front matter regexp on linter if configured.
+			if cfg != nil && cfg.FrontMatter != "" {
+				re, err := regexp.Compile(cfg.FrontMatter)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error: invalid frontMatter regex %q: %v\n", cfg.FrontMatter, err)
+					os.Exit(2)
+				}
+				linter.FrontMatterRegexp = re
+			}
+
+			// Load cache (skip when --no-cache, fix, fix-dry-run, or watch is used).
+			useCache := !noCache && !effectiveFix && !fixDryRun && !watch
+			cache := make(lintCache)
+			if useCache && cwd != "" {
+				cache = loadCache(cwd)
+			}
+
+			// --format: read stdin, apply fixes, write stdout, then exit.
+			if format {
+				source, err := io.ReadAll(os.Stdin)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
+					os.Exit(2)
+				}
+				fixed := linter.Fix(source)
+				if _, err := os.Stdout.Write(fixed); err != nil {
+					fmt.Fprintf(os.Stderr, "Error writing stdout: %v\n", err)
+					os.Exit(2)
+				}
+				os.Exit(0)
+			}
+
+			exitCode := 0
+
+			// allViolations collects violations from all sources for the final formatter run.
+			var allViolations []fileViolation
+
+			// Handle stdin ("-") sequentially – stdin cannot be parallelised.
+			// Stdin can only be requested via CLI args (not config globs).
+			for _, pattern := range args {
+				if pattern != "-" {
 					continue
 				}
-				if effectiveFix {
-					fixed := linter.Fix(source)
-					if err := os.WriteFile(file, fixed, 0644); err != nil {
-						fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", file, err)
+				source, err := io.ReadAll(os.Stdin)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
+					exitCode = 2
+					continue
+				}
+				violations := linter.Lint(source)
+				allViolations = append(allViolations, fileViolation{File: "stdin", Violations: violations})
+			}
+
+			// Collect all non-stdin files in order so that output remains deterministic.
+			var allFiles []string
+			for _, pattern := range inputGlobs {
+				if pattern == "-" {
+					continue
+				}
+				files, err := doublestar.FilepathGlob(pattern)
+				if err != nil || len(files) == 0 {
+					files = []string{pattern}
+				}
+				for _, file := range files {
+					if !isIgnored(file, ignores) {
+						allFiles = append(allFiles, file)
+					}
+				}
+			}
+
+			// fileResult carries the outcome of processing a single file.
+			type fileResult struct {
+				violations []lint.Violation
+				err        error
+				errCode    int
+				original   []byte // non-nil when --fix-dry-run: the content before fixing
+				fixed      []byte // non-nil when --fix-dry-run: the content after fixing
+			}
+
+			results := make([]fileResult, len(allFiles))
+			newEntries := make(lintCache) // updated cache entries collected from goroutines
+			var mu sync.Mutex             // protects newEntries
+
+			// Bound the number of concurrent goroutines to avoid resource exhaustion
+			// on large repositories. Using GOMAXPROCS as the concurrency limit ensures
+			// we keep all CPUs busy without spawning more goroutines than useful.
+			sem := make(chan struct{}, runtime.GOMAXPROCS(0))
+			var wg sync.WaitGroup
+			for i, file := range allFiles {
+				wg.Add(1)
+				go func(i int, file string) {
+					defer wg.Done()
+					sem <- struct{}{} // acquire a slot; limits concurrent work
+					defer func() { <-sem }() // release slot on exit
+
+					source, err := os.ReadFile(file)
+					if err != nil {
+						results[i] = fileResult{err: err, errCode: 2}
+						return
+					}
+
+					hash := hashContent(source)
+
+					// Cache hit: file unchanged, replay cached violations.
+					if useCache {
+						if entry, ok := cache[file]; ok && entry.Hash == hash {
+							results[i] = fileResult{violations: entry.Violations}
+							return
+						}
+					}
+
+					// Determine the effective linter for this file.
+					fileLinter := linter
+					if len(overrides) > 0 {
+						fileCfg := effectiveConfigForFile(ruleCfg, overrides, file)
+						fileLinter = newLinterFromConfig(fileCfg)
+						fileLinter.NoInlineConfig = noInlineConfig
+						fileLinter.FrontMatterRegexp = linter.FrontMatterRegexp
+					}
+
+					// Apply fixes if requested.
+					var origContent, fixedContent []byte
+					if effectiveFix {
+						fixedContent = fileLinter.Fix(source)
+						if err := os.WriteFile(file, fixedContent, 0644); err != nil {
+							results[i] = fileResult{err: err, errCode: 2}
+							return
+						}
+						source = fixedContent
+						hash = hashContent(source)
+					} else if fixDryRun {
+						fixedContent = fileLinter.Fix(source)
+						origContent = source
+						source = fixedContent
+						hash = hashContent(source)
+					}
+
+					violations := fileLinter.Lint(source)
+					results[i] = fileResult{violations: violations, original: origContent, fixed: fixedContent}
+
+					// Store the new cache entry.
+					if useCache {
+						mu.Lock()
+						newEntries[file] = cacheEntry{Hash: hash, Violations: violations}
+						mu.Unlock()
+					}
+				}(i, file)
+			}
+			wg.Wait()
+
+			// Collect file results in original order for deterministic output.
+			for i, file := range allFiles {
+				r := results[i]
+				if r.err != nil {
+					fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", file, r.err)
+					if r.errCode > exitCode {
+						exitCode = r.errCode
+					}
+					continue
+				}
+				allViolations = append(allViolations, fileViolation{File: file, Violations: r.violations})
+			}
+
+			// --fix-dry-run: output a unified diff for every file that would be changed.
+			if fixDryRun {
+				color := isColorEnabled(os.Stdout)
+				for i, file := range allFiles {
+					r := results[i]
+					if r.original != nil {
+						formatFileDiff(file, r.original, r.fixed, os.Stdout, color)
+					}
+				}
+			}
+
+			// Apply per-violation severity so formatters can use it.
+			for i := range allViolations {
+				for j := range allViolations[i].Violations {
+					allViolations[i].Violations[j].Severity = getRuleSeverity(allViolations[i].Violations[j].Rule, ruleCfg)
+				}
+			}
+
+			// Calculate violation-based exit code (only upgrade, never downgrade from 2).
+			if exitCode < 1 {
+				for _, fv := range allViolations {
+					for _, v := range fv.Violations {
+						if v.Severity != "warning" || failOnWarning {
+							exitCode = 1
+							break
+						}
+					}
+					if exitCode == 1 {
+						break
+					}
+				}
+			}
+
+			// Run each configured formatter.
+			for _, spec := range formatterSpecs {
+				var w io.Writer
+				var closeFile func()
+				if spec.outfile != "" {
+					f, err := os.Create(spec.outfile)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "Error creating output file %s: %v\n", spec.outfile, err)
+						if exitCode < 2 {
+							exitCode = 2
+						}
 						continue
 					}
-					source = fixed
+					w = f
+					closeFile = func() {
+						if err := f.Close(); err != nil {
+							fmt.Fprintf(os.Stderr, "Warning: could not close output file %s: %v\n", spec.outfile, err)
+						}
+					}
+				} else if spec.format == "default" {
+					w = os.Stderr
+					closeFile = func() {}
+				} else {
+					w = os.Stdout
+					closeFile = func() {}
 				}
-				fileLinter := linter
-				if len(overrides) > 0 {
-					fileCfg := effectiveConfigForFile(ruleCfg, overrides, file)
-					fileLinter = newLinterFromConfig(fileCfg)
-					fileLinter.NoInlineConfig = noInlineConfig
-					fileLinter.FrontMatterRegexp = linter.FrontMatterRegexp
+
+				switch spec.format {
+				case "json":
+					formatJSON(allViolations, w)
+				case "junit":
+					formatJUnit(allViolations, w)
+				case "tap":
+					formatTAP(allViolations, w)
+				case "sarif":
+					formatSARIF(allViolations, w)
+				case "github":
+					formatGitHubActions(allViolations, w)
+				default:
+					formatDefault(allViolations, w)
 				}
-				violations := fileLinter.Lint(source)
-				for j := range violations {
-					violations[j].Severity = getRuleSeverity(violations[j].Rule, ruleCfg)
-				}
-				watchViolations = append(watchViolations, fileViolation{File: file, Violations: violations})
+				closeFile()
 			}
-			formatDefault(watchViolations, os.Stderr)
-		})
-		os.Exit(0)
+
+			// Print per-rule summary if requested.
+			if summary {
+				formatSummary(allViolations, os.Stderr)
+			}
+
+			// Persist updated cache entries.
+			if useCache && cwd != "" && len(newEntries) > 0 {
+				for k, v := range newEntries {
+					cache[k] = v
+				}
+				if err := saveCache(cwd, cache); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: could not save cache: %v\n", err)
+				}
+			}
+
+			// --watch: after the initial lint run, poll files for changes and re-lint.
+			// Violations found during watch cycles are printed to stderr but do not
+			// affect the exit code – the process exits 0 on interrupt (Ctrl+C) since
+			// watch mode is an interactive session, not a one-shot check.
+			if watch {
+				runWatch(allFiles, func(changed []string) {
+					var watchViolations []fileViolation
+					for _, file := range changed {
+						source, err := os.ReadFile(file)
+						if err != nil {
+							fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", file, err)
+							continue
+						}
+						if effectiveFix {
+							fixed := linter.Fix(source)
+							if err := os.WriteFile(file, fixed, 0644); err != nil {
+								fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", file, err)
+								continue
+							}
+							source = fixed
+						}
+						fileLinter := linter
+						if len(overrides) > 0 {
+							fileCfg := effectiveConfigForFile(ruleCfg, overrides, file)
+							fileLinter = newLinterFromConfig(fileCfg)
+							fileLinter.NoInlineConfig = noInlineConfig
+							fileLinter.FrontMatterRegexp = linter.FrontMatterRegexp
+						}
+						violations := fileLinter.Lint(source)
+						for j := range violations {
+							violations[j].Severity = getRuleSeverity(violations[j].Rule, ruleCfg)
+						}
+						watchViolations = append(watchViolations, fileViolation{File: file, Violations: violations})
+					}
+					formatDefault(watchViolations, os.Stderr)
+				})
+				os.Exit(0)
+			}
+
+			os.Exit(exitCode)
+			return nil
+		},
 	}
 
-	os.Exit(exitCode)
+	// Print just the version string, matching the previous flag-package behaviour.
+	cmd.SetVersionTemplate("{{.Version}}\n")
+
+	cmd.Flags().StringVar(&configPath, "config", "", "path to config file (overrides auto-discovery)")
+	cmd.Flags().BoolVar(&failOnWarning, "fail-on-warning", false, "exit with code 1 even when all violations are warnings")
+	cmd.Flags().BoolVar(&fix, "fix", false, "updates files to resolve fixable issues")
+	cmd.Flags().BoolVar(&fixDryRun, "fix-dry-run", false, "show a diff of changes --fix would make, without modifying files")
+	cmd.Flags().BoolVar(&format, "format", false, "read stdin, apply fixes, write stdout")
+	cmd.Flags().BoolVar(&listRules, "list-rules", false, "print a table of all rules with their aliases, enabled/disabled state, and options")
+	cmd.Flags().BoolVar(&noCache, "no-cache", false, "disable reading/writing the cache file")
+	cmd.Flags().BoolVar(&noGlobs, "no-globs", false, "ignore the globs config key at runtime")
+	cmd.Flags().StringVar(&outputFormat, "output-format", "", "output format: default, json, junit, tap, sarif, github")
+	cmd.Flags().BoolVar(&summary, "summary", false, "print a count-per-rule breakdown after linting")
+	cmd.Flags().BoolVar(&watch, "watch", false, "re-lint files whenever they change (runs until Ctrl+C)")
+
+	// Register shell-completion hints for flags that accept a fixed set of values.
+	_ = cmd.RegisterFlagCompletionFunc("output-format", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return []string{"default", "json", "junit", "tap", "sarif", "github"}, cobra.ShellCompDirectiveNoFileComp
+	})
+	// --config completes to any file path (default file completion).
+	_ = cmd.RegisterFlagCompletionFunc("config", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return nil, cobra.ShellCompDirectiveDefault
+	})
+	// Positional arguments are file/glob paths.
+	cmd.ValidArgsFunction = func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return nil, cobra.ShellCompDirectiveDefault
+	}
+
+	return cmd
+}
+
+func main() {
+	if err := newRootCmd().Execute(); err != nil {
+		os.Exit(2)
+	}
 }
 
 // printRulesTable writes a human-readable table of all known rules to w.
