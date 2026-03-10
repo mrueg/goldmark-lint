@@ -32,6 +32,44 @@ func TestHashContent_Distinct(t *testing.T) {
 	}
 }
 
+func TestHashConfig_Deterministic(t *testing.T) {
+	cfg := map[string]interface{}{"MD013": map[string]interface{}{"line_length": 80}}
+	h1 := hashConfig(cfg, "v1.0.0")
+	h2 := hashConfig(cfg, "v1.0.0")
+	if h1 != h2 {
+		t.Errorf("hashConfig not deterministic: %q != %q", h1, h2)
+	}
+	if len(h1) != 64 {
+		t.Errorf("expected 64-char SHA-256 hex digest, got %d chars", len(h1))
+	}
+}
+
+func TestHashConfig_ChangesOnConfigChange(t *testing.T) {
+	cfg1 := map[string]interface{}{"MD013": map[string]interface{}{"line_length": 80}}
+	cfg2 := map[string]interface{}{"MD013": map[string]interface{}{"line_length": 120}}
+	h1 := hashConfig(cfg1, "v1.0.0")
+	h2 := hashConfig(cfg2, "v1.0.0")
+	if h1 == h2 {
+		t.Error("expected different hashes for different configs")
+	}
+}
+
+func TestHashConfig_ChangesOnVersionChange(t *testing.T) {
+	cfg := map[string]interface{}{"MD013": map[string]interface{}{"line_length": 80}}
+	h1 := hashConfig(cfg, "v1.0.0")
+	h2 := hashConfig(cfg, "v1.1.0")
+	if h1 == h2 {
+		t.Error("expected different hashes for different versions")
+	}
+}
+
+func TestHashConfig_NilConfig(t *testing.T) {
+	h := hashConfig(nil, "v1.0.0")
+	if len(h) != 64 {
+		t.Errorf("expected 64-char SHA-256 hex digest for nil config, got %d chars", len(h))
+	}
+}
+
 func TestLoadCache_Missing(t *testing.T) {
 	dir := t.TempDir()
 	c := loadCache(dir)
@@ -57,7 +95,7 @@ func TestSaveAndLoadCache(t *testing.T) {
 		{Rule: "MD001", Line: 3, Column: 1, Message: "test"},
 	}
 	c := lintCache{
-		"/some/file.md": {Hash: "abc123", Violations: violations},
+		"/some/file.md": {Hash: "abc123", ConfigHash: "cfghash1", Violations: violations},
 	}
 	if err := saveCache(dir, c); err != nil {
 		t.Fatalf("saveCache error: %v", err)
@@ -70,6 +108,9 @@ func TestSaveAndLoadCache(t *testing.T) {
 	}
 	if entry.Hash != "abc123" {
 		t.Errorf("hash = %q, want abc123", entry.Hash)
+	}
+	if entry.ConfigHash != "cfghash1" {
+		t.Errorf("configHash = %q, want cfghash1", entry.ConfigHash)
 	}
 	if len(entry.Violations) != 1 || entry.Violations[0].Rule != "MD001" {
 		t.Errorf("violations = %v, want one MD001 entry", entry.Violations)
@@ -232,5 +273,67 @@ func TestCLI_ParallelMultipleFiles(t *testing.T) {
 	}
 	if !strings.Contains(output, "c.md") {
 		t.Errorf("expected c.md in output, got: %s", output)
+	}
+}
+
+// TestCLI_CacheInvalidatedOnConfigChange verifies that changing the config
+// causes the cache to be invalidated and the file to be re-linted.
+func TestCLI_CacheInvalidatedOnConfigChange(t *testing.T) {
+	bin := buildBinary(t)
+	dir := t.TempDir()
+
+	// A valid markdown file with no violations under default config.
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Heading\n\nContent.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// First run: no config file, default rules – expect no violations (exit 0).
+	cmd1 := exec.Command(bin, mdFile)
+	cmd1.Dir = dir
+	if err := cmd1.Run(); err != nil {
+		t.Fatalf("first run: expected exit 0, got %v", err)
+	}
+
+	// Cache must exist after first run.
+	cachePath := filepath.Join(dir, cacheFileName)
+	if _, err := os.Stat(cachePath); err != nil {
+		t.Fatalf("expected cache file after first run: %v", err)
+	}
+
+	// Introduce a config that disables all rules – the cache should be
+	// invalidated because the configHash changes, forcing a re-lint.
+	cfgFile := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(cfgFile, []byte("config:\n  default: false\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Second run: config changed, cache must be invalidated and re-linted.
+	// With all rules disabled the file is still valid (exit 0).
+	cmd2 := exec.Command(bin, "--config", cfgFile, mdFile)
+	cmd2.Dir = dir
+	if err := cmd2.Run(); err != nil {
+		t.Errorf("second run: expected exit 0 with all rules disabled, got: %v", err)
+	}
+
+	// Read the cache and confirm the configHash changed (i.e. a fresh entry
+	// was written, not the stale one from the first run).
+	data, err := os.ReadFile(cachePath)
+	if err != nil {
+		t.Fatalf("could not read cache file: %v", err)
+	}
+	var loaded lintCache
+	if err := json.Unmarshal(data, &loaded); err != nil {
+		t.Fatalf("could not parse cache file: %v", err)
+	}
+	entry, ok := loaded[mdFile]
+	if !ok {
+		t.Fatalf("expected cache entry for %s", mdFile)
+	}
+	// The configHash must reflect the new (all-disabled) config, not the
+	// default config from the first run.
+	newConfigHash := hashConfig(map[string]interface{}{"default": false}, version)
+	if entry.ConfigHash != newConfigHash {
+		t.Errorf("configHash = %q, want hash of disabled-rules config %q", entry.ConfigHash, newConfigHash)
 	}
 }
