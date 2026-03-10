@@ -459,42 +459,50 @@ func TestCLI_Summary_NoViolations(t *testing.T) {
 	}
 }
 
-func TestCLI_Summary_JSONFormat(t *testing.T) {
+func TestCLI_Summary_NonDefaultFormats(t *testing.T) {
 	bin := buildBinary(t)
 	testfile := filepath.Join("..", "..", "testdata", "md001_invalid.md")
 	if _, err := os.Stat(testfile); err != nil {
 		t.Skip("testdata not available")
 	}
 
-	cmd := exec.Command(bin, "--summary", "--output-format", "json", testfile)
-	var stdout, stderr strings.Builder
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	_ = cmd.Run()
+	formats := []string{"json", "junit", "tap", "sarif", "github"}
+	for _, format := range formats {
+		t.Run(format, func(t *testing.T) {
+			cmd := exec.Command(bin, "--summary", "--output-format", format, testfile)
+			var stdout, stderr strings.Builder
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+			_ = cmd.Run()
 
-	// The JSON summary should appear on stdout, not stderr.
-	if strings.Contains(stderr.String(), "Summary:") {
-		t.Errorf("expected no human-readable 'Summary:' on stderr with --output-format json, got: %s", stderr.String())
-	}
+			// No human-readable summary table on stderr for non-default formats.
+			if strings.Contains(stderr.String(), "Summary:") {
+				t.Errorf("expected no human-readable 'Summary:' on stderr with --output-format %s, got: %s", format, stderr.String())
+			}
 
-	// stdout should contain a valid JSON object with rule counts.
-	outStr := stdout.String()
-	// stdout contains both the violations JSON array and the summary JSON object;
-	// find the last JSON object (the summary).
-	lastBrace := strings.LastIndex(outStr, "{")
-	if lastBrace == -1 {
-		t.Fatalf("expected JSON summary object on stdout, got: %s", outStr)
-	}
-	summaryJSON := outStr[lastBrace:]
-	var counts map[string]int
-	if err := json.Unmarshal([]byte(summaryJSON), &counts); err != nil {
-		t.Fatalf("summary JSON on stdout is not a valid JSON object: %v\noutput: %s", err, outStr)
-	}
-	if counts["MD001"] == 0 {
-		t.Errorf("expected MD001 count > 0 in JSON summary, got: %v", counts)
+			// stdout must end with a JSON summary object {"rule": count}.
+			// The summary is always the last top-level value written; find the
+			// start of the last top-level '{' (preceded by a newline or at start).			outStr := stdout.String()
+			lastNewlineBrace := strings.LastIndex(outStr, "\n{")
+			var summaryStr string
+			if lastNewlineBrace != -1 {
+				summaryStr = outStr[lastNewlineBrace+1:]
+			} else if strings.HasPrefix(strings.TrimSpace(outStr), "{") {
+				// Only one top-level object (e.g., no violations, empty main output).
+				summaryStr = strings.TrimSpace(outStr)
+			} else {
+				t.Fatalf("--output-format %s: expected JSON summary object on stdout, got: %s", format, outStr)
+			}
+			var counts map[string]int
+			if err := json.Unmarshal([]byte(summaryStr), &counts); err != nil {
+				t.Fatalf("--output-format %s: summary on stdout is not a valid JSON object: %v\noutput: %s", format, err, outStr)
+			}
+			if counts["MD001"] == 0 {
+				t.Errorf("--output-format %s: expected MD001 count > 0 in JSON summary, got: %v", format, counts)
+			}
+		})
 	}
 }
-
 
 func TestCLI_Watch(t *testing.T) {
 	if runtime.GOOS == "windows" {

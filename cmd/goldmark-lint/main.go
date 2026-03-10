@@ -433,7 +433,15 @@ func main() {
 
 	// Print per-rule summary if requested.
 	if *summary {
-		if *outputFormat == "json" {
+		// Use JSON summary when any active formatter is non-default (structured output).
+		nonDefault := false
+		for _, spec := range formatterSpecs {
+			if spec.format != "default" {
+				nonDefault = true
+				break
+			}
+		}
+		if nonDefault {
 			formatSummaryJSON(allViolations, os.Stdout)
 		} else {
 			formatSummary(allViolations, os.Stderr)
