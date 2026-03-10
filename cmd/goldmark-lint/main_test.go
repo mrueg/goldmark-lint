@@ -612,6 +612,94 @@ func TestCLI_FixDryRun_MutualExclusion(t *testing.T) {
 	}
 }
 
+func TestCLI_Completion_Bash(t *testing.T) {
+	bin := buildBinary(t)
+	cmd := exec.Command(bin, "--completion", "bash")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("--completion bash exited with error: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "goldmark-lint") {
+		t.Error("bash completion output missing 'goldmark-lint'")
+	}
+	if !strings.Contains(s, "--output-format") {
+		t.Error("bash completion output missing '--output-format'")
+	}
+	if !strings.Contains(s, "--config") {
+		t.Error("bash completion output missing '--config'")
+	}
+	// Verify all output-format values are present.
+	for _, format := range []string{"default", "json", "junit", "tap", "sarif", "github"} {
+		if !strings.Contains(s, format) {
+			t.Errorf("bash completion output missing output-format value %q", format)
+		}
+	}
+}
+
+func TestCLI_Completion_Zsh(t *testing.T) {
+	bin := buildBinary(t)
+	cmd := exec.Command(bin, "--completion", "zsh")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("--completion zsh exited with error: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "goldmark-lint") {
+		t.Error("zsh completion output missing 'goldmark-lint'")
+	}
+	if !strings.Contains(s, "--output-format") {
+		t.Error("zsh completion output missing '--output-format'")
+	}
+	if !strings.Contains(s, "--config") {
+		t.Error("zsh completion output missing '--config'")
+	}
+	// Verify all output-format values are present.
+	for _, format := range []string{"default", "json", "junit", "tap", "sarif", "github"} {
+		if !strings.Contains(s, format) {
+			t.Errorf("zsh completion output missing output-format value %q", format)
+		}
+	}
+}
+
+func TestCLI_Completion_Fish(t *testing.T) {
+	bin := buildBinary(t)
+	cmd := exec.Command(bin, "--completion", "fish")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("--completion fish exited with error: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "goldmark-lint") {
+		t.Error("fish completion output missing 'goldmark-lint'")
+	}
+	if !strings.Contains(s, "--output-format") {
+		t.Error("fish completion output missing '--output-format'")
+	}
+	if !strings.Contains(s, "--config") {
+		t.Error("fish completion output missing '--config'")
+	}
+	// Verify all output-format values are present.
+	for _, format := range []string{"default", "json", "junit", "tap", "sarif", "github"} {
+		if !strings.Contains(s, format) {
+			t.Errorf("fish completion output missing output-format value %q", format)
+		}
+	}
+}
+
+func TestCLI_Completion_InvalidShell(t *testing.T) {
+	bin := buildBinary(t)
+	cmd := exec.Command(bin, "--completion", "powershell")
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected non-zero exit for unknown shell, got nil error")
+	}
+	if exitErr.ExitCode() != 2 {
+		t.Errorf("--completion powershell exit code = %d, want 2", exitErr.ExitCode())
+	}
+}
+
 // TestCLI_ParallelDeterministic verifies that linting multiple files in parallel
 // produces output in a consistent (deterministic) order regardless of goroutine
 // scheduling. It runs the linter several times on the same set of files and

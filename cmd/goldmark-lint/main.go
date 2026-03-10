@@ -25,6 +25,7 @@ https://github.com/mrueg/goldmark-lint
 Syntax: goldmark-lint glob0 [glob1] [...] [globN] [--fix] [--help] [--version]
         goldmark-lint - (read from stdin)
         goldmark-lint --format (read stdin, apply fixes, write stdout)
+        goldmark-lint --completion bash|zsh|fish (print shell completion script)
 
 Glob expressions:
 - * matches any number of characters, but not /
@@ -32,6 +33,7 @@ Glob expressions:
 - ** matches any number of characters, including /
 
 Optional parameters:
+- --completion       generate shell completion script: bash, zsh, fish
 - --config           path to config file (overrides auto-discovery)
 - --fail-on-warning  exit with code 1 even when all violations are warnings
 - --fix              updates files to resolve fixable issues
@@ -66,6 +68,7 @@ Exit codes:
 `
 
 func main() {
+	completion := flag.String("completion", "", "generate shell completion script: bash, zsh, fish")
 	configPath := flag.String("config", "", "path to config file (overrides auto-discovery)")
 	failOnWarning := flag.Bool("fail-on-warning", false, "exit with code 1 even when all violations are warnings")
 	fix := flag.Bool("fix", false, "updates files to resolve fixable issues")
@@ -88,6 +91,14 @@ func main() {
 
 	if *ver {
 		fmt.Println(version)
+		os.Exit(0)
+	}
+
+	if *completion != "" {
+		if err := writeCompletion(os.Stdout, *completion); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(2)
+		}
 		os.Exit(0)
 	}
 
