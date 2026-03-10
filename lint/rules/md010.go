@@ -10,6 +10,9 @@ import (
 type MD010 struct {
 	// SpacesPerTab is the number of spaces used to replace each tab when fixing (default 4).
 	SpacesPerTab int `json:"spaces_per_tab"`
+	// IndentSize is an alias for SpacesPerTab used for markdownlint compatibility.
+	// If both are set, SpacesPerTab takes precedence.
+	IndentSize int `json:"indent_size"`
 	// CodeBlocks controls whether hard tabs in fenced code blocks are checked (default true).
 	CodeBlocks *bool `json:"code_blocks"`
 	// IgnoreCodeLanguages is a list of fenced code block languages whose tabs are not checked.
@@ -22,6 +25,9 @@ func (r MD010) Description() string { return "Hard tabs" }
 
 func (r MD010) Fix(source []byte) []byte {
 	spaces := r.SpacesPerTab
+	if spaces <= 0 {
+		spaces = r.IndentSize
+	}
 	if spaces <= 0 {
 		spaces = 4
 	}

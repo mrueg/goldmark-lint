@@ -975,6 +975,38 @@ func TestCLI_ConfigRuleOptions(t *testing.T) {
 	}
 }
 
+func TestCLI_MD010_IndentSizeOption(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// A file with a hard tab.
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Heading\n\n\tContent\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Config uses markdownlint's indent_size option name.
+	cfgContent := "fix: true\nconfig:\n  MD010:\n    indent_size: 2\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 after fixing MD010 with indent_size:2, got: %v", err)
+	}
+
+	fixed, err := os.ReadFile(mdFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Tab should be replaced with 2 spaces (indent_size:2), not the default 4.
+	want := "# Heading\n\n  Content\n"
+	if string(fixed) != want {
+		t.Errorf("fixed content = %q, want %q", string(fixed), want)
+	}
+}
+
 func TestLoadConfig_NoInlineConfig(t *testing.T) {
 	dir := t.TempDir()
 	content := "noInlineConfig: true\n"
