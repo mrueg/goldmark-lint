@@ -428,24 +428,26 @@ func main() {
 		default:
 			formatDefault(allViolations, w)
 		}
-		closeFile()
-	}
 
-	// Print per-rule summary if requested.
-	if *summary {
-		// Use JSON summary when any active formatter is non-default (structured output).
-		nonDefault := false
-		for _, spec := range formatterSpecs {
-			if spec.format != "default" {
-				nonDefault = true
-				break
+		// Print per-rule summary if requested, using the same format and writer.
+		if *summary {
+			switch spec.format {
+			case "json":
+				formatSummaryJSON(allViolations, w)
+			case "junit":
+				formatSummaryJUnit(allViolations, w)
+			case "tap":
+				formatSummaryTAP(allViolations, w)
+			case "sarif":
+				formatSummaryJSON(allViolations, w)
+			case "github":
+				formatSummaryGitHub(allViolations, w)
+			default:
+				formatSummary(allViolations, w)
 			}
 		}
-		if nonDefault {
-			formatSummaryJSON(allViolations, os.Stdout)
-		} else {
-			formatSummary(allViolations, os.Stderr)
-		}
+
+		closeFile()
 	}
 
 	// Persist updated cache entries.

@@ -353,21 +353,20 @@ func formatGitHubActions(violations []fileViolation, w io.Writer) {
 	}
 }
 
-// formatSummary writes a count-per-rule summary to w.
-// Rules are sorted by count descending, then by rule ID ascending for ties.
-func formatSummary(violations []fileViolation, w io.Writer) {
+// ruleCount holds a rule ID and its violation count.
+type ruleCount struct {
+	rule  string
+	count int
+}
+
+// computeRuleCounts returns per-rule violation counts sorted by count
+// descending, then rule ID ascending for ties.
+func computeRuleCounts(violations []fileViolation) []ruleCount {
 	counts := make(map[string]int)
 	for _, fv := range violations {
 		for _, v := range fv.Violations {
 			counts[v.Rule]++
 		}
-	}
-	if len(counts) == 0 {
-		return
-	}
-	type ruleCount struct {
-		rule  string
-		count int
 	}
 	entries := make([]ruleCount, 0, len(counts))
 	for rule, count := range counts {
@@ -379,6 +378,24 @@ func formatSummary(violations []fileViolation, w io.Writer) {
 		}
 		return entries[i].rule < entries[j].rule
 	})
+	return entries
+}
+
+// violationWord returns "violation" or "violations" based on count.
+func violationWord(count int) string {
+	if count == 1 {
+		return "violation"
+	}
+	return "violations"
+}
+
+// formatSummary writes a count-per-rule summary to w.
+// Rules are sorted by count descending, then by rule ID ascending for ties.
+func formatSummary(violations []fileViolation, w io.Writer) {
+	entries := computeRuleCounts(violations)
+	if len(entries) == 0 {
+		return
+	}
 	_, _ = fmt.Fprintln(w, "Summary:")
 	for _, e := range entries {
 		_, _ = fmt.Fprintf(w, "  %s: %d\n", e.rule, e.count)
@@ -397,6 +414,64 @@ func formatSummaryJSON(violations []fileViolation, w io.Writer) {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(counts)
+}
+
+// formatSummaryJUnit writes a count-per-rule summary as a JUnit XML testsuite to w.
+// Each rule becomes a failed test case whose failure message contains the count.
+func formatSummaryJUnit(violations []fileViolation, w io.Writer) {
+	entries := computeRuleCounts(violations)
+	if len(entries) == 0 {
+		return
+	}
+	cases := make([]xmlCase, 0, len(entries))
+	for _, e := range entries {
+		msg := fmt.Sprintf("%s: %d %s", e.rule, e.count, violationWord(e.count))
+		cases = append(cases, xmlCase{
+			Name:      e.rule,
+			ClassName: "markdownlint",
+			Time:      "0",
+			Failures:  []xmlFailure{{Message: msg, Type: e.rule, Text: msg}},
+		})
+	}
+	suites := xmlTestSuites{
+		Suites: []xmlSuite{{
+			Name:     "markdownlint-summary",
+			Tests:    len(entries),
+			Failures: len(entries),
+			Errors:   0,
+			Cases:    cases,
+		}},
+	}
+	_, _ = fmt.Fprint(w, xml.Header)
+	enc := xml.NewEncoder(w)
+	enc.Indent("", "  ")
+	_ = enc.Encode(suites)
+	_, _ = fmt.Fprintln(w)
+}
+
+// formatSummaryTAP writes a count-per-rule summary in TAP format to w.
+// Each rule is one TAP test entry.
+func formatSummaryTAP(violations []fileViolation, w io.Writer) {
+	entries := computeRuleCounts(violations)
+	if len(entries) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "TAP version 13\n1..%d\n", len(entries))
+	for i, e := range entries {
+		_, _ = fmt.Fprintf(w, "not ok %d - %s: %d %s\n", i+1, e.rule, e.count, violationWord(e.count))
+	}
+}
+
+// formatSummaryGitHub writes a count-per-rule summary as GitHub Actions ::notice
+// workflow commands to w.
+func formatSummaryGitHub(violations []fileViolation, w io.Writer) {
+	entries := computeRuleCounts(violations)
+	if len(entries) == 0 {
+		return
+	}
+	for _, e := range entries {
+		_, _ = fmt.Fprintf(w, "::notice::%s: %d %s\n", e.rule, e.count, violationWord(e.count))
+	}
 }
 
 // outputFormatterSpec holds a format name and optional outfile for a single formatter run.
