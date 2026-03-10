@@ -310,9 +310,17 @@ func main() {
 
 			hash := hashContent(source)
 
-			// Cache hit: file unchanged, replay cached violations.
+			// Compute the effective rule config for this file once; it is used
+			// both for the config-hash cache key and for building the linter.
+			effectiveCfg := ruleCfg
+			if len(overrides) > 0 {
+				effectiveCfg = effectiveConfigForFile(ruleCfg, overrides, file)
+			}
+			configHash := hashConfig(effectiveCfg, version)
+
+			// Cache hit: file unchanged AND effective config unchanged.
 			if useCache {
-				if entry, ok := cache[file]; ok && entry.Hash == hash {
+				if entry, ok := cache[file]; ok && entry.Hash == hash && entry.ConfigHash == configHash {
 					results[i] = fileResult{violations: entry.Violations}
 					return
 				}
@@ -321,8 +329,7 @@ func main() {
 			// Determine the effective linter for this file.
 			fileLinter := linter
 			if len(overrides) > 0 {
-				fileCfg := effectiveConfigForFile(ruleCfg, overrides, file)
-				fileLinter = newLinterFromConfig(fileCfg)
+				fileLinter = newLinterFromConfig(effectiveCfg)
 				fileLinter.NoInlineConfig = noInlineConfig
 				fileLinter.FrontMatterRegexp = linter.FrontMatterRegexp
 			}
@@ -350,7 +357,7 @@ func main() {
 			// Store the new cache entry.
 			if useCache {
 				mu.Lock()
-				newEntries[file] = cacheEntry{Hash: hash, Violations: violations}
+				newEntries[file] = cacheEntry{Hash: hash, ConfigHash: configHash, Violations: violations}
 				mu.Unlock()
 			}
 		}(i, file)

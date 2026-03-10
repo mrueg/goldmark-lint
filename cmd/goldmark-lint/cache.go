@@ -15,6 +15,7 @@ const cacheFileName = ".goldmark-lint-cache"
 // cacheEntry stores the lint result for a single file indexed by its content hash.
 type cacheEntry struct {
 	Hash       string           `json:"hash"`
+	ConfigHash string           `json:"configHash"`
 	Violations []lint.Violation `json:"violations"`
 }
 
@@ -25,6 +26,17 @@ type lintCache map[string]cacheEntry
 func hashContent(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+// hashConfig returns a SHA-256 hex digest that captures the effective rule
+// configuration and the goldmark-lint version. encoding/json sorts map keys
+// alphabetically, so the output is deterministic for equal configs.
+// cfg originates from JSON/YAML config parsing and only contains
+// JSON-compatible values, so json.Marshal will not return an error.
+func hashConfig(cfg map[string]interface{}, ver string) string {
+	data, _ := json.Marshal(cfg)
+	combined := ver + ":" + string(data)
+	return hashContent([]byte(combined))
 }
 
 // loadCache reads the cache file from dir and returns its contents.
