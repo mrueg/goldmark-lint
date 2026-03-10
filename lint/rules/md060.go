@@ -358,20 +358,20 @@ trimmed := make([]string, len(cells))
 for ci, c := range cells {
 trimmed[ci] = strings.TrimSpace(c)
 }
-rows[ri] = rowData{
-cells:       trimmed,
-hasLeading:  hasLeading,
-hasTrailing: hasTrailing,
-isDelim:     isTableDelimiterRow(line),
-}
-for ci, c := range trimmed {
-for ci >= len(maxWidths) {
-maxWidths = append(maxWidths, 0)
-}
-if len(c) > maxWidths[ci] {
-maxWidths[ci] = len(c)
-}
-}
+	rows[ri] = rowData{
+		cells:       trimmed,
+		hasLeading:  hasLeading,
+		hasTrailing: hasTrailing,
+		isDelim:     isTableDelimiterRow(line),
+	}
+	for ci, c := range trimmed {
+		if ci >= len(maxWidths) {
+			maxWidths = append(maxWidths, 0)
+		}
+		if len(c) > maxWidths[ci] {
+			maxWidths[ci] = len(c)
+		}
+	}
 }
 
 result := make([]string, len(tableLines))

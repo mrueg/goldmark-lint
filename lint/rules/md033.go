@@ -26,6 +26,12 @@ func (r MD033) Description() string { return "Inline HTML" }
 // closing tags, and self-closing tags on a single line.
 var md033AnyTagRE = regexp.MustCompile(`<!--.*?-->|</?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?\s*/?>`)
 
+// isHTMLTagNameByte reports whether b is a valid HTML tag-name byte:
+// ASCII letter, digit, or hyphen.
+func isHTMLTagNameByte(b byte) bool {
+	return b == '-' || (b >= '0' && b <= '9') || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
 // Fix removes all disallowed HTML tags from source. Allowed elements (and
 // table_allowed_elements) are left in place; HTML comments are always kept.
 // Only single-line tags are processed; multi-line opening tags are not handled.
@@ -49,7 +55,7 @@ func (r MD033) Fix(source []byte) []byte {
 				inner = inner[1:] // strip '/' for closing tags
 			}
 			j := 0
-			for j < len(inner) && (inner[j] == '-' || (inner[j] >= '0' && inner[j] <= '9') || (inner[j] >= 'a' && inner[j] <= 'z') || (inner[j] >= 'A' && inner[j] <= 'Z')) {
+			for j < len(inner) && isHTMLTagNameByte(inner[j]) {
 				j++
 			}
 			if j == 0 {
