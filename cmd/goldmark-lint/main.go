@@ -1,8 +1,8 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -14,97 +14,157 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/urfave/cli/v3"
 )
 
 // version is set at build time via -ldflags.
 var version = "dev"
 
-const helpText = `goldmark-lint
-https://github.com/mrueg/goldmark-lint
+func main() {
+	app := &cli.Command{
+		Name:                  "goldmark-lint",
+		Usage:                 "Lint Markdown files",
+		Version:               version,
+		EnableShellCompletion: true,
+		ArgsUsage:             "glob0 [glob1] [...] [globN]",
+		Description: `Lint Markdown files matching the given glob patterns.
 
-Syntax: goldmark-lint glob0 [glob1] [...] [globN] [--fix] [--help] [--version]
-        goldmark-lint - (read from stdin)
-        goldmark-lint --format (read stdin, apply fixes, write stdout)
+Use '-' as an argument to read from stdin.
+Use --format to read stdin, apply fixes, and write to stdout.
 
 Glob expressions:
-- * matches any number of characters, but not /
-- ? matches a single character, but not /
-- ** matches any number of characters, including /
-
-Optional parameters:
-- --config           path to config file (overrides auto-discovery)
-- --fail-on-warning  exit with code 1 even when all violations are warnings
-- --fix              updates files to resolve fixable issues
-- --fix-dry-run      show a diff of changes --fix would make, without modifying files
-- --format           read stdin, apply fixes, write stdout
-- --list-rules       print a table of all rules with their aliases, enabled/disabled state, and options
-- --no-cache         disable reading/writing the .goldmark-lint-cache file
-- --no-globs         ignore the globs config key at runtime
-- --output-format    output format: default, json, junit, tap, sarif, github (default: default)
-- --quiet / -q       suppress all output except violations
-- --summary           print a count-per-rule breakdown after linting
-- --watch            re-lint files whenever they change (runs until Ctrl+C)
-- --help             writes this message to the console and exits without doing anything else
-- --version          prints the version and exits
+  * matches any number of characters, but not /
+  ? matches a single character, but not /
+  ** matches any number of characters, including /
 
 Config file:
-- Reads .markdownlint-cli2.yaml (or .yml, .jsonc, .json) from the current
+  Reads .markdownlint-cli2.yaml (or .yml, .jsonc, .json) from the current
   directory or any parent directory (same discovery as markdownlint-cli2).
-- Also reads .markdownlint.yaml (or .yml, .jsonc, .json), which uses the
+  Also reads .markdownlint.yaml (or .yml, .jsonc, .json), which uses the
   simpler rule-only format (compatible with vscode-markdownlint).
   .markdownlint-cli2.* files take priority when both are present.
-- Supports "config" (or "rules", an alias) for rule enable/disable and options,
-  "ignores", "ignorePatterns" (regex-based file ignoring), "overrides" (per-glob
-  rule config overrides), "extends" (inherit configuration from another config
-  file), "outputFormatters", "globs" (default input globs), "fix" (enable --fix
-  from config), "frontMatter" (custom front matter regex), and "gitignore"
-  (auto-ignore .gitignore entries) keys.
 
 Exit codes:
-- 0: Linting was successful and there were no errors
-- 1: Linting was successful and there were errors
-- 2: Linting was not successful due to a problem or failure
-`
-
-func main() {
-	configPath := flag.String("config", "", "path to config file (overrides auto-discovery)")
-	failOnWarning := flag.Bool("fail-on-warning", false, "exit with code 1 even when all violations are warnings")
-	fix := flag.Bool("fix", false, "updates files to resolve fixable issues")
-	fixDryRun := flag.Bool("fix-dry-run", false, "show a diff of changes --fix would make, without modifying files")
-	format := flag.Bool("format", false, "read stdin, apply fixes, write stdout")
-	help := flag.Bool("help", false, "writes help message and exits")
-	listRules := flag.Bool("list-rules", false, "print a table of all rules with their aliases, enabled/disabled state, and options")
-	ver := flag.Bool("version", false, "prints the version and exits")
-	noCache := flag.Bool("no-cache", false, "disable reading/writing the cache file")
-	noGlobs := flag.Bool("no-globs", false, "ignore the globs config key at runtime")
-	outputFormat := flag.String("output-format", "", "output format: default, json, junit, tap, sarif, github")
-	quiet := flag.Bool("quiet", false, "suppress all output except violations")
-	flag.BoolVar(quiet, "q", false, "suppress all output except violations")
-	summary := flag.Bool("summary", false, "print a count-per-rule breakdown after linting")
-	watch := flag.Bool("watch", false, "re-lint files whenever they change (runs until Ctrl+C)")
-	flag.Parse()
-
-	if *help {
-		fmt.Print(helpText)
-		os.Exit(0)
+  0  Linting was successful and there were no errors
+  1  Linting was successful and there were errors
+  2  Linting was not successful due to a problem or failure`,
+		// Suppress printing of empty error messages produced by cli.Exit("", code).
+		ExitErrHandler: func(_ context.Context, _ *cli.Command, err error) {
+			if err == nil {
+				return
+			}
+			if msg := err.Error(); msg != "" {
+				fmt.Fprintln(os.Stderr, msg)
+			}
+			if exitCoder, ok := err.(cli.ExitCoder); ok {
+				os.Exit(exitCoder.ExitCode())
+			}
+		},
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "config",
+				Usage:   "path to config file (overrides auto-discovery)",
+				Sources: cli.EnvVars("GOLDMARK_LINT_CONFIG"),
+			},
+			&cli.BoolFlag{
+				Name:    "fail-on-warning",
+				Usage:   "exit with code 1 even when all violations are warnings",
+				Sources: cli.EnvVars("GOLDMARK_LINT_FAIL_ON_WARNING"),
+			},
+			&cli.BoolFlag{
+				Name:    "format",
+				Usage:   "read stdin, apply fixes, write stdout",
+				Sources: cli.EnvVars("GOLDMARK_LINT_FORMAT"),
+			},
+			&cli.BoolFlag{
+				Name:    "list-rules",
+				Usage:   "print a table of all rules with their aliases, enabled/disabled state, and options",
+				Sources: cli.EnvVars("GOLDMARK_LINT_LIST_RULES"),
+			},
+			&cli.BoolFlag{
+				Name:    "no-cache",
+				Usage:   "disable reading/writing the cache file",
+				Sources: cli.EnvVars("GOLDMARK_LINT_NO_CACHE"),
+			},
+			&cli.BoolFlag{
+				Name:    "no-globs",
+				Usage:   "ignore the globs config key at runtime",
+				Sources: cli.EnvVars("GOLDMARK_LINT_NO_GLOBS"),
+			},
+			&cli.StringFlag{
+				Name:    "output-format",
+				Usage:   "output format: default, json, junit, tap, sarif, github",
+				Sources: cli.EnvVars("GOLDMARK_LINT_OUTPUT_FORMAT"),
+			},
+			&cli.BoolFlag{
+				Name:    "quiet",
+				Aliases: []string{"q"},
+				Usage:   "suppress all output except violations",
+				Sources: cli.EnvVars("GOLDMARK_LINT_QUIET"),
+			},
+			&cli.BoolFlag{
+				Name:    "summary",
+				Usage:   "print a count-per-rule breakdown after linting",
+				Sources: cli.EnvVars("GOLDMARK_LINT_SUMMARY"),
+			},
+			&cli.BoolFlag{
+				Name:    "watch",
+				Usage:   "re-lint files whenever they change (runs until Ctrl+C)",
+				Sources: cli.EnvVars("GOLDMARK_LINT_WATCH"),
+			},
+		},
+		MutuallyExclusiveFlags: []cli.MutuallyExclusiveFlags{
+			{
+				Flags: [][]cli.Flag{
+					{
+						&cli.BoolFlag{
+							Name:    "fix",
+							Usage:   "updates files to resolve fixable issues",
+							Sources: cli.EnvVars("GOLDMARK_LINT_FIX"),
+						},
+					},
+					{
+						&cli.BoolFlag{
+							Name:    "fix-dry-run",
+							Usage:   "show a diff of changes --fix would make, without modifying files",
+							Sources: cli.EnvVars("GOLDMARK_LINT_FIX_DRY_RUN"),
+						},
+					},
+				},
+			},
+		},
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			return run(ctx, cmd)
+		},
 	}
 
-	if *ver {
-		fmt.Println(version)
-		os.Exit(0)
-	}
-
-	if *fix && *fixDryRun {
-		fmt.Fprintln(os.Stderr, "Error: --fix and --fix-dry-run are mutually exclusive")
+	if err := app.Run(context.Background(), os.Args); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
+}
+
+// run contains the main linting logic, invoked by the cli action.
+func run(_ context.Context, cmd *cli.Command) error {
+	configPath := cmd.String("config")
+	failOnWarning := cmd.Bool("fail-on-warning")
+	fix := cmd.Bool("fix")
+	fixDryRun := cmd.Bool("fix-dry-run")
+	format := cmd.Bool("format")
+	listRules := cmd.Bool("list-rules")
+	noCache := cmd.Bool("no-cache")
+	noGlobs := cmd.Bool("no-globs")
+	outputFormat := cmd.String("output-format")
+	quiet := cmd.Bool("quiet")
+	summary := cmd.Bool("summary")
+	watch := cmd.Bool("watch")
 
 	// Validate --output-format flag if specified.
-	if *outputFormat != "" {
-		switch *outputFormat {
+	if outputFormat != "" {
+		switch outputFormat {
 		case "default", "json", "junit", "tap", "sarif", "github":
 		default:
-			fmt.Fprintf(os.Stderr, "Error: unknown output format %q; supported formats: default, json, junit, tap, sarif, github\n", *outputFormat)
+			fmt.Fprintf(os.Stderr, "Error: unknown output format %q; supported formats: default, json, junit, tap, sarif, github\n", outputFormat)
 			os.Exit(2)
 		}
 	}
@@ -113,10 +173,10 @@ func main() {
 	// or use the explicitly specified --config path.
 	var cfg *ConfigFile
 	cwd, _ := os.Getwd()
-	if *configPath != "" {
-		loaded, err := loadConfig(*configPath)
+	if configPath != "" {
+		loaded, err := loadConfig(configPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading config %s: %v\n", *configPath, err)
+			fmt.Fprintf(os.Stderr, "Error loading config %s: %v\n", configPath, err)
 			os.Exit(2)
 		}
 		cfg = loaded
@@ -133,11 +193,11 @@ func main() {
 
 	// Determine the effective input globs: CLI args take priority, then config globs.
 	// When --no-globs is set, config globs are ignored.
-	inputGlobs := flag.Args()
-	if len(inputGlobs) == 0 && !*noGlobs && cfg != nil && len(cfg.Globs) > 0 {
+	inputGlobs := cmd.Args().Slice()
+	if len(inputGlobs) == 0 && !noGlobs && cfg != nil && len(cfg.Globs) > 0 {
 		inputGlobs = cfg.Globs
 	}
-	if *listRules {
+	if listRules {
 		var ruleCfgForList map[string]interface{}
 		if cfg != nil {
 			ruleCfgForList = cfg.Config
@@ -145,8 +205,8 @@ func main() {
 		printRulesTable(os.Stdout, ruleCfgForList)
 		os.Exit(0)
 	}
-	if len(inputGlobs) == 0 && !*format {
-		fmt.Fprint(os.Stderr, helpText)
+	if len(inputGlobs) == 0 && !format {
+		_ = cli.ShowAppHelp(cmd)
 		os.Exit(2)
 	}
 
@@ -156,7 +216,7 @@ func main() {
 	var overrides []GlobOverride
 	var noInlineConfig bool
 	// effectiveFix is true when --fix is passed on CLI or fix:true is in config.
-	effectiveFix := *fix
+	effectiveFix := fix
 	if cfg != nil {
 		ruleCfg = cfg.Config
 		ignores = cfg.Ignores
@@ -184,8 +244,8 @@ func main() {
 	// Determine the formatter specs to use.
 	// CLI flag takes priority; then config outputFormatters; then default.
 	var formatterSpecs []outputFormatterSpec
-	if *outputFormat != "" {
-		formatterSpecs = []outputFormatterSpec{{format: *outputFormat}}
+	if outputFormat != "" {
+		formatterSpecs = []outputFormatterSpec{{format: outputFormat}}
 	} else if cfg != nil && len(cfg.OutputFormatters) > 0 {
 		formatterSpecs = parseOutputFormatters(cfg.OutputFormatters)
 	}
@@ -218,14 +278,14 @@ func main() {
 	}
 
 	// Load cache (skip when --no-cache, fix, fix-dry-run, or watch is used).
-	useCache := !*noCache && !effectiveFix && !*fixDryRun && !*watch
+	useCache := !noCache && !effectiveFix && !fixDryRun && !watch
 	cache := make(lintCache)
 	if useCache && cwd != "" {
 		cache = loadCache(cwd)
 	}
 
 	// --format: read stdin, apply fixes, write stdout, then exit.
-	if *format {
+	if format {
 		source, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
@@ -246,7 +306,7 @@ func main() {
 
 	// Handle stdin ("-") sequentially – stdin cannot be parallelised.
 	// Stdin can only be requested via CLI args (not config globs).
-	for _, pattern := range flag.Args() {
+	for _, pattern := range cmd.Args().Slice() {
 		if pattern != "-" {
 			continue
 		}
@@ -344,7 +404,7 @@ func main() {
 				}
 				source = fixedContent
 				hash = hashContent(source)
-			} else if *fixDryRun {
+			} else if fixDryRun {
 				fixedContent = fileLinter.Fix(source)
 				origContent = source
 				source = fixedContent
@@ -378,7 +438,7 @@ func main() {
 	}
 
 	// --fix-dry-run: output a unified diff for every file that would be changed.
-	if *fixDryRun && !*quiet {
+	if fixDryRun && !quiet {
 		color := isColorEnabled(os.Stdout)
 		for i, file := range allFiles {
 			r := results[i]
@@ -399,7 +459,7 @@ func main() {
 	if exitCode < 1 {
 		for _, fv := range allViolations {
 			for _, v := range fv.Violations {
-				if v.Severity != "warning" || *failOnWarning {
+				if v.Severity != "warning" || failOnWarning {
 					exitCode = 1
 					break
 				}
@@ -455,7 +515,7 @@ func main() {
 	}
 
 	// Print per-rule summary if requested.
-	if *summary && !*quiet {
+	if summary && !quiet {
 		formatSummary(allViolations, os.Stderr)
 	}
 
@@ -473,9 +533,9 @@ func main() {
 	// Violations found during watch cycles are printed to stderr but do not
 	// affect the exit code – the process exits 0 on interrupt (Ctrl+C) since
 	// watch mode is an interactive session, not a one-shot check.
-	if *watch {
+	if watch {
 		var watchStatusOut io.Writer = os.Stderr
-		if *quiet {
+		if quiet {
 			watchStatusOut = io.Discard
 		}
 		runWatch(allFiles, watchStatusOut, func(changed []string) {
@@ -509,10 +569,13 @@ func main() {
 			}
 			formatDefault(watchViolations, os.Stderr)
 		})
-		os.Exit(0)
+		return nil
 	}
 
-	os.Exit(exitCode)
+	if exitCode != 0 {
+		return cli.Exit("", exitCode)
+	}
+	return nil
 }
 
 // printRulesTable writes a human-readable table of all known rules to w.
