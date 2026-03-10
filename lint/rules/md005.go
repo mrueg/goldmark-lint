@@ -20,6 +20,99 @@ func (r MD005) Description() string {
 	return "Inconsistent indentation for list items at the same level"
 }
 
+// md005IsListItem returns true when rest (the line after stripping leading spaces)
+// starts with an unordered or ordered list marker followed by a space.
+func md005IsListItem(rest string) bool {
+	if len(rest) < 2 {
+		return false
+	}
+	// Unordered
+	if (rest[0] == '-' || rest[0] == '*' || rest[0] == '+') && rest[1] == ' ' {
+		return true
+	}
+	// Ordered
+	j := 0
+	for j < len(rest) && rest[j] >= '0' && rest[j] <= '9' {
+		j++
+	}
+	if j > 0 && j < len(rest) && (rest[j] == '.' || rest[j] == ')') && j+1 < len(rest) && rest[j+1] == ' ' {
+		return true
+	}
+	return false
+}
+
+// Fix normalises indentation for list items that are siblings but have
+// inconsistent leading spaces.  The first item at each nesting level sets the
+// canonical indentation; subsequent siblings that differ by at most one space
+// are adjusted to match.
+func (r MD005) Fix(source []byte) []byte {
+	lines := strings.Split(string(source), "\n")
+	mask := fencedCodeBlockMask(lines)
+
+	// Stack-based tracking: each entry is the canonical indentation for the
+	// list level it represents.
+	type levelEntry struct{ canonical int }
+	var stack []levelEntry
+	changed := false
+
+	for i, line := range lines {
+		if mask[i] {
+			continue
+		}
+
+		if strings.TrimSpace(line) == "" {
+			stack = nil
+			continue
+		}
+
+		spaces := 0
+		for spaces < len(line) && line[spaces] == ' ' {
+			spaces++
+		}
+		rest := line[spaces:]
+
+		if !md005IsListItem(rest) {
+			// Non-list content at indent 0 ends any list context.
+			if spaces == 0 {
+				stack = nil
+			}
+			continue
+		}
+
+		// Pop stack entries whose canonical indentation is greater than the
+		// current item's indentation (we've gone back up the nesting tree).
+		for len(stack) > 0 && stack[len(stack)-1].canonical > spaces {
+			stack = stack[:len(stack)-1]
+		}
+
+		if len(stack) == 0 {
+			stack = append(stack, levelEntry{canonical: spaces})
+			continue
+		}
+
+		top := stack[len(stack)-1].canonical
+		if spaces == top {
+			// Exact match — no fix needed.
+			continue
+		}
+		// Items within 1 space of the canonical are considered siblings with
+		// a minor indentation error and are adjusted to the canonical value.
+		// We use AND so that both directions hold: |spaces - top| <= 1.
+		if spaces-top <= 1 && top-spaces <= 1 {
+			lines[i] = strings.Repeat(" ", top) + rest
+			changed = true
+			continue
+		}
+		// Larger difference — this item starts a new, deeper nesting level.
+		stack = append(stack, levelEntry{canonical: spaces})
+	}
+
+	if !changed {
+		return source
+	}
+	return []byte(strings.Join(lines, "\n"))
+}
+
 func (r MD005) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
 

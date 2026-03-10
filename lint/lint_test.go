@@ -3187,3 +3187,325 @@ if got != src {
 t.Errorf("MD055 Fix() modified valid source: got %q, want %q", got, src)
 }
 }
+
+// ─── MD040 Fix ─────────────────────────────────────────────────────────────
+
+func TestMD040_Fix_AddTextLanguage(t *testing.T) {
+src := "```\ncode\n```\n"
+got := fixString(t, rules.MD040{}, src)
+want := "``` text\ncode\n```\n"
+if got != want {
+t.Errorf("MD040 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD040_Fix_NoChangeWhenLangPresent(t *testing.T) {
+src := "```go\ncode\n```\n"
+got := fixString(t, rules.MD040{}, src)
+if got != src {
+t.Errorf("MD040 Fix() modified source that already has a language: got %q", got)
+}
+}
+
+func TestMD040_Fix_TildeFence(t *testing.T) {
+src := "~~~\ncode\n~~~\n"
+got := fixString(t, rules.MD040{}, src)
+want := "~~~ text\ncode\n~~~\n"
+if got != want {
+t.Errorf("MD040 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD040_Fix_SkipInsideFencedBlock(t *testing.T) {
+	// Content lines inside a fenced block must not be modified, even if they
+	// look like fence delimiters.
+	// Source: first block has "go" and contains a backtick line as content.
+	src := "```go\n` ` `\ncode\n```\n"
+	got := fixString(t, rules.MD040{}, src)
+	if got != src {
+		t.Errorf("MD040 Fix() unexpectedly modified source: got %q", got)
+	}
+}
+
+// ─── MD033 Fix ─────────────────────────────────────────────────────────────
+
+func TestMD033_Fix_RemoveInlineTag(t *testing.T) {
+src := "Some <b>bold</b> text\n"
+got := fixString(t, rules.MD033{}, src)
+want := "Some bold text\n"
+if got != want {
+t.Errorf("MD033 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD033_Fix_KeepAllowedTag(t *testing.T) {
+src := "Some <b>bold</b> text\n"
+got := fixString(t, rules.MD033{AllowedElements: []string{"b"}}, src)
+if got != src {
+t.Errorf("MD033 Fix() removed an allowed element: got %q", got)
+}
+}
+
+func TestMD033_Fix_KeepHTMLComment(t *testing.T) {
+src := "<!-- comment -->\nSome text\n"
+got := fixString(t, rules.MD033{}, src)
+if got != src {
+t.Errorf("MD033 Fix() removed an HTML comment: got %q", got)
+}
+}
+
+func TestMD033_Fix_RemoveSelfClosing(t *testing.T) {
+src := "Line break here<br/>.\n"
+got := fixString(t, rules.MD033{}, src)
+want := "Line break here.\n"
+if got != want {
+t.Errorf("MD033 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD033_Fix_NoChangeWhenNoneDisallowed(t *testing.T) {
+src := "No HTML here\n"
+got := fixString(t, rules.MD033{}, src)
+if got != src {
+t.Errorf("MD033 Fix() modified source that has no HTML: got %q", got)
+}
+}
+
+// ─── MD036 Fix ─────────────────────────────────────────────────────────────
+
+func TestMD036_Fix_BoldToHeading(t *testing.T) {
+src := "**Section Title**\n\nSome text\n"
+got := fixString(t, rules.MD036{}, src)
+want := "## Section Title\n\nSome text\n"
+if got != want {
+t.Errorf("MD036 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD036_Fix_ItalicToHeading(t *testing.T) {
+src := "*Section Title*\n\nSome text\n"
+got := fixString(t, rules.MD036{}, src)
+want := "## Section Title\n\nSome text\n"
+if got != want {
+t.Errorf("MD036 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD036_Fix_SkipPunctuation(t *testing.T) {
+src := "**Not a heading.**\n\nSome text\n"
+got := fixString(t, rules.MD036{}, src)
+if got != src {
+t.Errorf("MD036 Fix() modified emphasis ending with punctuation: got %q", got)
+}
+}
+
+func TestMD036_Fix_SkipInsideList(t *testing.T) {
+// Emphasis inside a list item must not be converted.
+src := "- **Not a heading**\n"
+v := lintString(t, rules.MD036{}, src)
+if len(v) != 0 {
+t.Logf("(no violation expected for emphasis inside list)")
+}
+got := fixString(t, rules.MD036{}, src)
+if got != src {
+t.Errorf("MD036 Fix() modified a list item: got %q", got)
+}
+}
+
+func TestMD036_Fix_NoChange(t *testing.T) {
+src := "## Real heading\n\nSome text\n"
+got := fixString(t, rules.MD036{}, src)
+if got != src {
+t.Errorf("MD036 Fix() modified a real heading: got %q", got)
+}
+}
+
+// ─── MD005 Fix ─────────────────────────────────────────────────────────────
+
+func TestMD005_Fix_NormaliseSiblingIndent(t *testing.T) {
+src := "- Item 1\n- Item 2\n - Item 3\n"
+got := fixString(t, rules.MD005{}, src)
+want := "- Item 1\n- Item 2\n- Item 3\n"
+if got != want {
+t.Errorf("MD005 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD005_Fix_NoChangeWhenConsistent(t *testing.T) {
+src := "- Item 1\n- Item 2\n- Item 3\n"
+got := fixString(t, rules.MD005{}, src)
+if got != src {
+t.Errorf("MD005 Fix() modified consistent source: got %q", got)
+}
+}
+
+func TestMD005_Fix_NestedList(t *testing.T) {
+src := "- Item 1\n  - Nested 1\n   - Nested 2\n"
+got := fixString(t, rules.MD005{}, src)
+want := "- Item 1\n  - Nested 1\n  - Nested 2\n"
+if got != want {
+t.Errorf("MD005 Fix() = %q, want %q", got, want)
+}
+}
+
+// ─── MD007 Fix ─────────────────────────────────────────────────────────────
+
+func TestMD007_Fix_NormaliseSingleLevel(t *testing.T) {
+// Top-level item at 1 space should be fixed to 0.
+src := " - Wrong\n"
+got := fixString(t, rules.MD007{}, src)
+want := "- Wrong\n"
+if got != want {
+t.Errorf("MD007 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD007_Fix_NormaliseNested(t *testing.T) {
+src := "- Item 1\n   - Nested\n"
+got := fixString(t, rules.MD007{}, src)
+want := "- Item 1\n  - Nested\n"
+if got != want {
+t.Errorf("MD007 Fix() = %q, want %q", got, want)
+}
+}
+
+func TestMD007_Fix_NoChange(t *testing.T) {
+src := "- Item 1\n  - Nested\n    - Deep\n"
+got := fixString(t, rules.MD007{}, src)
+if got != src {
+t.Errorf("MD007 Fix() modified valid source: got %q", got)
+}
+}
+
+func TestMD007_Fix_CustomIndent(t *testing.T) {
+// With indent=4, a nested item at 5 spaces should become 4.
+src := "- Item\n     - Nested\n"
+got := fixString(t, rules.MD007{Indent: 4}, src)
+want := "- Item\n    - Nested\n"
+if got != want {
+t.Errorf("MD007 Fix(indent=4) = %q, want %q", got, want)
+}
+}
+
+// ─── MD060 Fix ─────────────────────────────────────────────────────────────
+
+func TestMD060_Fix_CompactStyle(t *testing.T) {
+src := "|Name|Age|\n|----|---|\n|Alice|30|\n"
+got := fixString(t, rules.MD060{Style: "compact"}, src)
+want := "| Name | Age |\n|----|---|\n| Alice | 30 |\n"
+if got != want {
+t.Errorf("MD060 Fix(compact) = %q, want %q", got, want)
+}
+}
+
+func TestMD060_Fix_TightStyle(t *testing.T) {
+src := "| Name | Age |\n| ---- | --- |\n| Alice | 30 |\n"
+got := fixString(t, rules.MD060{Style: "tight"}, src)
+want := "|Name|Age|\n| ---- | --- |\n|Alice|30|\n"
+if got != want {
+t.Errorf("MD060 Fix(tight) = %q, want %q", got, want)
+}
+}
+
+func TestMD060_Fix_AnyNoChange(t *testing.T) {
+src := "| Name | Age |\n| ---- | --- |\n| Alice | 30 |\n"
+got := fixString(t, rules.MD060{Style: "any"}, src)
+if got != src {
+t.Errorf("MD060 Fix(any) = %q, want unchanged %q", got, src)
+}
+}
+
+func TestMD060_Fix_AlignedStyle(t *testing.T) {
+src := "| Name | Age |\n| ---- | --- |\n| Alice | 30 |\n"
+got := fixString(t, rules.MD060{Style: "aligned"}, src)
+// After alignment, all rows should have pipes at the same positions.
+// Each column should be wide enough to fit the widest content.
+wantHeader := "| Name  | Age |"
+if !strings.Contains(got, wantHeader) {
+t.Errorf("MD060 Fix(aligned) header line = %q, want to contain %q\nfull output: %q", got, wantHeader, got)
+}
+}
+
+func TestMD060_Fix_ConsistentStyle(t *testing.T) {
+// First row is compact; second row is tight — fix to consistent (compact).
+src := "| Name | Age |\n| ---- | --- |\n|Alice|30|\n"
+got := fixString(t, rules.MD060{Style: "consistent"}, src)
+want := "| Name | Age |\n| ---- | --- |\n| Alice | 30 |\n"
+if got != want {
+t.Errorf("MD060 Fix(consistent) = %q, want %q", got, want)
+}
+}
+
+// ─── MD003 Fix ─────────────────────────────────────────────────────────────
+
+func TestMD003_Fix_ATXToSetextH1(t *testing.T) {
+src := "# Heading One\n\nText\n"
+got := fixString(t, rules.MD003{Style: "setext"}, src)
+want := "Heading One\n===========\n\nText\n"
+if got != want {
+t.Errorf("MD003 Fix(setext) h1 = %q, want %q", got, want)
+}
+}
+
+func TestMD003_Fix_ATXToSetextH2(t *testing.T) {
+src := "## Heading Two\n\nText\n"
+got := fixString(t, rules.MD003{Style: "setext"}, src)
+want := "Heading Two\n-----------\n\nText\n"
+if got != want {
+t.Errorf("MD003 Fix(setext) h2 = %q, want %q", got, want)
+}
+}
+
+func TestMD003_Fix_SetextToATX(t *testing.T) {
+src := "Heading One\n===========\n\nText\n"
+got := fixString(t, rules.MD003{Style: "atx"}, src)
+want := "# Heading One\n\nText\n"
+if got != want {
+t.Errorf("MD003 Fix(atx) from setext = %q, want %q", got, want)
+}
+}
+
+func TestMD003_Fix_ATXToATXClosed(t *testing.T) {
+src := "# Heading\n"
+got := fixString(t, rules.MD003{Style: "atx_closed"}, src)
+want := "# Heading #\n"
+if got != want {
+t.Errorf("MD003 Fix(atx_closed) = %q, want %q", got, want)
+}
+}
+
+func TestMD003_Fix_ATXClosedToATX(t *testing.T) {
+src := "# Heading #\n"
+got := fixString(t, rules.MD003{Style: "atx"}, src)
+want := "# Heading\n"
+if got != want {
+t.Errorf("MD003 Fix(atx) from atx_closed = %q, want %q", got, want)
+}
+}
+
+func TestMD003_Fix_ConsistentATX(t *testing.T) {
+// First heading is ATX; setext heading should be converted to ATX.
+src := "# ATX First\n\nSetext\n------\n\nText\n"
+got := fixString(t, rules.MD003{Style: "consistent"}, src)
+want := "# ATX First\n\n## Setext\n\nText\n"
+if got != want {
+t.Errorf("MD003 Fix(consistent) = %q, want %q", got, want)
+}
+}
+
+func TestMD003_Fix_NoChangeWhenAlreadyCorrect(t *testing.T) {
+src := "# ATX Heading\n\nText\n"
+got := fixString(t, rules.MD003{Style: "atx"}, src)
+if got != src {
+t.Errorf("MD003 Fix(atx) modified already-correct source: got %q", got)
+}
+}
+
+func TestMD003_Fix_SetextWithATX_H3(t *testing.T) {
+// setext_with_atx: h3 must be ATX; if it's ATX already, leave it alone.
+src := "### H3 heading\n"
+got := fixString(t, rules.MD003{Style: "setext_with_atx"}, src)
+if got != src {
+t.Errorf("MD003 Fix(setext_with_atx) modified h3 ATX heading: got %q", got)
+}
+}
