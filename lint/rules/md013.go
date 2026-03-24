@@ -2,7 +2,6 @@ package rules
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -82,12 +81,6 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 		if codeBlockMask[i] {
 			headingMask[i] = false
 		}
-	}
-
-	// Build a per-line URL length map for the URL exemption (when not in stern mode).
-	var urlLens urlLengthsResult
-	if !r.Stern {
-		urlLens = urlLengthsPerLine(doc)
 	}
 
 	// Build a set of "link only" line numbers: lines whose only non-whitespace
@@ -193,14 +186,6 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 			if !r.Stern && tableMask[i] && tableRowLinkLines[i+1] {
 				continue
 			}
-			// URL exemption for non-table, non-link-only lines: skip lines that
-			// exceed the limit only due to a bare URL or auto-link.  Inline link
-			// URLs embedded in "[text](url): description" style content do NOT
-			// grant an exemption here — the description text is the reformattable
-			// part that should be shortened.
-			if !r.Stern && lineExemptByURL(urlLens.bareURLLens[i+1], lineLen, limit) {
-				continue
-			}
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
 				Line:    i + 1,
@@ -211,121 +196,6 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 	}
 	return violations
 }
-
-// urlLengthsResult bundles the per-line URL length maps returned by
-// urlLengthsPerLine.
-type urlLengthsResult struct {
-	// inlineLinkURLLens maps 1-based line number → rune lengths of inline
-	// link/image destination URLs that appear verbatim on that line.  These
-	// are used for the "link-only line" exemption.
-	inlineLinkURLLens map[int][]int
-	// bareURLLens maps 1-based line number → rune lengths of bare http(s)://
-	// URLs and auto-links on that line.  These are used for the general URL
-	// exemption (lines that exceed the limit only because of a URL that cannot
-	// be wrapped) on non-table lines.
-	bareURLLens map[int][]int
-}
-
-// urlLengthsPerLine returns URL length information per line for the MD013 URL
-// exemption logic. It distinguishes between inline link URLs (in [text](url)
-// syntax) and bare/autolink URLs, because markdownlint treats them differently:
-//
-//   - Table rows that contain any inline link URL are exempt entirely.
-//   - Non-table lines are only exempt when a bare URL (or auto-link) is the
-//     sole reason the line exceeds the limit; inline link URLs embedded in
-//     "[text](url): description" style list items do NOT grant an exemption.
-func urlLengthsPerLine(doc *lint.Document) urlLengthsResult {
-	inlineResult := make(map[int][]int)
-	bareResult := make(map[int][]int)
-	addInline := func(lineNum, urlLen int) {
-		if lineNum > 0 && urlLen > 0 {
-			inlineResult[lineNum] = append(inlineResult[lineNum], urlLen)
-		}
-	}
-	addBare := func(lineNum, urlLen int) {
-		if lineNum > 0 && urlLen > 0 {
-			bareResult[lineNum] = append(bareResult[lineNum], urlLen)
-		}
-	}
-
-	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
-			return ast.WalkContinue, nil
-		}
-		switch node := n.(type) {
-		case *ast.Link:
-			lineNum := inlineLinkLine(node, doc.Source)
-			dest := node.Destination
-			// Only record inline links where the URL actually appears on the
-			// source line (not reference links whose URL lives elsewhere).
-			if lineNum >= 1 && lineNum <= len(doc.Lines) && strings.Contains(doc.Lines[lineNum-1], string(dest)) {
-				addInline(lineNum, utf8.RuneCount(dest))
-			}
-		case *ast.Image:
-			lineNum := inlineLinkLine(node, doc.Source)
-			dest := node.Destination
-			if lineNum >= 1 && lineNum <= len(doc.Lines) && strings.Contains(doc.Lines[lineNum-1], string(dest)) {
-				addInline(lineNum, utf8.RuneCount(dest))
-			}
-		case *ast.AutoLink:
-			lineNum := autoLinkSourceLine(node, doc.Source)
-			addBare(lineNum, utf8.RuneCount(node.URL(doc.Source)))
-		}
-		return ast.WalkContinue, nil
-	})
-
-	// Use goldmark's parsed link reference definitions (doc.LinkRefs) to find
-	// definition lines. We scan the raw lines for a matching label and look up
-	// the destination length from the goldmark-parsed map, so angle-bracket
-	// destinations and backslash escapes are handled correctly.
-	if len(doc.LinkRefs) > 0 {
-		for i, line := range doc.Lines {
-			label := linkRefLabel(line)
-			if label == "" {
-				continue
-			}
-			key := strings.ToLower(label)
-			if dest, ok := doc.LinkRefs[key]; ok {
-				addBare(i+1, utf8.RuneCount(dest))
-			}
-		}
-	}
-
-	// Also detect bare URLs (not part of link syntax) in raw lines.
-	// markdownlint exempts lines where a bare URL is the reason for exceeding
-	// the limit. We scan each line for plain http(s):// URLs, but skip URLs
-	// that are part of inline link or image syntax [text](url) or that appear
-	// inside HTML attribute values like src="url" — those do not qualify for
-	// the bare-URL exemption.
-	for i, line := range doc.Lines {
-		// Blank out inline code span content so URLs inside backtick spans
-		// are invisible to the regex — they can't be wrapped and don't
-		// qualify for the bare-URL exemption.
-		scanned := blankInlineCodeSpans(line)
-		for _, loc := range md013BareURLRE.FindAllStringIndex(scanned, -1) {
-			start := loc[0]
-			// Skip URLs that are part of [text](url) syntax (preceded by '('),
-			// or inside HTML attribute values (preceded by '"' or '\'').
-			if start > 0 {
-				prev := line[start-1]
-				if prev == '(' || prev == '"' || prev == '\'' {
-					continue
-				}
-			}
-			url := line[loc[0]:loc[1]]
-			addBare(i+1, utf8.RuneCountInString(url))
-		}
-	}
-
-	return urlLengthsResult{
-		inlineLinkURLLens: inlineResult,
-		bareURLLens:       bareResult,
-	}
-}
-
-// md013BareURLRE matches bare http/https URLs in plain text (not wrapped in
-// markdown link or angle-bracket auto-link syntax).
-var md013BareURLRE = regexp.MustCompile(`https?://\S+`)
 
 // linkRefLabel returns the link-reference label from a line that looks like a
 // link reference definition (e.g. "[foo]: https://..."), or "" if the line
@@ -403,26 +273,6 @@ func lastTextLeaf(n ast.Node) *ast.Text {
 	return last
 }
 
-// autoLinkSourceLine returns the 1-based line number for an AutoLink node.
-// Uses Pos() when available, then checks adjacent Text siblings, then falls
-// back to the parent block.
-func autoLinkSourceLine(n ast.Node, source []byte) int {
-	if pos := n.Pos(); pos >= 0 {
-		return countLine(source, pos)
-	}
-	if next := n.NextSibling(); next != nil {
-		if t, ok := next.(*ast.Text); ok {
-			return countLine(source, t.Segment.Start)
-		}
-	}
-	if prev := n.PreviousSibling(); prev != nil {
-		if t, ok := prev.(*ast.Text); ok {
-			return countLine(source, t.Segment.Start)
-		}
-	}
-	return blockFirstLine(n, source)
-}
-
 // blockFirstLine returns the 1-based line number of the first line of the
 // nearest ancestor block node that has line information.
 func blockFirstLine(n ast.Node, source []byte) int {
@@ -435,18 +285,6 @@ func blockFirstLine(n ast.Node, source []byte) int {
 		}
 	}
 	return 0
-}
-
-// lineExemptByURL reports whether a line that exceeds limit is exempt because
-// removing any single URL from its length would make it fit within limit.
-// Returns false for nil or empty urlLens (no URL on the line).
-func lineExemptByURL(urlLens []int, lineLen, limit int) bool {
-	for _, ul := range urlLens {
-		if lineLen-ul <= limit {
-			return true
-		}
-	}
-	return false
 }
 
 // trailingWordTrimmedLen returns the effective length of line for MD013 in
@@ -485,14 +323,21 @@ func trailingWordTrimmedLen(line string) int {
 
 // md013LinkOnlyLines returns a set of 1-based line numbers for lines whose
 // non-whitespace content consists entirely of links or images, with no bare
-// text nodes outside link/image containers at the immediate paragraph/block level.
+// text nodes at the paragraph level (i.e. direct block children).
 // Markdownlint exempts such lines because the URL is the unavoidable cause of
 // the length (the line cannot be reformatted to fit within the limit).
+//
+// This mirrors markdownlint's micromark-based logic: only "data" tokens that
+// are direct children of a "paragraph" token contribute to paragraphDataLines.
+// Text inside inline containers (Strong, Emphasis, Link, Image, CodeSpan, etc.)
+// is therefore NOT counted as bare paragraph content, matching the way
+// markdownlint handles lines like "**text [link](url)**".
 func md013LinkOnlyLines(doc *lint.Document) map[int]bool {
 	// linkLines: 1-based line numbers that contain at least one link or image.
 	linkLines := make(map[int]bool)
 	// paragraphDataLines: 1-based line numbers that have a Text node whose
-	// DIRECT parent is NOT a link or image (i.e. bare text in the paragraph).
+	// direct parent is a block node (Paragraph, ListItem, etc.) — not inside
+	// an inline container like Strong, Emphasis, Link, Image, or CodeSpan.
 	paragraphDataLines := make(map[int]bool)
 
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -520,18 +365,36 @@ func md013LinkOnlyLines(doc *lint.Document) map[int]bool {
 					}
 				}
 			}
-		case ast.KindText:
-			// If this Text node is inside a link or image at any depth
-			// (e.g. inside a code span that is itself inside a link), it
-			// is link/image content – not bare paragraph content.
-			insideLinkOrImage := false
-			for anc := n.Parent(); anc != nil; anc = anc.Parent() {
-				if anc.Kind() == ast.KindLink || anc.Kind() == ast.KindImage {
-					insideLinkOrImage = true
-					break
+		case ast.KindAutoLink:
+			// AutoLinks (angle-bracket URLs like <https://...>) also make a
+			// line "link-containing" for the link-only check.
+			lineNum := 0
+			if pos := n.Pos(); pos >= 0 {
+				lineNum = countLine(doc.Source, pos)
+			} else if next := n.NextSibling(); next != nil {
+				if t, ok := next.(*ast.Text); ok {
+					lineNum = countLine(doc.Source, t.Segment.Start)
 				}
+			} else if prev := n.PreviousSibling(); prev != nil {
+				if t, ok := prev.(*ast.Text); ok {
+					lineNum = countLine(doc.Source, t.Segment.Start)
+				}
+			} else {
+				lineNum = blockFirstLine(n, doc.Source)
 			}
-			if insideLinkOrImage {
+			if lineNum > 0 {
+				linkLines[lineNum] = true
+			}
+		case ast.KindText:
+			// Only count this Text node as "bare paragraph data" when its direct
+			// parent is a block node that is NOT an inline container and NOT a
+			// heading. This mirrors markdownlint's micromark behaviour:
+			//   - text inside inline containers (Strong, Emphasis, Link, Image,
+			//     CodeSpan — all TypeInline) is embedded in markup and not counted
+			//   - text inside headings is not counted (headings are not "paragraph"
+			//     tokens in micromark, so their text never enters paragraphDataLines)
+			parent := n.Parent()
+			if parent == nil || parent.Type() == ast.TypeInline || parent.Kind() == ast.KindHeading {
 				break
 			}
 			t, ok := n.(*ast.Text)
