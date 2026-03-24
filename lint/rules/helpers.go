@@ -101,10 +101,12 @@ func fencedCodeBlockLine(n *ast.FencedCodeBlock, source []byte) int {
 }
 
 // emphasisStartPos returns the byte position in source of the opening marker of
-// the given Emphasis node. It walks to the first Text descendant, accumulating
-// nesting levels and inline-wrapper prefix characters, then subtracts the total
-// from the first text segment start.
+// the given Emphasis node. It tries Pos() first, then walks to the first Text
+// descendant and subtracts nesting levels and inline-wrapper prefix characters.
 func emphasisStartPos(emph *ast.Emphasis) int {
+	if pos := emph.Pos(); pos >= 0 {
+		return pos
+	}
 	pos, ok := firstTextStartInInline(emph.FirstChild(), emph.Level)
 	if ok {
 		return pos
