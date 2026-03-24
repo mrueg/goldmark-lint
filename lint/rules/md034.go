@@ -19,6 +19,10 @@ func (r MD034) Description() string { return "Bare URL used" }
 // or common punctuation characters that are unlikely to be part of the URL.
 var bareURLRE = regexp.MustCompile(`https?://[^\s<>()\[\]{}'"` + "`" + `]+`)
 
+// bareEmailRE matches a bare email address not wrapped in angle brackets.
+// Markdownlint flags these as bare URLs just like http(s) URLs.
+var bareEmailRE = regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
+
 // inlineLinkRE matches inline markdown links [text](url) for stripping from scanned content.
 var inlineLinkRE = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
 
@@ -170,6 +174,17 @@ func (r MD034) Check(doc *lint.Document) []lint.Violation {
 					// Unclosed '[' before this '(url)': looks like an attempted link.
 					continue
 				}
+			}
+			addViolation(lineNum, text[loc[0]:loc[1]])
+		}
+
+		// Report bare email addresses (e.g. user@example.com not in angle brackets).
+		// Markdownlint flags these the same as bare http(s) URLs.
+		for _, loc := range bareEmailRE.FindAllStringIndex(text, -1) {
+			lineNum := lineBase + strings.Count(text[:loc[0]], "\n")
+			// Skip if preceded by '<' (already an angle-bracket email auto-link).
+			if loc[0] > 0 && text[loc[0]-1] == '<' {
+				continue
 			}
 			addViolation(lineNum, text[loc[0]:loc[1]])
 		}

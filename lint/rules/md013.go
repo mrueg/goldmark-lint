@@ -298,7 +298,11 @@ func urlLengthsPerLine(doc *lint.Document) urlLengthsResult {
 	// inside HTML attribute values like src="url" — those do not qualify for
 	// the bare-URL exemption.
 	for i, line := range doc.Lines {
-		for _, loc := range md013BareURLRE.FindAllStringIndex(line, -1) {
+		// Blank out inline code span content so URLs inside backtick spans
+		// are invisible to the regex — they can't be wrapped and don't
+		// qualify for the bare-URL exemption.
+		scanned := blankInlineCodeSpans(line)
+		for _, loc := range md013BareURLRE.FindAllStringIndex(scanned, -1) {
 			start := loc[0]
 			// Skip URLs that are part of [text](url) syntax (preceded by '('),
 			// or inside HTML attribute values (preceded by '"' or '\'').
@@ -360,9 +364,12 @@ func linkRefLabel(line string) string {
 }
 
 // inlineLinkLine returns the 1-based line number for a Link or Image node by
-// inspecting its descendant Text nodes (recursing into CodeSpan and other
-// inline containers). Falls back to the nearest parent block line.
+// using Pos() when available, then falling back to the first Text descendant
+// or the nearest parent block line.
 func inlineLinkLine(n ast.Node, source []byte) int {
+	if pos := n.Pos(); pos >= 0 {
+		return countLine(source, pos)
+	}
 	if t := firstTextLeaf(n); t != nil {
 		return countLine(source, t.Segment.Start)
 	}
@@ -397,9 +404,12 @@ func lastTextLeaf(n ast.Node) *ast.Text {
 }
 
 // autoLinkSourceLine returns the 1-based line number for an AutoLink node.
-// It checks adjacent Text siblings first (next sibling is preferred because
-// it marks the end of the current line), then falls back to the parent block.
+// Uses Pos() when available, then checks adjacent Text siblings, then falls
+// back to the parent block.
 func autoLinkSourceLine(n ast.Node, source []byte) int {
+	if pos := n.Pos(); pos >= 0 {
+		return countLine(source, pos)
+	}
 	if next := n.NextSibling(); next != nil {
 		if t, ok := next.(*ast.Text); ok {
 			return countLine(source, t.Segment.Start)

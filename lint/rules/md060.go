@@ -3,7 +3,9 @@ package rules
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/mrueg/goldmark-lint/lint"
 )
 
@@ -21,7 +23,16 @@ func (r MD060) Description() string { return "Table column style" }
 func tableColumnStyle(line string) string {
 	trimmed := strings.TrimPrefix(strings.TrimSpace(line), "|")
 	trimmed = strings.TrimSuffix(trimmed, "|")
-	cells := strings.Split(trimmed, "|")
+	// Split on unescaped pipes only.
+	var cells []string
+	start := 0
+	for i := 0; i < len(trimmed); i++ {
+		if trimmed[i] == '|' && (i == 0 || trimmed[i-1] != '\\') {
+			cells = append(cells, trimmed[start:i])
+			start = i + 1
+		}
+	}
+	cells = append(cells, trimmed[start:])
 
 	allSingleSpace := true
 	allNoSpace := true
@@ -57,19 +68,35 @@ func tableColumnStyle(line string) string {
 	return "other"
 }
 
-// md60PipePositions returns the 0-based rune (character) positions of all '|' characters in line.
-// Using rune positions ensures correct alignment comparison when lines contain multi-byte
-// Unicode characters (e.g., emoji, CJK, ✓), matching markdownlint behaviour.
+// md60PipePositions returns the 0-based display-width positions of all '|'
+// characters in line that are not escaped (i.e., not preceded by '\'). Display
+// width is used (CJK/fullwidth chars count as 2) to match markdownlint's
+// "aligned" style comparison behaviour.
 func md60PipePositions(line string) []int {
 	var positions []int
-	runeIdx := 0
-	for _, r := range line {
-		if r == '|' {
-			positions = append(positions, runeIdx)
+	dispWidth := 0
+	runes := []rune(line)
+	for i, r := range runes {
+		if r == '|' && (i == 0 || runes[i-1] != '\\') {
+			positions = append(positions, dispWidth)
 		}
-		runeIdx++
+		dispWidth += runeDisplayWidth(r)
 	}
 	return positions
+}
+
+// runeDisplayWidth returns the display width of a rune: 2 for fullwidth/wide
+// Unicode characters (e.g. CJK ideographs, emoji), 0 for nonspacing and
+// spacing-combining marks (Indic vowel signs, Thai diacritics, etc.), and 1
+// for everything else. This matches the behaviour of markdownlint's
+// string-width npm package.
+func runeDisplayWidth(r rune) int {
+	// Combining marks (Unicode categories Mn and Mc) are zero-width: they
+	// render onto the preceding base character without advancing the cursor.
+	if unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Mc, r) {
+		return 0
+	}
+	return runewidth.RuneWidth(r)
 }
 
 // tableAlignedViolations returns violations for the "aligned" style: each non-header
@@ -128,7 +155,7 @@ func rowCompactTightViolations(line, ruleID string, lineNum int) (compact, tight
 	n := len(line)
 	var pipes []int
 	for i := 0; i < n; i++ {
-		if line[i] == '|' {
+		if line[i] == '|' && (i == 0 || line[i-1] != '\\') {
 			pipes = append(pipes, i)
 		}
 	}

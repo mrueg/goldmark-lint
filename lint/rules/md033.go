@@ -202,6 +202,10 @@ func (r MD033) Check(doc *lint.Document) []lint.Violation {
 			if isClosingRawHTML(node, doc.Source) {
 				return ast.WalkContinue, nil
 			}
+			// Skip HTML comments (<!-- ... -->) — markdownlint does not flag these.
+			if isHTMLComment(node, doc.Source) {
+				return ast.WalkContinue, nil
+			}
 			// Extract the tag name for allowed-element checking.
 			tag := rawHTMLTagName(node, doc.Source)
 			if r.isAllowed(tag) {
@@ -254,7 +258,15 @@ func rawHTMLTagName(n *ast.RawHTML, source []byte) string {
 	return raw[start:i]
 }
 
-// isClosingRawHTML reports whether a RawHTML node represents a closing tag
+// isHTMLComment reports whether a RawHTML node is an HTML comment (<!-- ... -->).
+func isHTMLComment(n *ast.RawHTML, source []byte) bool {
+	if n.Segments == nil || n.Segments.Len() == 0 {
+		return false
+	}
+	seg := n.Segments.At(0)
+	raw := seg.Value(source)
+	return len(raw) >= 4 && raw[0] == '<' && raw[1] == '!' && raw[2] == '-' && raw[3] == '-'
+}
 // (i.e., starts with "</"), such as </b> or </div>.
 func isClosingRawHTML(n *ast.RawHTML, source []byte) bool {
 	if n.Segments == nil || n.Segments.Len() == 0 {

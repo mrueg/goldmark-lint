@@ -1597,12 +1597,21 @@ func TestMD053_IndentedCodeBlock_FalseNegative(t *testing.T) {
 	}
 }
 
-func TestMD034_BareEmail_NoViolation(t *testing.T) {
-	// Bare email addresses should not be flagged by MD034 (only bare URLs).
+func TestMD034_BareEmail_Violation(t *testing.T) {
+	// Bare email addresses should be flagged by MD034, matching markdownlint behaviour.
 	src := "Contact user@example.com for help.\n"
 	v := lintString(t, rules.MD034{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation for bare email, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD034_AngleBracketEmail_NoViolation(t *testing.T) {
+	// Email addresses wrapped in angle brackets are auto-links and should not be flagged.
+	src := "Contact <user@example.com> for help.\n"
+	v := lintString(t, rules.MD034{}, src)
 	if len(v) != 0 {
-		t.Errorf("expected no violations for bare email, got %d: %v", len(v), v)
+		t.Errorf("expected no violations for angle-bracket email, got %d: %v", len(v), v)
 	}
 }
 
