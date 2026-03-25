@@ -206,7 +206,13 @@ func isTableDelimiterRow(line string) bool {
 	if !strings.Contains(line, "|") {
 		return false
 	}
-	trimmed := strings.TrimPrefix(strings.TrimSpace(line), "|")
+	// Strip one level of blockquote prefix so that tables inside blockquotes
+	// (lines like "> |---|---|") are recognised correctly.
+	stripped := strings.TrimSpace(line)
+	for strings.HasPrefix(stripped, ">") {
+		stripped = strings.TrimSpace(stripped[1:])
+	}
+	trimmed := strings.TrimPrefix(stripped, "|")
 	trimmed = strings.TrimSuffix(trimmed, "|")
 	cells := strings.Split(trimmed, "|")
 	if len(cells) == 0 {
@@ -224,6 +230,59 @@ func isTableDelimiterRow(line string) bool {
 func isTableRow(line string) bool {
 	return strings.Contains(line, "|")
 }
+
+// blockquotePrefix returns the leading blockquote marker sequence (e.g. "> ")
+// from line. If the line is not a blockquote line, returns "".
+func blockquotePrefix(line string) string {
+	s := line
+	prefix := ""
+	for {
+		s = strings.TrimLeft(s, " \t")
+		if !strings.HasPrefix(s, ">") {
+			break
+		}
+		// Consume "> " or ">"
+		if len(s) > 1 && s[1] == ' ' {
+			prefix += "> "
+			s = s[2:]
+		} else {
+			prefix += ">"
+			s = s[1:]
+		}
+	}
+	return prefix
+}
+
+// blockquoteDepth returns the number of `>` markers at the start of the line.
+func blockquoteDepth(line string) int {
+	s := strings.TrimLeft(line, " \t")
+	depth := 0
+	for strings.HasPrefix(s, ">") {
+		depth++
+		s = strings.TrimLeft(s[1:], " \t")
+	}
+	return depth
+}
+
+// isBlankInContext returns true if line is "blank" within a given blockquote
+// context defined by depth. A line is blank in context if it has at least
+// `depth` blockquote markers and nothing else (handles "> " blank blockquote
+// lines adjacent to tables inside blockquotes).
+func isBlankInContext(line string, depth int) bool {
+	if depth == 0 {
+		return strings.TrimSpace(line) == ""
+	}
+	// Count `>` markers in this line; if it has at least `depth` and the
+	// remainder is empty/whitespace, treat it as blank in context.
+	s := strings.TrimLeft(line, " \t")
+	found := 0
+	for strings.HasPrefix(s, ">") {
+		found++
+		s = strings.TrimLeft(s[1:], " \t")
+	}
+	return found >= depth && strings.TrimSpace(s) == ""
+}
+
 
 // lastTextStopInInline returns the highest Segment.Stop value found among all
 // *ast.Text descendants of n, searching recursively. Returns 0 if none found.

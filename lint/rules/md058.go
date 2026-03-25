@@ -21,8 +21,9 @@ func (r MD058) Check(doc *lint.Document) []lint.Violation {
 
 	for _, t := range tables {
 		start, end := t[0], t[1]
+		depth := blockquoteDepth(lines[start])
 		// Check blank line before (unless at document start).
-		if start > 0 && strings.TrimSpace(lines[start-1]) != "" {
+		if start > 0 && !isBlankInContext(lines[start-1], depth) {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
 				Line:    start + 1,
@@ -31,7 +32,7 @@ func (r MD058) Check(doc *lint.Document) []lint.Violation {
 			})
 		}
 		// Check blank line after (unless at document end).
-		if end < len(lines)-1 && strings.TrimSpace(lines[end+1]) != "" {
+		if end < len(lines)-1 && !isBlankInContext(lines[end+1], depth) {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
 				Line:    end + 1,
