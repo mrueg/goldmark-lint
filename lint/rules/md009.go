@@ -105,6 +105,7 @@ func (r MD009) Check(doc *lint.Document) []lint.Violation {
 				codeMask[i] = true
 			}
 		}
+
 	}
 
 	var violations []lint.Violation

@@ -15,9 +15,12 @@ func (r MD034) ID() string          { return "MD034" }
 func (r MD034) Aliases() []string   { return []string{"no-bare-urls"} }
 func (r MD034) Description() string { return "Bare URL used" }
 
-// bareURLRE matches an http or https URL within a string, stopping at whitespace
-// or common punctuation characters that are unlikely to be part of the URL.
-var bareURLRE = regexp.MustCompile(`https?://[^\s<>()\[\]{}'"` + "`" + `]+`)
+// bareURLRE matches an http/https URL or a www. URL within a string, stopping
+// at whitespace or common punctuation characters unlikely to be part of the URL.
+// CJK full-width parentheses （ (U+FF08) and ） (U+FF09) are excluded so that
+// URLs inside 「text」（url） style Chinese/Japanese text don't have CJK characters
+// appended, ensuring consistent deduplication across multiple goldmark text nodes.
+var bareURLRE = regexp.MustCompile(`(?:https?://|www\.)[^\s<>()\[\]{}'"` + "`\uff08\uff09" + `]+`)
 
 // bareEmailRE matches a bare email address not wrapped in angle brackets.
 // Markdownlint flags these as bare URLs just like http(s) URLs.

@@ -586,7 +586,7 @@ compared. A delta of `0` means the tools agree exactly on that rule.
 | MD031 | 908 | 908 | +0 |
 | MD032 | 539 | 562 | -23 |
 | MD033 | 214 | 214 | +0 |
-| MD034 | 352 | 351 | +1 |
+| MD034 | 355 | 351 | +4 |
 | MD035 | 3 | 3 | +0 |
 | MD036 | 63 | 63 | +0 |
 | MD038 | 22 | 22 | +0 |
@@ -605,11 +605,11 @@ compared. A delta of `0` means the tools agree exactly on that rule.
 | MD056 | 6 | 6 | +0 |
 | MD058 | 48 | 48 | +0 |
 | MD059 | 71 | 71 | +0 |
-| MD060 | 2,145 | 2,151 | -6 |
-| **TOTAL** | **53,754** | **53,791** | **43** |
+| MD060 | 2,151 | 2,151 | +0 |
+| **TOTAL** | **53,763** | **53,791** | **40** |
 
-36 out of 43 rules produce identical violation counts. The remaining 7 rules
-have a combined delta of 43 violations (< 0.1% of the total), reflecting minor
+37 out of 43 rules produce identical violation counts. The remaining 6 rules
+have a combined delta of 40 violations (< 0.1% of the total), reflecting minor
 edge-case differences in rule interpretation.
 
 To reproduce:
