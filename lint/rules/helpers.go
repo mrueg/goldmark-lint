@@ -233,26 +233,6 @@ func isTableRow(line string) bool {
 
 // blockquotePrefix returns the leading blockquote marker sequence (e.g. "> ")
 // from line. If the line is not a blockquote line, returns "".
-func blockquotePrefix(line string) string {
-	s := line
-	prefix := ""
-	for {
-		s = strings.TrimLeft(s, " \t")
-		if !strings.HasPrefix(s, ">") {
-			break
-		}
-		// Consume "> " or ">"
-		if len(s) > 1 && s[1] == ' ' {
-			prefix += "> "
-			s = s[2:]
-		} else {
-			prefix += ">"
-			s = s[1:]
-		}
-	}
-	return prefix
-}
-
 // blockquoteDepth returns the number of `>` markers at the start of the line.
 func blockquoteDepth(line string) int {
 	s := strings.TrimLeft(line, " \t")
