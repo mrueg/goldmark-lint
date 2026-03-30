@@ -480,6 +480,14 @@ func TestMD007_Valid(t *testing.T) {
 	}
 }
 
+func TestMD007_NestedOrdered(t *testing.T) {
+	src := "1. A\n   * B\n"
+	v := lintString(t, rules.MD007{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected no violations for unordered list nested in ordered list, got %v", v)
+	}
+}
+
 func TestMD007_Invalid(t *testing.T) {
 	src := "- item1\n   - bad indent\n"
 	v := lintString(t, rules.MD007{}, src)
@@ -3379,11 +3387,20 @@ t.Errorf("MD007 Fix() = %q, want %q", got, want)
 }
 
 func TestMD007_Fix_NoChange(t *testing.T) {
-src := "- Item 1\n  - Nested\n    - Deep\n"
-got := fixString(t, rules.MD007{}, src)
-if got != src {
-t.Errorf("MD007 Fix() modified valid source: got %q", got)
+	src := "- item\n  - subitem\n"
+	got := fixString(t, rules.MD007{}, src)
+	if got != src {
+		t.Errorf("MD007 Fix() modified valid source: got %q", got)
+	}
 }
+
+func TestMD007_Fix_NestedOrdered(t *testing.T) {
+	src := "1. A\n   * B\n"
+	want := src
+	got := fixString(t, rules.MD007{}, src)
+	if got != want {
+		t.Errorf("MD007 Fix() should not change indentation for unordered list nested in ordered list: got %q, want %q", got, want)
+	}
 }
 
 func TestMD007_Fix_CustomIndent(t *testing.T) {
