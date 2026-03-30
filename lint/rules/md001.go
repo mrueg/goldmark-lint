@@ -41,30 +41,8 @@ func (r MD001) Fix(source []byte) []byte {
 		Source: source,
 		Lines:  lines,
 		AST:    node,
-		// Note: We don't have FrontMatterFields here because Fix is called on
-		// the part of the source AFTER the front matter.
-		// However, if the user provided FrontMatterTitle, they expect it to
-		// be used. But since Fix is called by Linter.Fix which already
-		// stripped front matter, doc.AST starts AFTER front matter.
-		// This means prevLevel should always start at 0 (or 1 if we're in a
-		// sub-task where we know the front matter title was there).
-		//
-		// WAIT: Linter.Fix calls rule.Fix(source[fmEnd:]).
-		// So the 'source' passed to MD001.Fix is already stripped.
-		// BUT the user's config for FrontMatterTitle is about the ORIGINAL
-		// document's front matter.
-		//
-		// If the original document had a title, the first heading in the
-		// remaining source should be compared against prevLevel=1.
-		// But how does rule.Fix know if the stripped front matter had a title?
-		//
-		// This suggests a flaw in the FixableRule interface if it needs
-		// document-level context like front matter.
 	}
 
-	// For now, let's at least make it AST-aware for the increments within
-	// the stripped source.
-	
 	type fix struct {
 		lineNum  int
 		newLevel int
@@ -80,9 +58,6 @@ func (r MD001) Fix(source []byte) []byte {
 	}
 
 	changed := false
-	// Track level changes to adjust subsequent headings if needed.
-	// Actually, the run() method already calculates the expected level
-	// based on the (hypothetically) fixed previous levels.
 	for _, f := range fixes {
 		lineIdx := f.lineNum - 1
 		if lineIdx < 0 || lineIdx >= len(lines) {
@@ -94,8 +69,6 @@ func (r MD001) Fix(source []byte) []byte {
 		for j < len(stripped) && stripped[j] == '#' {
 			j++
 		}
-		// Only fix ATX headings (Setext headings don't have increments > 1
-		// because they are only H1/H2).
 		if j > 0 && j <= 6 {
 			leadingSpaces := len(line) - len(stripped)
 			lines[lineIdx] = line[:leadingSpaces] + strings.Repeat("#", f.newLevel) + stripped[j:]
@@ -124,6 +97,8 @@ func (r MD001) Check(doc *lint.Document) []lint.Violation {
 
 func (r MD001) run(doc *lint.Document, onViolation func(lineNum, expectedLevel, actualLevel int)) {
 	prevLevel := 0
+
+	// If the front matter contains a title, treat it as an h1.
 	if frontMatterHasTitle(doc, r.FrontMatterTitle) {
 		prevLevel = 1
 	}
@@ -144,7 +119,6 @@ func (r MD001) run(doc *lint.Document, onViolation func(lineNum, expectedLevel, 
 				line = countLine(doc.Source, seg.Start)
 			}
 			onViolation(line, prevLevel+1, level)
-			level = prevLevel + 1
 		}
 		prevLevel = level
 		return ast.WalkContinue, nil
