@@ -5,7 +5,11 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/text"
 )
 
 // MD034 checks for bare URLs that are not wrapped in angle brackets or a proper link.
@@ -17,33 +21,49 @@ func (r MD034) Description() string { return "Bare URL used" }
 
 // bareURLRE matches an http/https URL or a www. URL within a string, stopping
 // at whitespace or common punctuation characters unlikely to be part of the URL.
-// CJK full-width parentheses （ (U+FF08) and ） (U+FF09) are excluded so that
-// URLs inside 「text」（url） style Chinese/Japanese text don't have CJK characters
-// appended, ensuring consistent deduplication across multiple goldmark text nodes.
 var bareURLRE = regexp.MustCompile(`(?:https?://|www\.)[^\s<>()\[\]{}'"` + "`\uff08\uff09" + `]+`)
 
 // bareEmailRE matches a bare email address not wrapped in angle brackets.
-// Markdownlint flags these as bare URLs just like http(s) URLs.
 var bareEmailRE = regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
 
 // inlineLinkRE matches inline markdown links [text](url) for stripping from scanned content.
 var inlineLinkRE = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
 
-// Fix applies MD034 to source by wrapping bare URLs in angle brackets.
 func (r MD034) Fix(source []byte) []byte {
+	// Re-parse source to get an AST for accurate detection.
+	pctx := parser.NewContext()
+	reader := text.NewReader(source)
+	md := goldmark.New(goldmark.WithExtensions(extension.Table, extension.Strikethrough, extension.TaskList, extension.CJK))
+	docAST := md.Parser().Parse(reader, parser.WithContext(pctx))
+
 	lines := strings.Split(string(source), "\n")
+	doc := &lint.Document{
+		Source: source,
+		Lines:  lines,
+		AST:    docAST,
+	}
+
 	fencedMask := fencedCodeBlockMask(lines)
+	indentMask := indentedCodeBlockMask(doc)
 
 	changed := false
 	for i, line := range lines {
-		if fencedMask[i] {
+		if fencedMask[i] || indentMask[i] {
 			continue
 		}
 
-		// Skip indented code block lines (4+ spaces at start after a blank line).
-		// Simple heuristic: skip lines with 4+ leading spaces preceded by a blank line.
+		// Skip indented code block lines.
 		if i > 0 && strings.TrimSpace(lines[i-1]) == "" {
 			if len(line) >= 4 && line[0] == ' ' && line[1] == ' ' && line[2] == ' ' && line[3] == ' ' {
+				continue
+			}
+		}
+
+		// Skip link reference definitions.
+		trimmed := strings.TrimLeft(line, " \t")
+		if strings.HasPrefix(trimmed, "[") {
+			// [label]: url
+			if idx := strings.Index(trimmed, "]:"); idx > 0 {
 				continue
 			}
 		}
@@ -57,30 +77,19 @@ func (r MD034) Fix(source []byte) []byte {
 			continue
 		}
 
-		// Build the new line by inserting < > around URLs that are truly bare.
 		var newLine strings.Builder
 		prev := 0
 		lineChanged := false
 		for _, loc := range matches {
 			start, end := loc[0], loc[1]
-			// Check the character before the URL in the original line.
 			if start > 0 {
 				ch := line[start-1]
-				// Skip if URL is already inside angle brackets, link syntax,
-				// or attribute quotes.
 				if ch == '<' || ch == '(' || ch == '"' || ch == '\'' {
 					newLine.WriteString(line[prev:end])
 					prev = end
 					continue
 				}
 			}
-			// Also check if the original char at start is '<' (already wrapped).
-			if start > 0 && line[start-1] == '<' {
-				newLine.WriteString(line[prev:end])
-				prev = end
-				continue
-			}
-			// Wrap this URL.
 			newLine.WriteString(line[prev:start])
 			newLine.WriteByte('<')
 			newLine.WriteString(line[start:end])
@@ -102,7 +111,18 @@ func (r MD034) Fix(source []byte) []byte {
 
 func (r MD034) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
-	// Track reported (lineNum, url) pairs to avoid duplicate violations.
+	r.run(doc, func(lineNum int, url string) {
+		violations = append(violations, lint.Violation{
+			Rule:    r.ID(),
+			Line:    lineNum,
+			Column:  1,
+			Message: "Bare URL used",
+		})
+	})
+	return violations
+}
+
+func (r MD034) run(doc *lint.Document, onViolation func(lineNum int, url string)) {
 	type reported struct {
 		line int
 		url  string
@@ -115,12 +135,7 @@ func (r MD034) Check(doc *lint.Document) []lint.Violation {
 			return
 		}
 		seen[key] = true
-		violations = append(violations, lint.Violation{
-			Rule:    r.ID(),
-			Line:    lineNum,
-			Column:  1,
-			Message: "Bare URL used",
-		})
+		onViolation(lineNum, url)
 	}
 
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -132,8 +147,6 @@ func (r MD034) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
-		// Skip text inside links, images, or code spans (these are properly formatted
-		// or are not user-visible as bare URLs).
 		for p := t.Parent(); p != nil; p = p.Parent() {
 			switch p.(type) {
 			case *ast.Link, *ast.Image, *ast.CodeSpan:
@@ -145,26 +158,14 @@ func (r MD034) Check(doc *lint.Document) []lint.Violation {
 		text := string(doc.Source[seg.Start:seg.Stop])
 		lineBase := countLine(doc.Source, seg.Start)
 
-		// Report each bare URL on its own line.
-		// Use FindAllStringIndex to get precise positions for multi-line text nodes.
 		for _, loc := range bareURLRE.FindAllStringIndex(text, -1) {
 			lineNum := lineBase + strings.Count(text[:loc[0]], "\n")
-			// Skip URLs that appear to be link destinations in broken link syntax.
-			// When the source has ['label'(url) or similar (a '[' that was consumed
-			// as a link opener by the parser, leaving the label as a text node), and
-			// the URL is immediately preceded by '(' in the text, markdownlint treats
-			// it as an attempted link destination rather than a bare URL.
-			// We detect this by scanning the raw source from the start of the current
-			// line up to the '(' character and checking for an unclosed '['.
 			if loc[0] > 0 && text[loc[0]-1] == '(' {
-				// Position of '(' in the original source.
 				srcParenPos := seg.Start + loc[0] - 1
-				// Find the start of the current line in the source.
 				lineStartInSrc := srcParenPos
 				for lineStartInSrc > 0 && doc.Source[lineStartInSrc-1] != '\n' {
 					lineStartInSrc--
 				}
-				// Count unclosed '[' in source from line start up to '('.
 				depth := 0
 				for _, b := range doc.Source[lineStartInSrc:srcParenPos] {
 					if b == '[' {
@@ -174,18 +175,14 @@ func (r MD034) Check(doc *lint.Document) []lint.Violation {
 					}
 				}
 				if depth > 0 {
-					// Unclosed '[' before this '(url)': looks like an attempted link.
 					continue
 				}
 			}
 			addViolation(lineNum, text[loc[0]:loc[1]])
 		}
 
-		// Report bare email addresses (e.g. user@example.com not in angle brackets).
-		// Markdownlint flags these the same as bare http(s) URLs.
 		for _, loc := range bareEmailRE.FindAllStringIndex(text, -1) {
 			lineNum := lineBase + strings.Count(text[:loc[0]], "\n")
-			// Skip if preceded by '<' (already an angle-bracket email auto-link).
 			if loc[0] > 0 && text[loc[0]-1] == '<' {
 				continue
 			}
@@ -194,12 +191,6 @@ func (r MD034) Check(doc *lint.Document) []lint.Violation {
 		return ast.WalkContinue, nil
 	})
 
-	// Also scan raw lines for footnote definitions containing bare URLs.
-	// Goldmark treats [^n]: url as a link reference definition and does not expose
-	// the URL as a Text node, so we scan the raw source lines directly.
-	// We strip inline links ([text](url)) from the content first to avoid
-	// flagging URLs that are already properly wrapped in a link.
-	// Skip lines inside fenced or indented code blocks to avoid false positives.
 	fencedMask := fencedCodeBlockMask(doc.Lines)
 	indentMask := indentedCodeBlockMask(doc)
 	for i, line := range doc.Lines {
@@ -210,18 +201,14 @@ func (r MD034) Check(doc *lint.Document) []lint.Violation {
 		if !strings.HasPrefix(trimmed, "[^") {
 			continue
 		}
-		// Find the colon after the label: [^label]:
 		labelEnd := strings.Index(trimmed, "]:")
 		if labelEnd < 0 {
 			continue
 		}
-		// Strip inline links to avoid flagging URLs already inside [text](url).
 		rest := strings.TrimSpace(trimmed[labelEnd+2:])
 		rest = inlineLinkRE.ReplaceAllString(rest, "")
 		for _, m := range bareURLRE.FindAllString(rest, -1) {
 			addViolation(i+1, m)
 		}
 	}
-
-	return violations
 }
