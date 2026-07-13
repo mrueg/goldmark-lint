@@ -496,6 +496,10 @@ func TestIsIgnored(t *testing.T) {
 		{"node_modules/bar.md", []string{"**/node_modules/**"}, true},
 		{"a/node_modules/bar.md", []string{"**/node_modules/**"}, true},
 		{"src/bar.md", []string{"**/node_modules/**"}, false},
+		{"vendor/foo.md", []string{"vendor/"}, true},
+		{"a/node_modules/bar.md", []string{"node_modules/"}, true},
+		{"vendor/foo.md", []string{"vendor"}, true},
+		{"a/node_modules/bar.md", []string{"node_modules"}, true},
 	}
 	for _, tt := range tests {
 		got := isIgnored(tt.path, tt.patterns)
