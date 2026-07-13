@@ -560,12 +560,25 @@ func matchesAnyPattern(path string, patterns []string) bool {
 	parts := strings.Split(normalized, "/")
 	for _, pattern := range patterns {
 		pattern = filepath.ToSlash(pattern)
+		isDirPattern := strings.HasSuffix(pattern, "/")
+		cleanPattern := pattern
+		if isDirPattern {
+			cleanPattern = strings.TrimSuffix(pattern, "/")
+		}
 		// Try matching the pattern starting from each position in the path so
-		// that relative patterns (e.g. "vendor/**") work against both relative
-		// and absolute paths.
+		// that relative patterns work against both relative and absolute paths.
 		for i := range parts {
-			if ok, _ := doublestar.Match(pattern, strings.Join(parts[i:], "/")); ok {
-				return true
+			suffixParts := parts[i:]
+			for j := 1; j <= len(suffixParts); j++ {
+				// A match represents a directory if the matched prefix does not reach the end of the full path.
+				isDir := (i + j) < len(parts)
+				if isDirPattern && !isDir {
+					continue
+				}
+				subpath := strings.Join(suffixParts[:j], "/")
+				if ok, _ := doublestar.Match(cleanPattern, subpath); ok {
+					return true
+				}
 			}
 		}
 	}
