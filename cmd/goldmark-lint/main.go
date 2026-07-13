@@ -450,8 +450,12 @@ func run(_ context.Context, cmd *cli.Command) error {
 
 	// Apply per-violation severity so formatters can use it.
 	for i := range allViolations {
+		fileCfg := ruleCfg
+		if len(overrides) > 0 && allViolations[i].File != "stdin" && allViolations[i].File != "-" {
+			fileCfg = effectiveConfigForFile(ruleCfg, overrides, allViolations[i].File)
+		}
 		for j := range allViolations[i].Violations {
-			allViolations[i].Violations[j].Severity = getRuleSeverity(allViolations[i].Violations[j].Rule, ruleCfg)
+			allViolations[i].Violations[j].Severity = getRuleSeverity(allViolations[i].Violations[j].Rule, fileCfg)
 		}
 	}
 
@@ -569,15 +573,16 @@ func run(_ context.Context, cmd *cli.Command) error {
 					source = fixed
 				}
 				fileLinter := linter
+				fileCfg := ruleCfg
 				if len(overrides) > 0 {
-					fileCfg := effectiveConfigForFile(ruleCfg, overrides, file)
+					fileCfg = effectiveConfigForFile(ruleCfg, overrides, file)
 					fileLinter = newLinterFromConfig(fileCfg)
 					fileLinter.NoInlineConfig = noInlineConfig
 					fileLinter.FrontMatterRegexp = linter.FrontMatterRegexp
 				}
 				violations := fileLinter.Lint(source)
 				for j := range violations {
-					violations[j].Severity = getRuleSeverity(violations[j].Rule, ruleCfg)
+					violations[j].Severity = getRuleSeverity(violations[j].Rule, fileCfg)
 				}
 				watchViolations = append(watchViolations, fileViolation{File: file, Violations: violations})
 			}
