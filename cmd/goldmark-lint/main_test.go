@@ -242,6 +242,28 @@ func TestCLI_ErrorSeverityExitOne(t *testing.T) {
 	}
 }
 
+func TestCLI_SeverityOverride(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// A file with an MD041 violation (no top-level heading).
+	mdFile := filepath.Join(dir, "warning.md")
+	if err := os.WriteFile(mdFile, []byte("Not a heading\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Config has override setting MD041 to warning severity for warning.md.
+	cfgContent := "config:\n  MD041: true\noverrides:\n  - files:\n      - \"warning.md\"\n    config:\n      MD041: \"warning\"\n"
+	if err := os.WriteFile(filepath.Join(dir, ".markdownlint-cli2.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, mdFile)
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Errorf("expected exit 0 when violation is overridden to warning, got: %v", err)
+	}
+}
+
 func TestCLI_ConfigFlag(t *testing.T) {
 	bin := buildBinary(t)
 
