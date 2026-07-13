@@ -373,7 +373,17 @@ func isRuleEnabled(id string, cfg map[string]interface{}) bool {
 // getRuleSeverity returns "warning" if the rule is configured with "warning"
 // severity, otherwise "error".
 func getRuleSeverity(id string, cfg map[string]interface{}) string {
-	if val, ok := cfg[id]; ok {
+	var val interface{}
+	var ok bool
+	if val, ok = cfg[id]; !ok {
+		meta := allRuleMeta[id]
+		for _, alias := range meta.aliases {
+			if val, ok = cfg[alias]; ok {
+				break
+			}
+		}
+	}
+	if ok {
 		if s, ok := val.(string); ok && strings.ToLower(s) == "warning" {
 			return "warning"
 		}
@@ -384,7 +394,16 @@ func getRuleSeverity(id string, cfg map[string]interface{}) string {
 // applyRuleConfig applies rule-specific config options to the rule pointer by
 // marshaling the config map entry to JSON and unmarshaling it into the rule.
 func applyRuleConfig(rule interface{}, cfg map[string]interface{}, id string) {
-	val, ok := cfg[id]
+	var val interface{}
+	var ok bool
+	if val, ok = cfg[id]; !ok {
+		meta := allRuleMeta[id]
+		for _, alias := range meta.aliases {
+			if val, ok = cfg[alias]; ok {
+				break
+			}
+		}
+	}
 	if !ok {
 		return
 	}

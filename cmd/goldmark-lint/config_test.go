@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/mrueg/goldmark-lint/lint/rules"
 )
 
 func TestFindConfigFile_NotFound(t *testing.T) {
@@ -453,6 +455,30 @@ func TestBuildRules_DefaultFalse(t *testing.T) {
 	}
 	if got[0].ID() != "MD013" {
 		t.Errorf("expected MD013, got %s", got[0].ID())
+	}
+}
+
+func TestApplyRuleConfig_AliasOptions(t *testing.T) {
+	// Options configured via alias should be applied to the rule.
+	cfg := map[string]interface{}{
+		"no-hard-tabs": map[string]interface{}{
+			"spaces_per_tab": 3,
+		},
+	}
+	r := &rules.MD010{}
+	applyRuleConfig(r, cfg, "MD010")
+	if r.SpacesPerTab != 3 {
+		t.Errorf("expected SpacesPerTab to be 3, got %d", r.SpacesPerTab)
+	}
+}
+
+func TestGetRuleSeverity_Alias(t *testing.T) {
+	// Severity configured via alias should be resolved.
+	cfg := map[string]interface{}{
+		"line-length": "warning",
+	}
+	if got := getRuleSeverity("MD013", cfg); got != "warning" {
+		t.Errorf("expected \"warning\", got %q", got)
 	}
 }
 
