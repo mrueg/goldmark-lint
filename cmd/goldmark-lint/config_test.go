@@ -475,10 +475,14 @@ func TestApplyRuleConfig_AliasOptions(t *testing.T) {
 func TestGetRuleSeverity_Alias(t *testing.T) {
 	// Severity configured via alias should be resolved.
 	cfg := map[string]interface{}{
-		"line-length": "warning",
+		"line-length":    "warning",
+		"no-empty-links": "warning",
 	}
 	if got := getRuleSeverity("MD013", cfg); got != "warning" {
 		t.Errorf("expected \"warning\", got %q", got)
+	}
+	if got := getRuleSeverity("MD042", cfg); got != "warning" {
+		t.Errorf("expected \"warning\" for MD042, got %q", got)
 	}
 }
 

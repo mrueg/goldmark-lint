@@ -299,6 +299,7 @@ var allRuleMeta = map[string]ruleMeta{
 	"MD039": {tags: []string{"links", "whitespace"}, aliases: []string{"no-space-in-links"}},
 	"MD040": {tags: []string{"code", "language"}, aliases: []string{"fenced-code-language"}},
 	"MD041": {tags: []string{"headings"}, aliases: []string{"first-line-heading", "first-line-h1"}},
+	"MD042": {tags: []string{"links"}, aliases: []string{"no-empty-links"}},
 	"MD043": {tags: []string{"headings"}, aliases: []string{"required-headings", "required-headers"}},
 	"MD044": {tags: []string{"spelling"}, aliases: []string{"proper-names"}},
 	"MD045": {tags: []string{"accessibility", "images"}, aliases: []string{"no-alt-text"}},
