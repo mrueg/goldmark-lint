@@ -1,0 +1,14 @@
+# Neutral configuration for the benchmark and conformance harnesses.
+#
+# Both scripts run the linters from inside this repository, and goldmark-lint
+# searches for a config file from the working directory up to the filesystem
+# root — so it finds the repository's own .markdownlint-cli2.yaml and applies
+# it to the corpora. markdownlint-cli2 does not search above the working
+# directory, so it does not. The comparison was therefore measuring
+# goldmark-lint with MD013 partly disabled against markdownlint with default
+# settings, which cost 1,018 phantom MD013 "misses".
+#
+# Passing this file to both tools explicitly pins the comparison to default
+# rule settings and stops any ambient config from reaching it. An empty config
+# map means "every rule at its default".
+config: {}

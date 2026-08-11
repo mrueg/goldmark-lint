@@ -37,6 +37,11 @@ TLDR_DIR="${SCRIPT_DIR}/tldr"
 
 GOLDMARK_BIN="${REPO_ROOT}/bench/goldmark-lint"
 
+# Neutral configuration passed to both linters; see the note in conform.sh.
+# It matters for timing too: a discovered config that disables rules changes
+# how much work each tool actually does.
+NEUTRAL_CONFIG="${SCRIPT_DIR}/defaults.markdownlint-cli2.yaml"
+
 # Defaults for hyperfine options.
 RUNS=10
 WARMUP=3
@@ -135,27 +140,27 @@ info "Built: ${GOLDMARK_BIN}"
 # to a walk for patterns containing **).
 run_goldmark() {
   if [[ "${NO_CACHE}" -eq 1 ]]; then
-    "${GOLDMARK_BIN}" --no-cache 'rfcs/**/*.md' 'tldr/**/*.md'
+    "${GOLDMARK_BIN}" --no-cache --config "${NEUTRAL_CONFIG}" 'rfcs/**/*.md' 'tldr/**/*.md'
   else
-    "${GOLDMARK_BIN}" 'rfcs/**/*.md' 'tldr/**/*.md'
+    "${GOLDMARK_BIN}" --config "${NEUTRAL_CONFIG}" 'rfcs/**/*.md' 'tldr/**/*.md'
   fi
 }
 
 # run_markdownlint lints both corpora with markdownlint-cli2.
 run_markdownlint() {
-  markdownlint-cli2 'rfcs/**/*.md' 'tldr/**/*.md'
+  markdownlint-cli2 --config "${NEUTRAL_CONFIG}" 'rfcs/**/*.md' 'tldr/**/*.md'
 }
 
 # Command strings used by hyperfine (--shell bash).  The single quotes around
 # the glob patterns are interpreted by the bash subprocess, preventing shell
 # glob expansion so that each tool receives the raw patterns and performs its
 # own expansion — matching exactly what a user would type on the command line.
-GOLDMARK_EXTRA=""
+GOLDMARK_EXTRA=" --config ${NEUTRAL_CONFIG}"
 if [[ "${NO_CACHE}" -eq 1 ]]; then
-  GOLDMARK_EXTRA=" --no-cache"
+  GOLDMARK_EXTRA=" --no-cache --config ${NEUTRAL_CONFIG}"
 fi
 GOLDMARK_CMD="${GOLDMARK_BIN}${GOLDMARK_EXTRA} 'rfcs/**/*.md' 'tldr/**/*.md'"
-MARKDOWNLINT_CMD="markdownlint-cli2 'rfcs/**/*.md' 'tldr/**/*.md'"
+MARKDOWNLINT_CMD="markdownlint-cli2 --config ${NEUTRAL_CONFIG} 'rfcs/**/*.md' 'tldr/**/*.md'"
 
 HAS_HYPERFINE=0
 if command -v hyperfine &>/dev/null; then
