@@ -132,6 +132,18 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 			}
 			return ast.WalkContinue, nil
 		})
+		// A bare URL counts as a link here too. markdownlint parses GFM autolink
+		// literals, so a table row carrying a plain https:// address holds a link
+		// node for it and is exempt; goldmark does not enable the Linkify
+		// extension, so the same row has only text and would be reported.
+		for i, line := range doc.Lines {
+			if !tableMask[i] || tableRowLinkLines[i+1] {
+				continue
+			}
+			if bareURLRE.MatchString(line) {
+				tableRowLinkLines[i+1] = true
+			}
+		}
 	}
 
 	var violations []lint.Violation

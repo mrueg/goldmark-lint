@@ -3823,3 +3823,33 @@ func TestMD005_ContainerPrefixDoesNotShiftIndent(t *testing.T) {
 		t.Errorf("expected no violations for inner items at the same column, got %v", v)
 	}
 }
+
+// TestMD013_TableRowWithBareURLExempt covers a long table row whose only link
+// is a bare URL. markdownlint parses GFM autolink literals, so such a row holds
+// a link node and is exempt from the length check; goldmark does not enable the
+// Linkify extension, so the row was reported.
+//
+// Reduced from tldr-pages contributing-guides/style-guide.md:253.
+func TestMD013_TableRowWithBareURLExempt(t *testing.T) {
+	long := strings.Repeat("x", 40) + " " + strings.Repeat("y", 40)
+	src := "# T\n\n| Term | Explanation |\n|---|---|\n" +
+		"| Bare URL row | text that is quite long indeed and keeps going (https://en.wikipedia.org/wiki/Regular_expression). |\n" +
+		"| Plain row | " + long + " more words here to push this well past the limit |\n"
+	v := lintString(t, rules.MD013{}, src)
+	if len(v) != 1 {
+		t.Fatalf("expected 1 violation (the row without a URL), got %d: %v", len(v), v)
+	}
+	if v[0].Line != 6 {
+		t.Errorf("reported line %d, want 6 (the row with no URL)", v[0].Line)
+	}
+}
+
+// TestMD013_BareURLOutsideTableStillReported keeps the exemption scoped to
+// table rows: a long paragraph containing a bare URL is still a violation in
+// both linters.
+func TestMD013_BareURLOutsideTableStillReported(t *testing.T) {
+	src := "# T\n\nPlain paragraph with a bare URL https://en.wikipedia.org/wiki/Regular_expression and more text to exceed eighty.\n"
+	if v := lintString(t, rules.MD013{}, src); len(v) != 1 {
+		t.Errorf("expected 1 violation for a long paragraph with a bare URL, got %v", v)
+	}
+}
