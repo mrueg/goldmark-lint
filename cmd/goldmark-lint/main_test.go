@@ -873,3 +873,149 @@ func TestCLI_ParallelDeterministic(t *testing.T) {
 		}
 	}
 }
+
+// TestCLI_Fix_LeavesUnchangedFilesUntouched asserts that --fix does not rewrite
+// a file it has nothing to change. Rewriting unconditionally bumps the mtime,
+// which invalidates downstream build caches and re-triggers file watchers.
+func TestCLI_Fix_LeavesUnchangedFilesUntouched(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	clean := filepath.Join(dir, "clean.md")
+	if err := os.WriteFile(clean, []byte("# Clean doc\n\nNothing wrong here.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	dirty := filepath.Join(dir, "dirty.md")
+	if err := os.WriteFile(dirty, []byte("# Dirty doc\n\nTrailing spaces here.   \n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	statBefore := func(p string) os.FileInfo {
+		fi, err := os.Stat(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fi
+	}
+	cleanBefore, dirtyBefore := statBefore(clean), statBefore(dirty)
+
+	// Ensure any rewrite produces a visibly different mtime.
+	time.Sleep(1100 * time.Millisecond)
+
+	cmd := exec.Command(bin, "--fix", clean, dirty)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			t.Fatalf("unexpected error running --fix: %v\n%s", err, out)
+		}
+	}
+
+	if got := statBefore(clean).ModTime(); !got.Equal(cleanBefore.ModTime()) {
+		t.Errorf("--fix rewrote an unchanged file: mtime went from %v to %v", cleanBefore.ModTime(), got)
+	}
+	if got := statBefore(dirty).ModTime(); got.Equal(dirtyBefore.ModTime()) {
+		t.Errorf("--fix did not rewrite a file that needed fixing (mtime unchanged at %v)", got)
+	}
+	fixed, err := os.ReadFile(dirty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(fixed), "here.   ") {
+		t.Errorf("--fix left trailing spaces in place: %q", string(fixed))
+	}
+}
+
+// TestCLI_Fix_PreservesFilePermissions asserts that rewriting a file through
+// the atomic write path keeps its original mode rather than resetting it.
+func TestCLI_Fix_PreservesFilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file modes not meaningful on Windows")
+	}
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	mdFile := filepath.Join(dir, "restricted.md")
+	if err := os.WriteFile(mdFile, []byte("# Doc\n\nTrailing spaces.   \n"), 0640); err != nil {
+		t.Fatal(err)
+	}
+	// WriteFile applies the umask, so set the mode explicitly.
+	if err := os.Chmod(mdFile, 0640); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, "--fix", mdFile)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			t.Fatalf("unexpected error running --fix: %v\n%s", err, out)
+		}
+	}
+
+	fi, err := os.Stat(mdFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fi.Mode().Perm(); got != 0640 {
+		t.Errorf("--fix changed file mode from 0640 to %04o", got)
+	}
+}
+
+// TestCLI_WatchFix_HonoursOverrides asserts that fixes applied during a watch
+// cycle use the per-file rule set from "overrides", not the default rule set.
+// The watch callback used to fix with the default linter and only then build
+// the override-aware one, so a rule disabled by an override was still applied.
+func TestCLI_WatchFix_HonoursOverrides(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("signal-based test not supported on Windows")
+	}
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	// MD009 (trailing spaces) is fixable and is disabled for *.md by an override,
+	// so --fix must leave trailing spaces alone.
+	cfg := "config:\n  MD009: true\noverrides:\n  - files: [\"*.md\"]\n    config:\n      MD009: false\n"
+	cfgPath := filepath.Join(dir, ".markdownlint-cli2.yaml")
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
+		t.Fatal(err)
+	}
+	mdFile := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Title\n\nClean line.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, "--config", cfgPath, "--watch", "--fix", mdFile)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("failed to start --watch process: %v", err)
+	}
+	defer func() { _ = cmd.Process.Kill() }()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(stderr.String(), "Watching") {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for watch message; stderr: %s", stderr.String())
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// Introduce trailing spaces; the override says MD009 is off for this file.
+	withTrailing := "# Title\n\nTrailing spaces here.   \n"
+	if err := os.WriteFile(mdFile, []byte(withTrailing), 0644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(watchInterval + 500*time.Millisecond)
+
+	if err := cmd.Process.Signal(os.Interrupt); err != nil {
+		t.Fatalf("failed to send interrupt: %v", err)
+	}
+	_ = cmd.Wait()
+
+	got, err := os.ReadFile(mdFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != withTrailing {
+		t.Errorf("watch --fix ignored the MD009 override and rewrote the file:\n got: %q\nwant: %q", string(got), withTrailing)
+	}
+}

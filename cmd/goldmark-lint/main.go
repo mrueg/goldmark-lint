@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -356,10 +358,14 @@ func run(_ context.Context, cmd *cli.Command) error {
 	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
 	var wg sync.WaitGroup
 	for i, file := range allFiles {
+		// Acquire the slot before spawning so that at most GOMAXPROCS
+		// goroutines exist at a time. Acquiring inside the goroutine would
+		// still create one goroutine per file up front, which on a very large
+		// repository is exactly the resource exhaustion this guards against.
+		sem <- struct{}{}
 		wg.Add(1)
 		go func(i int, file string) {
 			defer wg.Done()
-			sem <- struct{}{} // acquire a slot; limits concurrent work
 			defer func() { <-sem }() // release slot on exit
 
 			source, err := os.ReadFile(file)
@@ -398,9 +404,14 @@ func run(_ context.Context, cmd *cli.Command) error {
 			var origContent, fixedContent []byte
 			if effectiveFix {
 				fixedContent = fileLinter.Fix(source)
-				if err := os.WriteFile(file, fixedContent, 0644); err != nil {
-					results[i] = fileResult{err: err, errCode: 2}
-					return
+				// Only touch the file when the fixes actually changed something.
+				// Rewriting an unchanged file bumps its mtime, which invalidates
+				// downstream build caches and re-triggers file watchers.
+				if !bytes.Equal(source, fixedContent) {
+					if err := writeFileAtomic(file, fixedContent); err != nil {
+						results[i] = fileResult{err: err, errCode: 2}
+						return
+					}
 				}
 				source = fixedContent
 				hash = hashContent(source)
@@ -564,14 +575,9 @@ func run(_ context.Context, cmd *cli.Command) error {
 					fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", file, err)
 					continue
 				}
-				if effectiveFix {
-					fixed := linter.Fix(source)
-					if err := os.WriteFile(file, fixed, 0644); err != nil {
-						fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", file, err)
-						continue
-					}
-					source = fixed
-				}
+				// Resolve the per-file linter before fixing: with overrides
+				// configured, fixing with the default linter would apply the
+				// wrong rule set and then lint the result with the right one.
 				fileLinter := linter
 				fileCfg := ruleCfg
 				if len(overrides) > 0 {
@@ -579,6 +585,16 @@ func run(_ context.Context, cmd *cli.Command) error {
 					fileLinter = newLinterFromConfig(fileCfg)
 					fileLinter.NoInlineConfig = noInlineConfig
 					fileLinter.FrontMatterRegexp = linter.FrontMatterRegexp
+				}
+				if effectiveFix {
+					fixed := fileLinter.Fix(source)
+					if !bytes.Equal(source, fixed) {
+						if err := writeFileAtomic(file, fixed); err != nil {
+							fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", file, err)
+							continue
+						}
+					}
+					source = fixed
 				}
 				violations := fileLinter.Lint(source)
 				for j := range violations {
@@ -595,6 +611,48 @@ func run(_ context.Context, cmd *cli.Command) error {
 		return cli.Exit("", exitCode)
 	}
 	return nil
+}
+
+// writeFileAtomic replaces the contents of path with data.
+//
+// The data is written to a temporary file in the same directory and then
+// renamed over the target, so an interrupted or failed write cannot leave a
+// truncated Markdown file behind — rename is atomic within a filesystem, and
+// keeping the temporary file alongside the target keeps it on that filesystem.
+// The target's existing permissions are preserved; new files get 0644 before
+// the process umask.
+func writeFileAtomic(path string, data []byte) error {
+	perm := os.FileMode(0644)
+	if fi, err := os.Stat(path); err == nil {
+		perm = fi.Mode().Perm()
+	}
+
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	// Best-effort cleanup: harmless once the rename below has succeeded.
+	defer func() { _ = os.Remove(tmpName) }()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	// Flush to disk before the rename so a crash cannot leave the renamed file
+	// with unwritten contents.
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpName, perm); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 // printRulesTable writes a human-readable table of all known rules to w.
