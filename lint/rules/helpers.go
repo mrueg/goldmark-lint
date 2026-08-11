@@ -220,9 +220,9 @@ func isTableRow(line string) bool {
 	return strings.Contains(line, "|")
 }
 
-// blockquotePrefix returns the leading blockquote marker sequence (e.g. "> ")
-// from line. If the line is not a blockquote line, returns "".
-// blockquoteDepth returns the number of `>` markers at the start of the line.
+// blockquoteDepth returns the number of `>` markers at the start of the line,
+// i.e. how deeply the line is nested in blockquotes. It returns 0 for a line
+// that is not part of a blockquote.
 func blockquoteDepth(line string) int {
 	s := strings.TrimLeft(line, " \t")
 	depth := 0
@@ -432,7 +432,8 @@ func indentedCodeBlockMask(doc *lint.Document) []bool {
 	return mask
 }
 
-// It uses the goldmark AST to accurately detect HTML blocks.
+// htmlBlockLineMask returns a bool slice with true for each source line that is
+// part of an HTML block. It uses the goldmark AST to accurately detect HTML blocks.
 func htmlBlockLineMask(doc *lint.Document) []bool {
 	mask := make([]bool, len(doc.Lines))
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {

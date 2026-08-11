@@ -544,11 +544,26 @@ Measured with [hyperfine](https://github.com/sharkdp/hyperfine)
 
 **goldmark-lint is ~5.9× faster than markdownlint-cli2** on this corpus.
 
+Note that this corpus is made up of many small files — 34,405 files averaging
+roughly 30 lines each — so it measures per-file overhead rather than how either
+tool scales within a single large document. For that dimension, linting one
+synthetic file of mixed headings, prose and fenced code:
+
+| Lines in one file | goldmark-lint | markdownlint |
+|-------------------|---------------|--------------|
+| 5,000             | 0.29 s        | 1.76 s       |
+| 10,000            | 0.42 s        | 2.33 s       |
+| 20,000            | 0.87 s        | 3.91 s       |
+
 To reproduce:
 
 ```sh
 ./bench/bench.sh
 ```
+
+`bench/bench.sh` accepts `--runs N`, `--warmup N` and `--no-cache`. The CI
+benchmark workflow passes `--no-cache` so that every run does the full parsing
+work; the table above is from a default (cached) run.
 
 ### Conformance
 
@@ -606,11 +621,12 @@ compared. A delta of `0` means the tools agree exactly on that rule.
 | MD058 | 48 | 48 | +0 |
 | MD059 | 71 | 71 | +0 |
 | MD060 | 2,151 | 2,151 | +0 |
-| **TOTAL** | **53,763** | **53,791** | **40** |
+| **TOTAL** | **53,763** | **53,791** | **-28** |
 
 37 out of 43 rules produce identical violation counts. The remaining 6 rules
-have a combined delta of 40 violations (< 0.1% of the total), reflecting minor
-edge-case differences in rule interpretation.
+differ by 40 violations in total when counted without regard to direction, and
+by -28 on balance (< 0.1% of the total either way), reflecting minor edge-case
+differences in rule interpretation.
 
 To reproduce:
 
@@ -622,6 +638,8 @@ To reproduce:
 
 The table below lists all [markdownlint rules](https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md).
 Rules that are implemented in goldmark-lint are marked ✅. Rules marked 🔧 also support auto-fixing.
+Rules that markdownlint itself has deprecated (MD002, MD006) or never assigned
+(MD008, MD015–MD017, MD057) are not listed.
 
 | Rule | Description | Status |
 |------|-------------|--------|
