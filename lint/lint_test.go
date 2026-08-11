@@ -3785,3 +3785,41 @@ func TestMD052_ParserProvidedDefinitionsStillResolve(t *testing.T) {
 		})
 	}
 }
+
+// TestMD005_LooseListIsChecked covers a list with blank lines between its
+// items. Such items hold a Paragraph rather than a TextBlock, and MD005 only
+// looked for TextBlock, so every loose list was skipped outright.
+//
+// Reduced from rust-lang/rfcs text/1398-kinds-of-allocators.md:482.
+func TestMD005_LooseListIsChecked(t *testing.T) {
+	src := "# T\n\n* first item\n\n * second item indented by one\n\n* third item\n"
+	v := lintString(t, rules.MD005{}, src)
+	if len(v) != 1 {
+		t.Fatalf("expected 1 violation in a loose list, got %d: %v", len(v), v)
+	}
+	if v[0].Line != 5 {
+		t.Errorf("reported line %d, want 5", v[0].Line)
+	}
+}
+
+// TestMD005_TightListStillChecked guards that accepting Paragraph did not
+// disturb the tight-list path.
+func TestMD005_TightListStillChecked(t *testing.T) {
+	src := "# T\n\n* first item\n * second item indented by one\n* third item\n"
+	if v := lintString(t, rules.MD005{}, src); len(v) != 1 {
+		t.Errorf("expected 1 violation in a tight list, got %d: %v", len(v), v)
+	}
+}
+
+// TestMD005_ContainerPrefixDoesNotShiftIndent covers sibling items whose lines
+// begin differently: the first is introduced by the enclosing list marker and
+// the second by spaces. Both markers sit at the same column, so they are
+// siblings; counting leading spaces made the second look mis-indented.
+//
+// Reduced from rust-lang/rfcs text/2497-if-let-chains.md:1838.
+func TestMD005_ContainerPrefixDoesNotShiftIndent(t *testing.T) {
+	src := "# T\n\n48. > 1. first inner item\n    > 2. second inner item\n"
+	if v := lintString(t, rules.MD005{}, src); len(v) != 0 {
+		t.Errorf("expected no violations for inner items at the same column, got %v", v)
+	}
+}

@@ -141,7 +141,13 @@ func (r MD005) Check(doc *lint.Document) []lint.Violation {
 				continue
 			}
 			line := doc.Lines[lineIdx]
-			spaces := len(line) - len(strings.TrimLeft(line, " "))
+			// Compare where the markers sit, not how many spaces precede them,
+			// so that items introduced by a container prefix (a blockquote, or
+			// an enclosing list marker on the same line) line up correctly.
+			spaces := listMarkerColumn(line, columnOfOffset(doc.Source, seg.Start))
+			if spaces < 0 {
+				spaces = len(line) - len(strings.TrimLeft(line, " "))
+			}
 			if expectedIndent < 0 {
 				expectedIndent = spaces
 			} else if spaces != expectedIndent {
@@ -159,15 +165,71 @@ func (r MD005) Check(doc *lint.Document) []lint.Violation {
 	return violations
 }
 
-// listItemFirstSegment returns the first text segment of a list item by walking
-// its first TextBlock child, since ListItem.Lines() is empty in goldmark.
+// listItemFirstSegment returns the first text segment of a list item, since
+// ListItem.Lines() is empty in goldmark. A tight item holds a TextBlock and a
+// loose one — any list with blank lines between its items — holds a Paragraph,
+// so both have to be accepted; matching only TextBlock silently skipped every
+// loose list.
 func listItemFirstSegment(item *ast.ListItem) (text.Segment, bool) {
 	for c := item.FirstChild(); c != nil; c = c.NextSibling() {
-		if tb, ok := c.(*ast.TextBlock); ok {
-			if tb.Lines() != nil && tb.Lines().Len() > 0 {
-				return tb.Lines().At(0), true
+		switch c.(type) {
+		case *ast.TextBlock, *ast.Paragraph:
+			if c.Lines() != nil && c.Lines().Len() > 0 {
+				return c.Lines().At(0), true
 			}
 		}
 	}
 	return text.Segment{}, false
+}
+
+// listMarkerColumn returns the column at which the list marker introducing
+// contentCol sits on line, or -1 when no marker can be found.
+//
+// The marker's column, not the count of leading spaces, is what makes items
+// comparable: an item can be introduced by a container prefix rather than by
+// plain indentation. In a nested list written inside a blockquote inside an
+// outer list item, the first inner item's line starts with the outer marker
+// ("48. > 1. ...") while the next starts with spaces ("    > 2. ..."). Both
+// inner markers sit at the same column, so the items are siblings; counting
+// leading spaces would make them look inconsistent.
+func listMarkerColumn(line string, contentCol int) int {
+	j := contentCol - 1
+	if j >= len(line) {
+		j = len(line) - 1
+	}
+	// Step back over the whitespace between the marker and the content.
+	for j >= 0 && (line[j] == ' ' || line[j] == '\t') {
+		j--
+	}
+	if j < 0 {
+		return -1
+	}
+	switch line[j] {
+	case '-', '*', '+':
+		return j
+	case '.', ')':
+		// Walk back over the digits of an ordered marker such as "48.".
+		k := j - 1
+		for k >= 0 && line[k] >= '0' && line[k] <= '9' {
+			k--
+		}
+		if k == j-1 {
+			return -1 // separator with no digits before it
+		}
+		return k + 1
+	}
+	return -1
+}
+
+// columnOfOffset returns the 0-based column of byte offset within its source
+// line.
+func columnOfOffset(source []byte, offset int) int {
+	if offset > len(source) {
+		offset = len(source)
+	}
+	start := offset
+	for start > 0 && source[start-1] != '\n' {
+		start--
+	}
+	return offset - start
 }
