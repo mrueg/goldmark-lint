@@ -14,6 +14,37 @@ func (r MD038) ID() string          { return "MD038" }
 func (r MD038) Aliases() []string   { return []string{"no-space-in-code"} }
 func (r MD038) Description() string { return "Spaces inside code span elements" }
 
+// leadingSpaceIsRequired reports whether the leading space of a code span's
+// content must be kept. CommonMark needs a space between the opening delimiter
+// and content that itself begins with a backtick, otherwise the backticks merge
+// into the delimiter run and the span stops parsing as code.
+func leadingSpaceIsRequired(content string) bool {
+	return strings.HasPrefix(strings.TrimLeft(content, " "), "`")
+}
+
+// trailingSpaceIsRequired is the closing-delimiter counterpart of
+// leadingSpaceIsRequired.
+func trailingSpaceIsRequired(content string) bool {
+	return strings.HasSuffix(strings.TrimRight(content, " "), "`")
+}
+
+// trimCodeSpanContent strips the leading and trailing spaces of a code span's
+// content, keeping any space that CommonMark requires. It returns content
+// unchanged when nothing may safely be removed.
+func trimCodeSpanContent(content string) string {
+	if strings.TrimSpace(content) == "" {
+		return content
+	}
+	out := content
+	if strings.HasPrefix(out, " ") && !leadingSpaceIsRequired(out) {
+		out = strings.TrimLeft(out, " ")
+	}
+	if strings.HasSuffix(out, " ") && !trailingSpaceIsRequired(out) {
+		out = strings.TrimRight(out, " ")
+	}
+	return out
+}
+
 // fixCodeSpanSpaces removes leading/trailing spaces from code span content.
 func fixCodeSpanSpaces(line string) string {
 	result := []byte(line)
@@ -38,7 +69,7 @@ func fixCodeSpanSpaces(line string) string {
 				}
 				if k-end == tickLen {
 					content := string(result[contentStart:end])
-					trimmed := strings.TrimSpace(content)
+					trimmed := trimCodeSpanContent(content)
 					if trimmed != content && len(trimmed) > 0 {
 						// Rebuild this code span without leading/trailing spaces
 						newSpan := string(result[start:contentStart]) + trimmed + string(result[end:k])
@@ -127,6 +158,16 @@ func (r MD038) Check(doc *lint.Document) []lint.Violation {
 		}
 		// Only flag trailing space if there is non-whitespace content before it.
 		if hasTrailingSpace && strings.TrimRight(string(lastContent), " ") == "" {
+			hasTrailingSpace = false
+		}
+		// A space separating the delimiter from content that itself starts or
+		// ends with a backtick is required by CommonMark, not stylistic: without
+		// it the backticks merge into the delimiter run and the span no longer
+		// parses as code. markdownlint does not report these either.
+		if hasLeadingSpace && leadingSpaceIsRequired(string(firstContent)) {
+			hasLeadingSpace = false
+		}
+		if hasTrailingSpace && trailingSpaceIsRequired(string(lastContent)) {
 			hasTrailingSpace = false
 		}
 

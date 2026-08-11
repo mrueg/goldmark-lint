@@ -3610,3 +3610,53 @@ func TestMD029_LinkRefAloneDoesNotKeepListOpen(t *testing.T) {
 		t.Errorf("expected 2 violations when only a link definition separates the fragments, got %v", v)
 	}
 }
+
+// TestMD038_RequiredBacktickSpaceNotFlagged covers code spans whose content
+// starts or ends with a backtick. CommonMark requires a space between the
+// delimiter and such content, so the space is structural rather than
+// stylistic and markdownlint does not report it.
+func TestMD038_RequiredBacktickSpaceNotFlagged(t *testing.T) {
+	cases := map[string]string{
+		"trailing backtick":        "F ``a` `` end.\n",
+		"leading backtick":         "F `` `a`` end.\n",
+		"inner span then backtick": "F ``name = `T` `` end.\n",
+	}
+	for name, src := range cases {
+		t.Run(name, func(t *testing.T) {
+			if v := lintString(t, rules.MD038{}, src); len(v) != 0 {
+				t.Errorf("expected no violations for a required delimiter space, got %v", v)
+			}
+		})
+	}
+}
+
+// TestMD038_FixPreservesRequiredBacktickSpace is the important half: stripping
+// a required space merges the content's backticks into the delimiter run, so
+// the span stops being a code span at all. Fix used to turn a two-backtick
+// span holding "a`" into one where the closing delimiter has three backticks,
+// which goldmark then renders as literal text rather than a code element.
+func TestMD038_FixPreservesRequiredBacktickSpace(t *testing.T) {
+	for _, src := range []string{
+		"F ``a` `` end.\n",
+		"F `` `a`` end.\n",
+		"F ``name = `T` `` end.\n",
+	} {
+		if got := fixString(t, rules.MD038{}, src); got != src {
+			t.Errorf("Fix() corrupted a code span with a required space:\n got: %q\nwant: %q", got, src)
+		}
+	}
+}
+
+// TestMD038_FixStillRemovesUnnecessarySpaces guards the other direction, so the
+// change above does not simply disable the fix.
+func TestMD038_FixStillRemovesUnnecessarySpaces(t *testing.T) {
+	cases := map[string]string{
+		"F `a ` end.\n": "F `a` end.\n",
+		"F ` a` end.\n": "F `a` end.\n",
+	}
+	for src, want := range cases {
+		if got := fixString(t, rules.MD038{}, src); got != want {
+			t.Errorf("Fix(%q) = %q, want %q", src, got, want)
+		}
+	}
+}
