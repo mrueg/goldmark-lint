@@ -2139,7 +2139,23 @@ func groupByLine(violations []lint.Violation) map[int][]string {
 	return result
 }
 
+// TestIntegration_CompareWithMarkdownlint reports, per fixture, any rule that
+// markdownlint flags on a line where goldmark-lint does not. It is a diagnostic
+// aid rather than an assertion: differences are logged, never failed, because
+// the authoritative conformance comparison lives in bench/conform.sh.
+//
+// It spawns the markdownlint Node binary once per fixture, which takes about
+// two minutes over the ~100 files in testdata, so it is skipped under -short
+// and when GOLDMARK_LINT_INTEGRATION is unset. Run it explicitly with:
+//
+//	GOLDMARK_LINT_INTEGRATION=1 go test ./lint -run TestIntegration -v
 func TestIntegration_CompareWithMarkdownlint(t *testing.T) {
+	if testing.Short() {
+		t.Skip("spawns markdownlint once per fixture; skipped in -short mode")
+	}
+	if os.Getenv("GOLDMARK_LINT_INTEGRATION") == "" {
+		t.Skip("set GOLDMARK_LINT_INTEGRATION=1 to run the markdownlint comparison")
+	}
 	if !integrationMarkdownlintAvailable() {
 		t.Skip("markdownlint not available, skipping integration test")
 	}

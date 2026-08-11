@@ -9,22 +9,57 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
+// sharedBinary caches the CLI binary built once for the whole package. Building
+// it per test used to dominate the suite: 32 tests x `go build` into a fresh
+// temporary directory was roughly four minutes of wall time.
+var (
+	sharedBinaryOnce sync.Once
+	sharedBinaryPath string
+	sharedBinaryErr  error
+)
+
+// buildBinary returns the path to the CLI binary, building it on first use.
+// The binary is immutable and read-only to the tests, so one copy is shared by
+// every test in the package, including tests running in parallel.
 func buildBinary(t *testing.T) string {
 	t.Helper()
-	bin := filepath.Join(t.TempDir(), "goldmark-lint")
-	if runtime.GOOS == "windows" {
-		bin += ".exe"
+	sharedBinaryOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "goldmark-lint-testbin")
+		if err != nil {
+			sharedBinaryErr = err
+			return
+		}
+		bin := filepath.Join(dir, "goldmark-lint")
+		if runtime.GOOS == "windows" {
+			bin += ".exe"
+		}
+		out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput()
+		if err != nil {
+			sharedBinaryErr = fmt.Errorf("building binary: %w\n%s", err, out)
+			return
+		}
+		sharedBinaryPath = bin
+	})
+	if sharedBinaryErr != nil {
+		t.Fatalf("failed to build binary: %v", sharedBinaryErr)
 	}
-	cmd := exec.Command("go", "build", "-o", bin, ".")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("failed to build binary: %v\n%s", err, out)
+	return sharedBinaryPath
+}
+
+// TestMain removes the shared binary's temporary directory once the package's
+// tests have finished. t.TempDir cannot be used for it because the binary
+// outlives any individual test.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if sharedBinaryPath != "" {
+		_ = os.RemoveAll(filepath.Dir(sharedBinaryPath))
 	}
-	return bin
+	os.Exit(code)
 }
 
 func TestCLI_Version(t *testing.T) {
@@ -480,7 +515,6 @@ func TestCLI_Summary_NoViolations(t *testing.T) {
 		t.Errorf("expected no summary output for zero violations, got: %s", stderr.String())
 	}
 }
-
 
 func TestCLI_Quiet_SuppressesSummary(t *testing.T) {
 	bin := buildBinary(t)
