@@ -12,7 +12,9 @@ import (
 type MD009 struct {
 	// BrSpaces is the number of spaces allowed at end of line for hard line breaks (default 2).
 	BrSpaces int `json:"br_spaces"`
-	// CodeBlocks controls whether trailing spaces in fenced code blocks are checked (default true).
+	// CodeBlocks controls whether trailing spaces inside code blocks are checked.
+	// It defaults to false: like markdownlint, trailing whitespace inside a code
+	// block is left alone because it can be significant.
 	CodeBlocks *bool `json:"code_blocks"`
 	// ListItemEmptyLines controls whether trailing spaces are allowed on empty lines
 	// within list items (default false).
@@ -61,11 +63,20 @@ func (r MD009) Check(doc *lint.Document) []lint.Violation {
 		// The raw-line fencedCodeBlockMask misses fenced code blocks inside
 		// blockquotes (where each line is prefixed with "> "); the AST-based
 		// walk handles those correctly.
+		// indentedBase records, for each line of an indented code block, the
+		// indentation the block itself starts at. Fenced blocks are left at -1
+		// because only an indented block can absorb a following blank line.
+		indentedBase := make([]int, len(doc.Lines))
+		for i := range indentedBase {
+			indentedBase[i] = -1
+		}
 		markBlockLines := func(n ast.Node) {
 			var cb *ast.BaseBlock
+			indented := false
 			switch node := n.(type) {
 			case *ast.CodeBlock:
 				cb = &node.BaseBlock
+				indented = true
 			case *ast.FencedCodeBlock:
 				cb = &node.BaseBlock
 			default:
@@ -74,12 +85,23 @@ func (r MD009) Check(doc *lint.Document) []lint.Violation {
 			if cb.Lines() == nil {
 				return
 			}
+			base := -1
 			for i := 0; i < cb.Lines().Len(); i++ {
 				seg := cb.Lines().At(i)
 				lineNum := doc.LineAt(seg.Start) - 1
-				if lineNum >= 0 && lineNum < len(codeMask) {
-					codeMask[lineNum] = true
+				if lineNum < 0 || lineNum >= len(codeMask) {
+					continue
 				}
+				codeMask[lineNum] = true
+				if !indented {
+					continue
+				}
+				// The block's own indentation is that of its first line; later
+				// lines may be indented further and must not raise the bar.
+				if base < 0 {
+					base = whitespaceWidth(doc.Lines[lineNum])
+				}
+				indentedBase[lineNum] = base
 			}
 		}
 		_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -89,23 +111,31 @@ func (r MD009) Check(doc *lint.Document) []lint.Violation {
 			markBlockLines(n)
 			return ast.WalkContinue, nil
 		})
-		// Also mark blank (all-whitespace) lines that immediately follow an
-		// indented code block line. Such lines are the trailing "gap" after
-		// a code chunk and should not be flagged for trailing spaces,
-		// matching markdownlint behaviour.
-		for i := 1; i < len(codeMask); i++ {
-			if codeMask[i] {
+
+		// A whitespace-only line that trails an indented code block belongs to
+		// that block when it reaches the block's indentation, and is ordinary
+		// blank content when it falls short of it. markdownlint draws the line
+		// in the same place:
+		//
+		//	    code at indent 4
+		//	<4 spaces>              part of the block, not reported
+		//	<3 spaces>              blank content, reported
+		//
+		// A line after a *fenced* block is never absorbed, which is why only
+		// indented blocks seed this.
+		lastIndent := -1
+		for i, line := range doc.Lines {
+			if strings.TrimSpace(line) != "" {
+				lastIndent = indentedBase[i]
 				continue
 			}
-			if strings.TrimSpace(doc.Lines[i]) != "" {
+			if codeMask[i] || lastIndent < 0 {
 				continue
 			}
-			// If the immediately preceding line is part of a code block, mark this line too.
-			if codeMask[i-1] {
+			if whitespaceWidth(line) >= lastIndent {
 				codeMask[i] = true
 			}
 		}
-
 	}
 
 	var violations []lint.Violation
@@ -131,4 +161,21 @@ func (r MD009) Check(doc *lint.Document) []lint.Violation {
 		}
 	}
 	return violations
+}
+
+// whitespaceWidth returns the column width of line's leading whitespace,
+// expanding tabs to the next four-column stop as CommonMark does.
+func whitespaceWidth(line string) int {
+	col := 0
+	for _, c := range line {
+		switch c {
+		case ' ':
+			col++
+		case '\t':
+			col += 4 - (col % 4)
+		default:
+			return col
+		}
+	}
+	return col
 }
