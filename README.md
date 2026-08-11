@@ -583,11 +583,18 @@ work; the table above is from a default (cached) run.
 
 ### Conformance
 
-**Corpus:** two real-world repositories at fixed commits:
+**Corpus:** three real-world sources at fixed commits:
 
 - [rust-lang/rfcs](https://github.com/rust-lang/rfcs) `c143e315` — 636 files
 - [tldr-pages/tldr](https://github.com/tldr-pages/tldr) `05c563d1` — 33,769 files
-- **Total: 34,405 Markdown files**
+- [commonmark/commonmark-spec](https://github.com/commonmark/commonmark-spec)
+  `108bec0c` — `spec.txt`, a single 9,811-line document
+- **Total: 34,406 Markdown files**
+
+The first two are ordinary prose. The CommonMark spec is included because it
+exercises Markdown's edge cases on purpose — deeply nested lists, 32-backtick
+fences, tabs as indentation — and because it covers the large-single-document
+path that thousands of small files do not.
 
 Both tools were run with default settings. The table compares per-rule
 violation counts; a delta of `0` means the tools agree on that rule's total.
@@ -596,69 +603,71 @@ violation counts; a delta of `0` means the tools agree on that rule's total.
 | --------- | ------------: | ----------------: | ------: |
 | MD001     |            16 |                16 |      +0 |
 | MD003     |             3 |                 3 |      +0 |
-| MD004     |         4,585 |             4,585 |      +0 |
+| MD004     |         4,604 |             4,604 |      +0 |
 | MD005     |            11 |                11 |      +0 |
-| MD007     |         1,247 |             1,247 |      +0 |
-| MD009     |           414 |               414 |      +0 |
+| MD007     |         1,251 |             1,251 |      +0 |
+| MD009     |           415 |               415 |      +0 |
 | MD010     |           124 |               124 |      +0 |
 | MD011     |             5 |                 5 |      +0 |
-| MD012     |           858 |               858 |      +0 |
+| MD012     |         1,449 |             1,450 |      -1 |
 | MD013     |        33,217 |            33,217 |      +0 |
 | MD014     |            13 |                13 |      +0 |
 | MD019     |             2 |                 2 |      +0 |
 | MD020     |             2 |                 2 |      +0 |
 | MD022     |         3,166 |             3,166 |      +0 |
 | MD024     |            91 |                91 |      +0 |
+| MD025     |             0 |                 3 |      -3 |
 | MD026     |           169 |               169 |      +0 |
 | MD027     |            15 |                15 |      +0 |
 | MD028     |            66 |                66 |      +0 |
-| MD029     |           110 |               110 |      +0 |
-| MD030     |            63 |                63 |      +0 |
-| MD031     |           908 |               908 |      +0 |
+| MD029     |           120 |               120 |      +0 |
+| MD030     |            90 |                90 |      +0 |
+| MD031     |           910 |               910 |      +0 |
 | MD032     |           539 |               562 |     -23 |
-| MD033     |           214 |               214 |      +0 |
+| MD033     |           217 |               217 |      +0 |
 | MD034     |           355 |               351 |      +4 |
 | MD035     |             3 |                 3 |      +0 |
 | MD036     |            63 |                63 |      +0 |
-| MD038     |            21 |                22 |      -1 |
+| MD038     |            24 |                25 |      -1 |
 | MD039     |             3 |                 3 |      +0 |
-| MD040     |           536 |               536 |      +0 |
+| MD040     |           540 |               540 |      +0 |
 | MD041     |           621 |               621 |      +0 |
 | MD045     |             2 |                 2 |      +0 |
-| MD046     |           137 |               141 |      -4 |
+| MD046     |           139 |               143 |      -4 |
 | MD047     |             8 |                 8 |      +0 |
 | MD049     |           346 |               346 |      +0 |
 | MD050     |            24 |                24 |      +0 |
-| MD051     |           233 |               233 |      +0 |
-| MD052     |             9 |                10 |      -1 |
+| MD051     |           236 |               236 |      +0 |
+| MD052     |            22 |                26 |      -4 |
 | MD053     |         3,220 |             3,220 |      +0 |
 | MD055     |            71 |                71 |      +0 |
 | MD056     |             6 |                 6 |      +0 |
 | MD058     |            48 |                48 |      +0 |
 | MD059     |            71 |                71 |      +0 |
 | MD060     |         2,151 |             2,151 |      +0 |
-| **TOTAL** |    **53,766** |        **53,791** | **-25** |
+| **TOTAL** |    **54,448** |        **54,480** | **-32** |
 
-38 of the 43 rules produce identical counts. The remaining five (MD032, MD034,
-MD038, MD046 and MD052) differ by 33 violations in total when counted without
-regard to direction, and by -25 on balance — under 0.1% of the total either
-way.
+37 of the 44 rules produce identical counts. The remaining seven (MD012,
+MD025, MD032, MD034, MD038, MD046 and MD052) differ by 40 violations in total
+when counted without regard to direction, and by -32 on balance — under 0.1%
+of the total either way.
 
 Counts alone can hide disagreement, because a false positive in one file and a
 missed violation in another cancel out. `conform.sh` therefore also compares
 the individual `(file, line, rule)` locations:
 
-| Measure                              | Count  |
-| ------------------------------------ | -----: |
-| Locations both tools agree on        | 51,982 |
-| Reported only by goldmark-lint       |      0 |
-| Reported only by markdownlint-cli2   |      8 |
+| Measure                            |  Count |
+| ---------------------------------- | -----: |
+| Locations both tools agree on      | 52,660 |
+| Reported only by goldmark-lint     |      0 |
+| Reported only by markdownlint-cli2 |     15 |
 
-goldmark-lint reports no violation that markdownlint does not. The eight
+**goldmark-lint reports no violation that markdownlint does not.** The 15
 locations it misses are MD046 (4) and MD032 (3), where goldmark and micromark
 disagree about whether indented text following a flush-left link reference
-definition is list content or an indented code block, and MD052 (1), a
-reference link whose text spans two source lines.
+definition is list content or an indented code block; MD052 (4+1), reference
+links whose text spans two source lines; MD025 (3); and MD012 (1), a blank-line
+run that begins immediately after front matter.
 
 To reproduce:
 
