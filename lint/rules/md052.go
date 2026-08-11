@@ -70,6 +70,14 @@ var md052CollapsedRE = regexp.MustCompile(`!?\[([^\]]+)\]\[\]`)
 // md052ShortcutRE matches shortcut references: [label] (not followed by ( or [).
 var md052ShortcutRE = regexp.MustCompile(`!?\[([^\]]+)\](?:[^(\[{]|$)`)
 
+// isFootnoteLabel reports whether label is a GFM footnote reference such as
+// [^note]. markdownlint parses these as footnotes rather than link references,
+// so an undefined one is not an MD052 violation. The definition scanner already
+// excluded them; the usage side has to agree.
+func isFootnoteLabel(label string) bool {
+	return strings.HasPrefix(label, "^")
+}
+
 func (r MD052) ignoredLabels() map[string]bool {
 	labels := r.IgnoredLabels
 	if len(labels) == 0 {
@@ -97,32 +105,25 @@ func (r MD052) Check(doc *lint.Document) []lint.Violation {
 	// Use goldmark's parsed link references for accurate label detection.
 	// This handles multi-line definitions, title-on-next-line, angle-bracket
 	// destinations, etc. — all cases that the regex may miss.
+	//
+	// Only goldmark's references are trusted. Re-scanning the source for
+	// "[label]: url" patterns over-collects, because a link reference
+	// definition is only a definition while it sits at the start of a block: a
+	// malformed one ends the run and turns every following line into paragraph
+	// text. In rust-lang/rfcs text/0507-release-channels.md a definition with
+	// an unbalanced ")" does exactly that, and the regex scan still registered
+	// the definitions below it, hiding two real violations. goldmark already
+	// handles definitions in blockquotes and labels containing code spans, so
+	// the scan bought nothing that the parser does not provide.
 	defined := make(map[string]bool)
 	for label := range doc.LinkRefs {
-		defined[strings.ToLower(label)] = true
-	}
-	// Also scan lines for definitions that goldmark might not export (e.g.
-	// definitions in blockquotes), using the regex as a supplement.
-	// We scan both the raw line (to capture backtick-label definitions like
-	// [`genawaiter`]: url) and the blankCodeSpans version (so that usage lines
-	// processed with blankCodeSpans can find the same blanked-label key).
-	for i, line := range doc.Lines {
-		if skipLine(i) {
-			continue
-		}
-		if md052DefLabelValid(line) {
-			if m := md052DefRE.FindStringSubmatch(line); m != nil {
-				defined[strings.ToLower(m[1])] = true
-			}
-		}
-		// Register the blanked label so that collapsed references like [`label`][]
-		// (where blankCodeSpans turns the label into spaces) can still be matched.
-		if blanked := blankCodeSpans(line); blanked != line {
-			if md052DefLabelValid(blanked) {
-				if m := md052DefRE.FindStringSubmatch(blanked); m != nil {
-					defined[strings.ToLower(m[1])] = true
-				}
-			}
+		lower := strings.ToLower(label)
+		defined[lower] = true
+		// Usage lines are matched after blanking code spans, so register the
+		// blanked form of the label too; that is how a reference such as
+		// [`name`][`name`] finds its definition.
+		if blanked := blankCodeSpans(lower); blanked != lower {
+			defined[blanked] = true
 		}
 	}
 
@@ -138,7 +139,7 @@ func (r MD052) Check(doc *lint.Document) []lint.Violation {
 			if label == "" {
 				continue // collapsed handled below
 			}
-			if ignored[label] {
+			if ignored[label] || isFootnoteLabel(label) {
 				continue
 			}
 			if !defined[label] {
@@ -153,7 +154,7 @@ func (r MD052) Check(doc *lint.Document) []lint.Violation {
 		// Collapsed references: [label][].
 		for _, m := range md052CollapsedRE.FindAllStringSubmatch(checkLine, -1) {
 			label := strings.ToLower(m[1])
-			if ignored[label] {
+			if ignored[label] || isFootnoteLabel(label) {
 				continue
 			}
 			if !defined[label] {
@@ -169,7 +170,7 @@ func (r MD052) Check(doc *lint.Document) []lint.Violation {
 		if r.ShortcutSyntax {
 			for _, m := range md052ShortcutRE.FindAllStringSubmatch(checkLine, -1) {
 				label := strings.ToLower(m[1])
-				if ignored[label] {
+				if ignored[label] || isFootnoteLabel(label) {
 					continue
 				}
 				if !defined[label] {

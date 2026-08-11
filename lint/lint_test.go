@@ -3660,3 +3660,75 @@ func TestMD038_FixStillRemovesUnnecessarySpaces(t *testing.T) {
 		}
 	}
 }
+
+// TestMD009_BlankLineAfterIndentedCodeBlock covers a whitespace-only line
+// directly after an indented code block. CommonMark excludes trailing blank
+// lines from the block, so the line is ordinary content and markdownlint
+// reports its trailing spaces. MD009 used to extend the code-block mask over
+// it and stay silent.
+//
+// Reduced from rust-lang/rfcs
+// text/0192-bounds-on-object-and-generic-types.md:363.
+func TestMD009_BlankLineAfterIndentedCodeBlock(t *testing.T) {
+	src := "# T\n\n- item text:\n\n      indented code line\n    \n  More item text.\n"
+	v := lintString(t, rules.MD009{}, src)
+	if len(v) != 1 {
+		t.Fatalf("expected 1 violation, got %d: %v", len(v), v)
+	}
+	if v[0].Line != 6 {
+		t.Errorf("MD009 reported line %d, want 6", v[0].Line)
+	}
+}
+
+// TestMD009_BlankLineInsideIndentedCodeBlock is the boundary case: a
+// whitespace-only line *between* two code lines is part of the block, and
+// neither linter reports it.
+func TestMD009_BlankLineInsideIndentedCodeBlock(t *testing.T) {
+	src := "# T\n\n    code one\n    \n    code two\n\nText.\n"
+	if v := lintString(t, rules.MD009{}, src); len(v) != 0 {
+		t.Errorf("expected no violations inside an indented code block, got %v", v)
+	}
+}
+
+// TestMD009_TrailingSpacesInsideCodeBlocksIgnored pins the documented default
+// of the code_blocks option, which is false.
+func TestMD009_TrailingSpacesInsideCodeBlocksIgnored(t *testing.T) {
+	for _, src := range []string{
+		"# T\n\n```sh\ncode with trailing   \n```\n\nText.\n",
+		"# T\n\n    indented code trailing   \n\nText.\n",
+	} {
+		if v := lintString(t, rules.MD009{}, src); len(v) != 0 {
+			t.Errorf("expected no violations inside code blocks, got %v for %q", v, src)
+		}
+	}
+}
+
+// TestMD009_BlankLineIndentThreshold pins where a whitespace-only line stops
+// belonging to the indented code block above it. markdownlint treats the line
+// as part of the block once it reaches the block's own indentation.
+func TestMD009_BlankLineIndentThreshold(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want int
+	}{
+		{"blank matches block indent", "# T\n\n    code at indent 4\n    \nText.\n", 0},
+		{"blank narrower than block", "# T\n\n    code at indent 4\n   \nText.\n", 1},
+		{"blank wider than block", "# T\n\n    code at indent 4\n      \nText.\n", 0},
+		{"blank narrower than nested block", "# T\n\n- item:\n\n      code at 6\n    \n  more text.\n", 1},
+		{"after a fenced block", "# T\n\n```sh\ncode\n```\n   \nText.\n", 1},
+		// The threshold is the block's own indentation, not that of whichever
+		// line happens to precede the blank: a block may indent later lines
+		// further, and that must not raise the bar. Reduced from rust-lang/rfcs
+		// text/1211-mir.md:282.
+		{"deeper later line does not raise the bar",
+			"# T\n\n    DROP_KIND = SHALLOW\n              | DEEP\n             \nText.\n", 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if v := lintString(t, rules.MD009{}, tc.src); len(v) != tc.want {
+				t.Errorf("got %d violations, want %d: %v", len(v), tc.want, v)
+			}
+		})
+	}
+}
