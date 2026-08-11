@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -2369,12 +2370,45 @@ func TestFrontMatter_MD041_Invalid(t *testing.T) {
 	}
 }
 
-func TestFrontMatter_DotDotDot_Valid(t *testing.T) {
-	// Front matter closed with "..." should also be stripped.
+func TestFrontMatter_DotDotDot_DoesNotCloseBlock(t *testing.T) {
+	// "..." is a YAML document end marker, but markdownlint's default front
+	// matter pattern only recognises "---", so a block closed with "..." is not
+	// closed at all and the document is treated as starting at line 1.
+	// markdownlint reports MD041 on this input for the same reason.
 	src := "---\ntitle: My Page\n...\n\n# Heading\n"
 	v := lintString(t, rules.MD041{}, src)
-	if len(v) != 0 {
-		t.Errorf("expected no violations for front matter closed with ..., got %v", v)
+	if len(v) != 1 {
+		t.Fatalf("expected 1 violation for front matter closed with ..., got %v", v)
+	}
+	if v[0].Line != 1 {
+		t.Errorf("reported line %d, want 1", v[0].Line)
+	}
+}
+
+// TestFrontMatter_DotDotDotScansToNextDashes covers the consequence that the
+// CommonMark spec runs into: a block opened with "---" and closed with "..."
+// swallows everything up to the next "---" line. On spec.txt that is line 881,
+// so markdownlint reports nothing before it — and now neither does
+// goldmark-lint. Content after the later "---" is linted normally.
+func TestFrontMatter_DotDotDotScansToNextDashes(t *testing.T) {
+	src := "---\ntitle: T\n...\n\n#  Early heading\n\nText.\n\n---\n\n#  Late heading\n"
+	v := lintString(t, rules.MD019{}, src)
+	if len(v) != 1 {
+		t.Fatalf("expected only the heading after the closing --- to be seen, got %v", v)
+	}
+	if v[0].Line != 11 {
+		t.Errorf("reported line %d, want 11 (the late heading)", v[0].Line)
+	}
+}
+
+// TestFrontMatter_DotDotDotOverridableByConfig documents the escape hatch: a
+// project that really does close its front matter with "..." can say so.
+func TestFrontMatter_DotDotDotOverridableByConfig(t *testing.T) {
+	src := "---\ntitle: My Page\n...\n\n# Heading\n"
+	linter := lint.NewLinter(rules.MD041{})
+	linter.FrontMatterRegexp = regexp.MustCompile(`(?s)\A---\r?\n.*?\n\.\.\.\r?\n`)
+	if v := linter.Lint([]byte(src)); len(v) != 0 {
+		t.Errorf("expected no violations with a frontMatter pattern accepting ..., got %v", v)
 	}
 }
 
