@@ -589,60 +589,76 @@ work; the table above is from a default (cached) run.
 - [tldr-pages/tldr](https://github.com/tldr-pages/tldr) `05c563d1` — 33,769 files
 - **Total: 34,405 Markdown files**
 
-Both tools were run with default settings and their per-rule violation counts
-compared. A delta of `0` means the tools agree exactly on that rule.
+Both tools were run with default settings. The table compares per-rule
+violation counts; a delta of `0` means the tools agree on that rule's total.
 
 | Rule      | goldmark-lint | markdownlint-cli2 | delta   |
 | --------- | ------------: | ----------------: | ------: |
-| MD001     | 16            | 16                | +0      |
-| MD003     | 3             | 3                 | +0      |
-| MD004     | 4,585         | 4,585             | +0      |
-| MD005     | 11            | 11                | +0      |
-| MD007     | 1,247         | 1,247             | +0      |
-| MD009     | 413           | 414               | -1      |
-| MD010     | 124           | 124               | +0      |
-| MD011     | 5             | 5                 | +0      |
-| MD012     | 858           | 858               | +0      |
-| MD013     | 33,219        | 33,217            | +2      |
-| MD014     | 13            | 13                | +0      |
-| MD019     | 2             | 2                 | +0      |
-| MD020     | 2             | 2                 | +0      |
-| MD022     | 3,166         | 3,166             | +0      |
-| MD024     | 91            | 91                | +0      |
-| MD026     | 169           | 169               | +0      |
-| MD027     | 15            | 15                | +0      |
-| MD028     | 66            | 66                | +0      |
-| MD029     | 104           | 110               | -6      |
-| MD030     | 63            | 63                | +0      |
-| MD031     | 908           | 908               | +0      |
-| MD032     | 539           | 562               | -23     |
-| MD033     | 214           | 214               | +0      |
-| MD034     | 355           | 351               | +4      |
-| MD035     | 3             | 3                 | +0      |
-| MD036     | 63            | 63                | +0      |
-| MD038     | 22            | 22                | +0      |
-| MD039     | 3             | 3                 | +0      |
-| MD040     | 536           | 536               | +0      |
-| MD041     | 621           | 621               | +0      |
-| MD045     | 2             | 2                 | +0      |
-| MD046     | 137           | 141               | -4      |
-| MD047     | 8             | 8                 | +0      |
-| MD049     | 346           | 346               | +0      |
-| MD050     | 24            | 24                | +0      |
-| MD051     | 233           | 233               | +0      |
-| MD052     | 10            | 10                | +0      |
-| MD053     | 3,220         | 3,220             | +0      |
-| MD055     | 71            | 71                | +0      |
-| MD056     | 6             | 6                 | +0      |
-| MD058     | 48            | 48                | +0      |
-| MD059     | 71            | 71                | +0      |
-| MD060     | 2,151         | 2,151             | +0      |
-| **TOTAL** | **53,763**    | **53,791**        | **-28** |
+| MD001     |            16 |                16 |      +0 |
+| MD003     |             3 |                 3 |      +0 |
+| MD004     |         4,585 |             4,585 |      +0 |
+| MD005     |            11 |                11 |      +0 |
+| MD007     |         1,247 |             1,247 |      +0 |
+| MD009     |           414 |               414 |      +0 |
+| MD010     |           124 |               124 |      +0 |
+| MD011     |             5 |                 5 |      +0 |
+| MD012     |           858 |               858 |      +0 |
+| MD013     |        33,217 |            33,217 |      +0 |
+| MD014     |            13 |                13 |      +0 |
+| MD019     |             2 |                 2 |      +0 |
+| MD020     |             2 |                 2 |      +0 |
+| MD022     |         3,166 |             3,166 |      +0 |
+| MD024     |            91 |                91 |      +0 |
+| MD026     |           169 |               169 |      +0 |
+| MD027     |            15 |                15 |      +0 |
+| MD028     |            66 |                66 |      +0 |
+| MD029     |           110 |               110 |      +0 |
+| MD030     |            63 |                63 |      +0 |
+| MD031     |           908 |               908 |      +0 |
+| MD032     |           539 |               562 |     -23 |
+| MD033     |           214 |               214 |      +0 |
+| MD034     |           355 |               351 |      +4 |
+| MD035     |             3 |                 3 |      +0 |
+| MD036     |            63 |                63 |      +0 |
+| MD038     |            21 |                22 |      -1 |
+| MD039     |             3 |                 3 |      +0 |
+| MD040     |           536 |               536 |      +0 |
+| MD041     |           621 |               621 |      +0 |
+| MD045     |             2 |                 2 |      +0 |
+| MD046     |           137 |               141 |      -4 |
+| MD047     |             8 |                 8 |      +0 |
+| MD049     |           346 |               346 |      +0 |
+| MD050     |            24 |                24 |      +0 |
+| MD051     |           233 |               233 |      +0 |
+| MD052     |             9 |                10 |      -1 |
+| MD053     |         3,220 |             3,220 |      +0 |
+| MD055     |            71 |                71 |      +0 |
+| MD056     |             6 |                 6 |      +0 |
+| MD058     |            48 |                48 |      +0 |
+| MD059     |            71 |                71 |      +0 |
+| MD060     |         2,151 |             2,151 |      +0 |
+| **TOTAL** |    **53,766** |        **53,791** | **-25** |
 
-37 out of 43 rules produce identical violation counts. The remaining 6 rules
-differ by 40 violations in total when counted without regard to direction, and
-by -28 on balance (< 0.1% of the total either way), reflecting minor edge-case
-differences in rule interpretation.
+38 of the 43 rules produce identical counts. The remaining five (MD032, MD034,
+MD038, MD046 and MD052) differ by 33 violations in total when counted without
+regard to direction, and by -25 on balance — under 0.1% of the total either
+way.
+
+Counts alone can hide disagreement, because a false positive in one file and a
+missed violation in another cancel out. `conform.sh` therefore also compares
+the individual `(file, line, rule)` locations:
+
+| Measure                              | Count  |
+| ------------------------------------ | -----: |
+| Locations both tools agree on        | 51,982 |
+| Reported only by goldmark-lint       |      0 |
+| Reported only by markdownlint-cli2   |      8 |
+
+goldmark-lint reports no violation that markdownlint does not. The eight
+locations it misses are MD046 (4) and MD032 (3), where goldmark and micromark
+disagree about whether indented text following a flush-left link reference
+definition is list content or an indented code block, and MD052 (1), a
+reference link whose text spans two source lines.
 
 To reproduce:
 
