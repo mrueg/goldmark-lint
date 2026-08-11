@@ -42,6 +42,25 @@ jobs:
             exit 1
           fi
 
+  self-lint:
+    name: Self-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: .go-version
+      # Lint this repository's own Markdown with the linter being built. A
+      # change that makes goldmark-lint wrong about a real document fails here
+      # rather than reaching users.
+      #
+      # The file list comes from git rather than a glob so that testdata/, which
+      # holds deliberately malformed fixtures, is excluded without an "ignores"
+      # entry in .markdownlint-cli2.yaml — that config is auto-discovered by the
+      # CLI tests too, and excluding testdata there made them lint nothing.
+      - name: Lint own Markdown
+        run: go run ./cmd/goldmark-lint --no-cache $(git ls-files '*.md' ':!:testdata/*')
+
   build:
     name: Build
     runs-on: ubuntu-latest
