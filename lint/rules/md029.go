@@ -192,6 +192,52 @@ func listItemNumFromSeg(source []byte, segStart int) int {
 	return n
 }
 
+// lineIndent returns the number of leading space characters in line.
+func lineIndent(line string) int {
+	n := 0
+	for n < len(line) && line[n] == ' ' {
+		n++
+	}
+	return n
+}
+
+// gapKeepsListOpen reports whether the source lines strictly between two
+// ordered-list fragments leave the earlier list open as far as markdownlint is
+// concerned, so the later fragment continues its numbering rather than starting
+// a new list.
+//
+// goldmark ends a list at a link reference definition written flush against the
+// left margin, while micromark (which markdownlint uses) keeps the list open
+// when the surrounding content is indented into it. Only that case is treated
+// as a continuation: every non-blank line in the gap must be either a link
+// reference definition or indented past the list markers, and at least one must
+// be indented. A blockquote, fenced code block, thematic break, HTML block,
+// heading or plain paragraph at the left margin genuinely terminates the list
+// in both parsers, and the fragment after it must restart at 1.
+//
+// fromLine and toLine are 1-based and exclusive at both ends.
+func gapKeepsListOpen(lines []string, fromLine, toLine, markerIndent int) bool {
+	sawIndentedContent := false
+	for i := fromLine; i < toLine-1; i++ {
+		if i < 0 || i >= len(lines) {
+			continue
+		}
+		line := lines[i]
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if lineIndent(line) > markerIndent {
+			sawIndentedContent = true
+			continue
+		}
+		if linkRefLabel(line) != "" {
+			continue
+		}
+		return false
+	}
+	return sawIndentedContent
+}
+
 // Check validates ordered list item numbering style.
 func (r MD029) Check(doc *lint.Document) []lint.Violation {
 	style := r.Style
@@ -201,18 +247,16 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 
 	var violations []lint.Violation
 
-	// lastListEnd tracks, for each parent node and "one_or_ordered" style, the
-	// last-item number, item-count, and list node of the most recent multi-item
-	// consecutive ordered list. This lets us detect continuation fragments: when
-	// the parser splits a sequential list at a link definition, the second
-	// fragment starts at N>1 and follows a previous multi-item list that ended
-	// at N-1, with no heading in between.
-	type listState struct {
-		lastNum int
-		count   int
-		node    ast.Node
+	// prevFragment records, per parent node, the trailing state of the most
+	// recent valid consecutive ordered list, so that a following fragment can be
+	// recognised as a continuation the parser split off. See gapKeepsListOpen.
+	type fragment struct {
+		lastNum      int
+		count        int
+		lastLine     int
+		markerIndent int
 	}
-	lastListEnd := map[ast.Node]listState{}
+	prevFragment := map[ast.Node]fragment{}
 
 	// Walk AST ordered lists and check each list independently.
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -352,65 +396,53 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 				}
 			}
 		case "one_or_ordered":
+			// markerIndent is the indentation of this list's markers, used to
+			// decide whether intervening lines are indented into the list.
+			markerIndent := 0
+			if items[0].line-1 >= 0 && items[0].line-1 < len(doc.Lines) {
+				markerIndent = lineIndent(doc.Lines[items[0].line-1])
+			}
 			// Valid if all items are the same number, or items form a consecutive
 			// sequence starting at 0 or 1.
 			if allOne || sequentialFromFirst {
-				// Record this valid sequential list so the next fragment (if any)
-				// can be identified as a continuation.
 				if sequentialFromFirst && len(items) > 1 {
-					lastListEnd[list.Parent()] = listState{items[len(items)-1].number, len(items), list}
+					prevFragment[list.Parent()] = fragment{
+						lastNum:      items[len(items)-1].number,
+						count:        len(items),
+						lastLine:     items[len(items)-1].line,
+						markerIndent: markerIndent,
+					}
 				}
 				break
 			}
 			first := items[0].number
 			if first > 1 {
-				// Check if this is a parser-split continuation of a previous
-				// multi-item sequential list at the same parent level.
-				// Conditions: both lists have > 1 items, items are consecutive,
-				// AND there is no heading between the two lists (headings break
-				// list context; link definitions / indented paragraphs do not).
-				parent := list.Parent()
-				if len(items) > 1 {
-					if prev, ok := lastListEnd[parent]; ok &&
-						prev.count > 1 &&
-						first == prev.lastNum+1 {
-						// Check this list is itself consecutive.
-						consecutive := true
-						for i := 1; i < len(items); i++ {
-							if items[i].number != items[i-1].number+1 {
-								consecutive = false
-								break
-							}
-						}
-						// Check there is no heading OR paragraph between prev.node
-						// and this list. Headings break list context; regular paragraphs
-						// indicate a clear list termination. Link definitions, indented
-						// code blocks (CodeBlock/TextBlock), and similar "orphaned"
-						// list-continuation content may appear without terminating the
-						// logical list (depending on the parser).
-						noBreakBetween := consecutive
-						if noBreakBetween {
-							for sib := prev.node.NextSibling(); sib != nil; sib = sib.NextSibling() {
-								if sib == list {
-									break
-								}
-								switch sib.(type) {
-								case *ast.Heading, *ast.Paragraph:
-									noBreakBetween = false
-								}
-								if !noBreakBetween {
-									break
-								}
-							}
-						}
-						if noBreakBetween {
-							// Treat as continuation; update state and skip.
-							lastListEnd[parent] = listState{items[len(items)-1].number, len(items), list}
-							return ast.WalkContinue, nil
-						}
+				// A fragment the parser split off from a still-open list keeps
+				// the earlier numbering; anything else must restart at 1.
+				consecutive := true
+				for i := 1; i < len(items); i++ {
+					if items[i].number != items[i-1].number+1 {
+						consecutive = false
+						break
 					}
 				}
-				// List starts at non-0, non-1: expect sequential from 1.
+				if prev, ok := prevFragment[list.Parent()]; ok &&
+					consecutive && len(items) > 1 && prev.count > 1 &&
+					first == prev.lastNum+1 &&
+					gapKeepsListOpen(doc.Lines, prev.lastLine, items[0].line, prev.markerIndent) {
+					prevFragment[list.Parent()] = fragment{
+						lastNum:      items[len(items)-1].number,
+						count:        len(items),
+						lastLine:     items[len(items)-1].line,
+						markerIndent: markerIndent,
+					}
+					return ast.WalkContinue, nil
+				}
+				// A list whose first item is neither 0 nor 1 is a violation, and
+				// the expected numbering restarts from 1. markdownlint applies
+				// this to every list, including one that a block-level
+				// interruption (blockquote, fenced code block, thematic break,
+				// HTML block) has split off from an earlier list.
 				for i, it := range items {
 					expected := i + 1
 					if it.number != expected {
