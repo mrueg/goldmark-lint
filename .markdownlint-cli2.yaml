@@ -1,0 +1,23 @@
+# Configuration used to lint this repository's own Markdown.
+#
+# goldmark-lint is run against its own docs in CI (see .github/workflows/ci.yml)
+# so that a change which makes the linter wrong about a real document is caught
+# here first.
+
+config:
+  MD013:
+    # CLI --help output and example transcripts are reproduced verbatim; hard
+    # wrapping them would misrepresent what the tool actually prints.
+    code_blocks: false
+    # A table row cannot be wrapped without breaking the table.
+    tables: false
+
+# There is deliberately no "ignores" key here. This file sits at the repository
+# root, so it is discovered by config auto-discovery from any working directory
+# inside the repo — including cmd/goldmark-lint while the CLI tests run. Those
+# tests lint fixtures under testdata/, and an "ignores: testdata/**" entry made
+# the binary skip them, so fifteen tests saw no violations and failed.
+#
+# testdata/ holds deliberately malformed input and must not be self-linted, so
+# the CI job selects the files to lint instead of excluding them here; see the
+# self-lint job in .github/workflows/ci.yml.
