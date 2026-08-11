@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mrueg/goldmark-lint/lint"
 )
@@ -335,5 +336,174 @@ func TestCLI_CacheInvalidatedOnConfigChange(t *testing.T) {
 	newConfigHash := hashConfig(map[string]interface{}{"default": false}, version)
 	if entry.ConfigHash != newConfigHash {
 		t.Errorf("configHash = %q, want hash of disabled-rules config %q", entry.ConfigHash, newConfigHash)
+	}
+}
+
+func TestPruneCache_DropsMissingFiles(t *testing.T) {
+	dir := t.TempDir()
+	present := filepath.Join(dir, "present.md")
+	if err := os.WriteFile(present, []byte("# Doc\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(dir, "deleted.md")
+
+	now := time.Now()
+	c := lintCache{
+		present: {Hash: "a", LastUsed: now.Unix()},
+		missing: {Hash: "b", LastUsed: now.Unix()},
+	}
+
+	if removed, _ := pruneCache(c, nil, now); removed != 1 {
+		t.Errorf("pruneCache removed %d entries, want 1", removed)
+	}
+	if _, ok := c[missing]; ok {
+		t.Error("entry for a deleted file survived pruning")
+	}
+	if _, ok := c[present]; !ok {
+		t.Error("entry for an existing file was pruned")
+	}
+}
+
+func TestPruneCache_DropsEntriesOlderThanMaxAge(t *testing.T) {
+	dir := t.TempDir()
+	fresh := filepath.Join(dir, "fresh.md")
+	stale := filepath.Join(dir, "stale.md")
+	for _, p := range []string{fresh, stale} {
+		if err := os.WriteFile(p, []byte("# Doc\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	now := time.Now()
+	c := lintCache{
+		fresh: {Hash: "a", LastUsed: now.Add(-time.Hour).Unix()},
+		stale: {Hash: "b", LastUsed: now.Add(-maxCacheEntryAge - time.Hour).Unix()},
+	}
+
+	if removed, _ := pruneCache(c, nil, now); removed != 1 {
+		t.Errorf("pruneCache removed %d entries, want 1", removed)
+	}
+	if _, ok := c[stale]; ok {
+		t.Errorf("entry unused for longer than %v survived pruning", maxCacheEntryAge)
+	}
+	if _, ok := c[fresh]; !ok {
+		t.Error("recently used entry was pruned")
+	}
+}
+
+func TestPruneCache_KeepsTouchedAndUnstampedEntries(t *testing.T) {
+	dir := t.TempDir()
+	touchedPath := filepath.Join(dir, "touched.md")
+	legacy := filepath.Join(dir, "legacy.md")
+	if err := os.WriteFile(legacy, []byte("# Doc\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now()
+	c := lintCache{
+		// Touched by this run but the file was deleted mid-run, and ancient:
+		// still kept, because the current run is the authority on what it used.
+		touchedPath: {Hash: "a", LastUsed: now.Add(-10 * maxCacheEntryAge).Unix()},
+		// Written by a version predating LastUsed: kept so that upgrading does
+		// not discard an otherwise valid cache.
+		legacy: {Hash: "b"},
+	}
+
+	removed, stamped := pruneCache(c, map[string]bool{touchedPath: true}, now)
+	if removed != 0 {
+		t.Errorf("pruneCache removed %d entries, want 0", removed)
+	}
+	if len(c) != 2 {
+		t.Errorf("cache has %d entries after pruning, want 2", len(c))
+	}
+	// The legacy entry must be stamped so it ages out normally from now on
+	// instead of being grandfathered in forever.
+	if stamped != 1 {
+		t.Errorf("pruneCache stamped %d entries, want 1", stamped)
+	}
+	if c[legacy].LastUsed == 0 {
+		t.Error("legacy entry was left without a LastUsed stamp")
+	}
+}
+
+func TestNeedsTimestampRefresh(t *testing.T) {
+	now := time.Now()
+	c := lintCache{
+		"recent.md": {LastUsed: now.Add(-time.Minute).Unix()},
+		"old.md":    {LastUsed: now.Add(-lastUsedRefreshInterval - time.Hour).Unix()},
+	}
+
+	if needsTimestampRefresh(c, map[string]bool{"recent.md": true}, now) {
+		t.Error("a run touching only freshly-stamped entries should not rewrite the cache")
+	}
+	if !needsTimestampRefresh(c, map[string]bool{"old.md": true}, now) {
+		t.Error("a run touching a stale-stamped entry should refresh it")
+	}
+	if needsTimestampRefresh(c, nil, now) {
+		t.Error("a run touching nothing should not rewrite the cache")
+	}
+}
+
+// TestCLI_Cache_PrunesDeletedFiles exercises pruning end to end: a file that is
+// linted, cached, and then deleted must not linger in the cache file. The cache
+// previously only ever grew, so a checkout that had run the benchmark corpora
+// accumulated a 16 MB cache of 42,000 entries that had to be parsed every run.
+func TestCLI_Cache_PrunesDeletedFiles(t *testing.T) {
+	bin := buildBinary(t)
+
+	dir := t.TempDir()
+	keep := filepath.Join(dir, "keep.md")
+	gone := filepath.Join(dir, "gone.md")
+	for _, p := range []string{keep, gone} {
+		if err := os.WriteFile(p, []byte("# Title\n\nBody text.\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	runLint := func(files ...string) {
+		cmd := exec.Command(bin, files...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) {
+				t.Fatalf("unexpected error: %v\n%s", err, out)
+			}
+		}
+	}
+
+	runLint(keep, gone)
+
+	readCache := func() lintCache {
+		data, err := os.ReadFile(filepath.Join(dir, cacheFileName))
+		if err != nil {
+			t.Fatalf("cache file not written: %v", err)
+		}
+		var c lintCache
+		if err := json.Unmarshal(data, &c); err != nil {
+			t.Fatalf("cache file is not valid JSON: %v", err)
+		}
+		return c
+	}
+
+	if got := len(readCache()); got != 2 {
+		t.Fatalf("cache has %d entries after first run, want 2", got)
+	}
+
+	// Delete one file and lint only the other; the deleted one must be dropped.
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	// Change the surviving file so the run produces a cache write.
+	if err := os.WriteFile(keep, []byte("# Title\n\nDifferent body.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runLint(keep)
+
+	after := readCache()
+	if _, ok := after[gone]; ok {
+		t.Error("cache still holds an entry for a deleted file")
+	}
+	if _, ok := after[keep]; !ok {
+		t.Error("cache lost the entry for the file that was just linted")
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"text/tabwriter"
+	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/mrueg/goldmark-lint/lint"
@@ -349,8 +350,10 @@ func run(_ context.Context, cmd *cli.Command) error {
 	}
 
 	results := make([]fileResult, len(allFiles))
-	newEntries := make(lintCache) // updated cache entries collected from goroutines
-	var mu sync.Mutex             // protects newEntries
+	newEntries := make(lintCache)    // updated cache entries collected from goroutines
+	touched := make(map[string]bool) // every file this run served from or wrote to the cache
+	var mu sync.Mutex                // protects newEntries and touched
+	cacheStamp := time.Now().Unix()
 
 	// Bound the number of concurrent goroutines to avoid resource exhaustion
 	// on large repositories. Using GOMAXPROCS as the concurrency limit ensures
@@ -388,6 +391,9 @@ func run(_ context.Context, cmd *cli.Command) error {
 			if useCache {
 				if entry, ok := cache[file]; ok && entry.Hash == hash && entry.ConfigHash == configHash {
 					results[i] = fileResult{violations: entry.Violations}
+					mu.Lock()
+					touched[file] = true
+					mu.Unlock()
 					return
 				}
 			}
@@ -428,7 +434,13 @@ func run(_ context.Context, cmd *cli.Command) error {
 			// Store the new cache entry.
 			if useCache {
 				mu.Lock()
-				newEntries[file] = cacheEntry{Hash: hash, ConfigHash: configHash, Violations: violations}
+				newEntries[file] = cacheEntry{
+					Hash:       hash,
+					ConfigHash: configHash,
+					LastUsed:   cacheStamp,
+					Violations: violations,
+				}
+				touched[file] = true
 				mu.Unlock()
 			}
 		}(i, file)
@@ -548,13 +560,28 @@ func run(_ context.Context, cmd *cli.Command) error {
 		closeFile()
 	}
 
-	// Persist updated cache entries.
-	if useCache && cwd != "" && len(newEntries) > 0 {
+	// Persist updated cache entries, dropping ones that can no longer be useful.
+	if useCache && cwd != "" {
+		now := time.Now()
+		// Refresh the stamps of entries served from the cache so that files
+		// which keep being linted do not age out.
+		refresh := needsTimestampRefresh(cache, touched, now)
+		if refresh {
+			for path := range touched {
+				if entry, ok := cache[path]; ok {
+					entry.LastUsed = cacheStamp
+					cache[path] = entry
+				}
+			}
+		}
 		for k, v := range newEntries {
 			cache[k] = v
 		}
-		if err := saveCache(cwd, cache); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not save cache: %v\n", err)
+		pruned, stamped := pruneCache(cache, touched, now)
+		if len(newEntries) > 0 || pruned > 0 || stamped > 0 || refresh {
+			if err := saveCache(cwd, cache); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not save cache: %v\n", err)
+			}
 		}
 	}
 
