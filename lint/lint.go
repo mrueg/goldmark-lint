@@ -235,6 +235,11 @@ func parseFrontMatterFieldsAt(source []byte, end int) map[string]string {
 			lineEnd = start + next
 		}
 		line := strings.TrimRight(string(source[start:lineEnd]), "\r")
+		// "..." stops field harvesting even though it does not close the block
+		// for frontMatterEnd. The two differ on purpose: the block may now run
+		// past a "..." to a later "---", and everything after the "..." is the
+		// document proper, not YAML. Reading keys out of it would invent front
+		// matter fields from ordinary prose containing a colon.
 		if line == "---" || line == "..." {
 			break
 		}
@@ -260,7 +265,15 @@ func parseFrontMatterFieldsAt(source []byte, end int) map[string]string {
 // frontMatterEnd returns the byte offset of the end of the source's leading
 // front matter block, or 0 if the source does not begin with valid front matter.
 // Front matter starts with "---" on the very first line and ends with a line
-// containing only "---" or "...".
+// containing only "---".
+//
+// A line containing only "..." does not close the block, even though YAML
+// accepts it as a document end marker, because markdownlint's default front
+// matter pattern only recognises "---". Treating "..." as a terminator made
+// goldmark-lint disagree with markdownlint about where the document begins,
+// and every rule then reported against a different body of text. A document
+// that closes its front matter with "..." is scanned on to the next "---";
+// set the frontMatter config key to override the pattern.
 func frontMatterEnd(source []byte) int {
 	if !bytes.HasPrefix(source, []byte("---\n")) && !bytes.HasPrefix(source, []byte("---\r\n")) {
 		return 0
@@ -284,7 +297,7 @@ func frontMatterEnd(source []byte) int {
 		if len(line) > 0 && line[len(line)-1] == '\r' {
 			line = line[:len(line)-1]
 		}
-		if bytes.Equal(line, []byte("---")) || bytes.Equal(line, []byte("...")) {
+		if bytes.Equal(line, []byte("---")) {
 			end := lineEnd
 			if end < len(source) && source[end] == '\n' {
 				end++
