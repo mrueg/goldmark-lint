@@ -325,19 +325,46 @@ func run(_ context.Context, cmd *cli.Command) error {
 
 	// Collect all non-stdin files in order so that output remains deterministic.
 	var allFiles []string
+	matchedNothing := 0
+	globPatterns := 0
 	for _, pattern := range inputGlobs {
 		if pattern == "-" {
 			continue
 		}
 		files, err := doublestar.FilepathGlob(pattern)
-		if err != nil || len(files) == 0 {
+		if err != nil {
+			// A malformed pattern is a usage error, not a missing file.
+			fmt.Fprintf(os.Stderr, "Error: invalid glob pattern %q: %v\n", pattern, err)
+			exitCode = 2
+			continue
+		}
+		if len(files) == 0 {
+			if isGlobPattern(pattern) {
+				// A glob that matches nothing is not an error: an optional docs
+				// directory that happens to be empty is a normal CI state, and
+				// markdownlint-cli2 treats it the same way. Passing the pattern
+				// through as a literal path here produced a confusing
+				// "no such file or directory: docs/**/*.md" and exit code 2.
+				globPatterns++
+				matchedNothing++
+				continue
+			}
+			// A literal path that does not exist was named explicitly by the
+			// user, so surface it as an error via the normal read path below.
 			files = []string{pattern}
+		} else if isGlobPattern(pattern) {
+			globPatterns++
 		}
 		for _, file := range files {
 			if !isIgnored(file, ignores) && !isIgnoredByPattern(file, ignorePatternRegexps) {
 				allFiles = append(allFiles, file)
 			}
 		}
+	}
+	// Say so when every glob came up empty, so a typo does not look like a
+	// clean run. This is informational only and does not affect the exit code.
+	if !quiet && len(allFiles) == 0 && matchedNothing > 0 && matchedNothing == globPatterns {
+		fmt.Fprintf(os.Stderr, "No files matched the given pattern(s): %s\n", strings.Join(inputGlobs, " "))
 	}
 
 	// fileResult carries the outcome of processing a single file.
@@ -680,6 +707,14 @@ func writeFileAtomic(path string, data []byte) error {
 		return err
 	}
 	return os.Rename(tmpName, path)
+}
+
+// isGlobPattern reports whether pattern contains glob metacharacters, i.e.
+// whether the user asked "every file matching this" rather than naming one
+// specific file. Only the former is allowed to match nothing without it being
+// treated as an error.
+func isGlobPattern(pattern string) bool {
+	return strings.ContainsAny(pattern, "*?[{")
 }
 
 // printRulesTable writes a human-readable table of all known rules to w.
