@@ -434,6 +434,12 @@ func indentedCodeBlockMask(doc *lint.Document) []bool {
 // part of an HTML block. It uses the goldmark AST to accurately detect HTML blocks.
 func htmlBlockLineMask(doc *lint.Document) []bool {
 	mask := make([]bool, len(doc.Lines))
+	markLine := func(offset int) {
+		lineIdx := doc.LineAt(offset) - 1
+		if lineIdx >= 0 && lineIdx < len(mask) {
+			mask[lineIdx] = true
+		}
+	}
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
@@ -442,11 +448,14 @@ func htmlBlockLineMask(doc *lint.Document) []bool {
 			return ast.WalkContinue, nil
 		}
 		for i := 0; i < n.Lines().Len(); i++ {
-			seg := n.Lines().At(i)
-			lineIdx := doc.LineAt(seg.Start) - 1
-			if lineIdx >= 0 && lineIdx < len(mask) {
-				mask[lineIdx] = true
-			}
+			markLine(n.Lines().At(i).Start)
+		}
+		// goldmark keeps the line that closes an HTML block (the "-->" of a
+		// comment, for instance) out of Lines() and in a separate ClosureLine
+		// segment. Without this it is not masked, so rules that skip HTML blocks
+		// see the closing line as ordinary content.
+		if hb, ok := n.(*ast.HTMLBlock); ok && hb.HasClosure() {
+			markLine(hb.ClosureLine.Start)
 		}
 		return ast.WalkContinue, nil
 	})
