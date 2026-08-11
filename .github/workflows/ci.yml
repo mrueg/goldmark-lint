@@ -52,9 +52,14 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: .go-version
+      # The snapshot build now produces SBOMs, so syft has to be present for it
+      # to be a faithful rehearsal of the release.
+      - uses: anchore/sbom-action/download-syft@v0
       - uses: goreleaser/goreleaser-action@v7
         with:
-          args: release --snapshot --clean --skip=ko
+          # Signing is skipped: it needs the OIDC identity that only the
+          # release workflow is granted. Everything else runs as it will on a tag.
+          args: release --snapshot --clean --skip=ko --skip=sign
 
   conform:
     name: Conformance

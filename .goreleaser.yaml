@@ -24,16 +24,36 @@ archives:
       - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
 
-kos:
-  - repositories:
-      - ghcr.io/mrueg/goldmark-lint
-    tags:
-      - "{{.Version}}"
-      - latest
-    bare: true
-    platforms:
-      - linux/amd64
-      - linux/arm64
+# Record what went into each archive so consumers can scan releases for known
+# vulnerabilities without unpacking and guessing at the dependency set.
+sboms:
+  - artifacts: archive
+
+# Sign the checksum file with cosign in keyless mode: the signing identity is
+# the GitHub Actions OIDC token for this workflow, so no private key has to be
+# held anywhere. Signing the checksums covers every archive it lists.
+#
+# cosign v3 writes the certificate and signature together into one bundle;
+# the older --output-certificate/--output-signature pair is rejected outright
+# ("must specify --bundle with --new-bundle-format").
+#
+# Verify a download with:
+#
+#	cosign verify-blob \\
+#	  --bundle checksums.txt.bundle \\
+#	  --certificate-identity-regexp 'https://github.com/mrueg/goldmark-lint/.*' \\
+#	  --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
+#	  checksums.txt
+signs:
+  - cmd: cosign
+    signature: "${artifact}.bundle"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - --yes
+    artifacts: checksum
+    output: true
 
 homebrew_casks:
   - repository:

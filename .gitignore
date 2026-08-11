@@ -7,3 +7,6 @@ bench/rfcs/
 bench/tldr/
 bench/goldmark-lint
 bench/goldmark-lint.exe
+
+# goreleaser build output
+/dist/
