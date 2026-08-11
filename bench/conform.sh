@@ -213,3 +213,109 @@ if [[ ${#ONLY_ML[@]} -gt 0 ]]; then
   printf '  %s\n' "${ONLY_ML[@]}"
   echo ""
 fi
+
+# ---------------------------------------------------------------------------
+# Per-location comparison
+#
+# The table above compares per-rule *counts*, which can hide disagreements: a
+# false positive in one file and a missed violation in another cancel out and
+# the rule still shows a delta of 0. Every MD005 and MD041 conformance bug
+# fixed so far was invisible that way. This section compares the actual
+# (file, line, rule) triples instead.
+#
+# Both tools can report the same rule several times on one line (MD060 reports
+# per pipe, for instance), so triples are deduplicated before comparing: this
+# measures whether the tools agree that a rule fires on a line, not how many
+# times it fires.
+# ---------------------------------------------------------------------------
+
+# extract_gm_locations emits "<file>:<line>:<RULE>" for each goldmark-lint
+# violation. Accepts a single JSON file.
+extract_gm_locations() {
+  jq -r '.[] | "\(.fileName):\(.lineNumber):\(.ruleNames[0])"' "$1"
+}
+
+# extract_ml_locations emits "<file>:<line>:<RULE>" for each markdownlint-cli2
+# violation. Lines come in two shapes,
+#
+#	path/to/file.md:12 error MD041/first-line-heading ...
+#	path/to/file.md:12:1 error MD004/ul-style ...
+#
+# so the trailing numeric fields are peeled off from the right rather than
+# matched positionally; a regex anchored from the left reads the column as the
+# line number whenever a column is present.
+extract_ml_locations() {
+  awk '
+    match($0, / (error|warning) MD[0-9]+\//) {
+      loc = substr($0, 1, RSTART - 1)
+      rest = substr($0, RSTART)
+      match(rest, /MD[0-9]+/)
+      rule = substr(rest, RSTART, RLENGTH)
+
+      n = split(loc, part, ":")
+      if (n < 2) next
+      # Drop a trailing column field, then take the line number.
+      last = n
+      if (part[last] ~ /^[0-9]+$/ && last > 2 && part[last - 1] ~ /^[0-9]+$/) last--
+      if (part[last] !~ /^[0-9]+$/) next
+      line = part[last]
+
+      file = part[1]
+      for (i = 2; i < last; i++) file = file ":" part[i]
+      print file ":" line ":" rule
+    }
+  ' "$1"
+}
+
+GM_LOCS=$(mktemp)
+ML_LOCS=$(mktemp)
+ONLY_GM_LOCS=$(mktemp)
+ONLY_ML_LOCS=$(mktemp)
+trap 'rm -f "${GOLDMARK_OUT_RFCS}" "${GOLDMARK_OUT_TLDR}" "${MDLINT_OUT_RFCS}" "${MDLINT_OUT_TLDR}" "${GM_LOCS}" "${ML_LOCS}" "${ONLY_GM_LOCS}" "${ONLY_ML_LOCS}"' EXIT
+
+# Prefix each corpus so that identical relative paths in the two corpora cannot
+# collide with each other.
+{
+  extract_gm_locations "${GOLDMARK_OUT_RFCS}" | sed 's|^|rfcs/|'
+  extract_gm_locations "${GOLDMARK_OUT_TLDR}" | sed 's|^|tldr/|'
+} | LC_ALL=C sort -u >"${GM_LOCS}"
+{
+  extract_ml_locations "${MDLINT_OUT_RFCS}" | sed 's|^|rfcs/|'
+  extract_ml_locations "${MDLINT_OUT_TLDR}" | sed 's|^|tldr/|'
+} | LC_ALL=C sort -u >"${ML_LOCS}"
+
+LC_ALL=C comm -23 "${GM_LOCS}" "${ML_LOCS}" >"${ONLY_GM_LOCS}"
+LC_ALL=C comm -13 "${GM_LOCS}" "${ML_LOCS}" >"${ONLY_ML_LOCS}"
+
+GM_ONLY_COUNT=$(wc -l <"${ONLY_GM_LOCS}" | tr -d ' ')
+ML_ONLY_COUNT=$(wc -l <"${ONLY_ML_LOCS}" | tr -d ' ')
+SHARED_COUNT=$(LC_ALL=C comm -12 "${GM_LOCS}" "${ML_LOCS}" | wc -l | tr -d ' ')
+
+echo "=== Per-location agreement ==="
+printf "Agreed          : %d\n" "${SHARED_COUNT}"
+printf "goldmark-lint only (false positives) : %d\n" "${GM_ONLY_COUNT}"
+printf "markdownlint only (missed)           : %d\n" "${ML_ONLY_COUNT}"
+echo ""
+
+# print_loc_breakdown summarises a disagreement file by rule and lists a few
+# example locations for each, so a failure points straight at a repro.
+print_loc_breakdown() {
+  local title="$1" file="$2"
+  [[ -s "$file" ]] || return 0
+  echo "${title}:"
+  while read -r rule count; do
+    printf '  %-8s %d\n' "$rule" "$count"
+    grep ":${rule}\$" "$file" | head -3 | sed 's|^|      |'
+    if [[ "$count" -gt 3 ]]; then
+      printf '      ... and %d more\n' "$(( count - 3 ))"
+    fi
+  done < <(sed -E 's|.*:([A-Z]+[0-9]+)$|\1|' "$file" | LC_ALL=C sort | uniq -c | sort -rn | awk '{print $2, $1}')
+  echo ""
+}
+
+print_loc_breakdown "Reported only by goldmark-lint" "${ONLY_GM_LOCS}"
+print_loc_breakdown "Reported only by markdownlint-cli2" "${ONLY_ML_LOCS}"
+
+if [[ "${GM_ONLY_COUNT}" -eq 0 && "${ML_ONLY_COUNT}" -eq 0 ]]; then
+  echo "The two tools agree on every violation location."
+fi
