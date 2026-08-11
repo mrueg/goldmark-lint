@@ -41,6 +41,14 @@ COMMONMARK_FILE="spec.txt"
 
 GOLDMARK_BIN="${SCRIPT_DIR}/goldmark-lint"
 
+# Neutral configuration passed to both linters. Without it goldmark-lint
+# discovers this repository's own .markdownlint-cli2.yaml -- it searches from
+# the working directory up to the filesystem root, and the corpora live inside
+# the repository -- while markdownlint-cli2, which does not search above the
+# working directory, uses defaults. The comparison then measured two different
+# configurations against each other.
+NEUTRAL_CONFIG="${SCRIPT_DIR}/defaults.markdownlint-cli2.yaml"
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -149,23 +157,23 @@ trap 'rm -f "${GOLDMARK_OUT_RFCS}" "${GOLDMARK_OUT_TLDR}" "${GOLDMARK_OUT_CM}" "
 
 info "Running goldmark-lint on rfcs…"
 # goldmark-lint writes JSON violations to stdout; exit code 1 when violations found.
-(cd "${RFCS_DIR}" && "${GOLDMARK_BIN}" --no-cache --output-format json '**/*.md') >"${GOLDMARK_OUT_RFCS}" 2>/dev/null || true
+(cd "${RFCS_DIR}" && "${GOLDMARK_BIN}" --no-cache --config "${NEUTRAL_CONFIG}" --output-format json '**/*.md') >"${GOLDMARK_OUT_RFCS}" 2>/dev/null || true
 
 info "Running goldmark-lint on tldr…"
-(cd "${TLDR_DIR}" && "${GOLDMARK_BIN}" --no-cache --output-format json '**/*.md') >"${GOLDMARK_OUT_TLDR}" 2>/dev/null || true
+(cd "${TLDR_DIR}" && "${GOLDMARK_BIN}" --no-cache --config "${NEUTRAL_CONFIG}" --output-format json '**/*.md') >"${GOLDMARK_OUT_TLDR}" 2>/dev/null || true
 
 info "Running goldmark-lint on commonmark-spec…"
-(cd "${COMMONMARK_DIR}" && "${GOLDMARK_BIN}" --no-cache --output-format json "${COMMONMARK_FILE}") >"${GOLDMARK_OUT_CM}" 2>/dev/null || true
+(cd "${COMMONMARK_DIR}" && "${GOLDMARK_BIN}" --no-cache --config "${NEUTRAL_CONFIG}" --output-format json "${COMMONMARK_FILE}") >"${GOLDMARK_OUT_CM}" 2>/dev/null || true
 
 info "Running markdownlint-cli2 on rfcs…"
 # markdownlint-cli2 writes violation lines to stderr; capture them for parsing.
-(cd "${RFCS_DIR}" && markdownlint-cli2 '**/*.md') 2>"${MDLINT_OUT_RFCS}" >/dev/null || true
+(cd "${RFCS_DIR}" && markdownlint-cli2 --config "${NEUTRAL_CONFIG}" '**/*.md') 2>"${MDLINT_OUT_RFCS}" >/dev/null || true
 
 info "Running markdownlint-cli2 on tldr…"
-(cd "${TLDR_DIR}" && markdownlint-cli2 '**/*.md') 2>"${MDLINT_OUT_TLDR}" >/dev/null || true
+(cd "${TLDR_DIR}" && markdownlint-cli2 --config "${NEUTRAL_CONFIG}" '**/*.md') 2>"${MDLINT_OUT_TLDR}" >/dev/null || true
 
 info "Running markdownlint-cli2 on commonmark-spec…"
-(cd "${COMMONMARK_DIR}" && markdownlint-cli2 "${COMMONMARK_FILE}") 2>"${MDLINT_OUT_CM}" >/dev/null || true
+(cd "${COMMONMARK_DIR}" && markdownlint-cli2 --config "${NEUTRAL_CONFIG}" "${COMMONMARK_FILE}") 2>"${MDLINT_OUT_CM}" >/dev/null || true
 
 # ---------------------------------------------------------------------------
 # Extract per-rule violation counts.
