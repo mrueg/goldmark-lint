@@ -3732,3 +3732,56 @@ func TestMD009_BlankLineIndentThreshold(t *testing.T) {
 		})
 	}
 }
+
+// TestMD052_FootnoteLabelsNotReported covers footnote-style labels used with
+// full reference syntax. markdownlint parses [^label] as a GFM footnote rather
+// than a link reference, so an undefined one is not an MD052 violation. The
+// definition scanner already skipped them while the usage side did not.
+//
+// Reduced from rust-lang/rfcs text/1683-docs-team.md:82 and
+// text/3668-async-closures.md:1.
+func TestMD052_FootnoteLabelsNotReported(t *testing.T) {
+	src := "# T\n\nAvailable on [IRC][^IRC] to collaborate.\n\n" +
+		"[^IRC]: An IRC footnote definition.\n\n" +
+		"Feature `async_closure`[^rework][^plural] here.\n\n" +
+		"[^rework]: reworks things\n[^plural]: pluralization note\n"
+	if v := lintString(t, rules.MD052{}, src); len(v) != 0 {
+		t.Errorf("expected no violations for footnote labels, got %v", v)
+	}
+}
+
+// TestMD052_DefinitionRunEndsAtMalformedEntry covers a run of link reference
+// definitions interrupted by a malformed one. A definition is only a
+// definition while it sits at the start of a block, so once "[2]:" fails to
+// parse the rest of the run becomes paragraph text and "[3]" is undefined too.
+// goldmark agrees — it renders neither as a link — but MD052 re-scanned the
+// source for "[label]: url" patterns and registered "3" anyway.
+//
+// Reduced from rust-lang/rfcs text/0507-release-channels.md.
+func TestMD052_DefinitionRunEndsAtMalformedEntry(t *testing.T) {
+	src := "# T\n\nUse [a][1] and [b][2] and [c][3].\n\n" +
+		"[1]: http://example.com/one\n" +
+		"[2]: http://example.com/two)\n" +
+		"[3]: http://example.com/three\n"
+	v := lintString(t, rules.MD052{}, src)
+	if len(v) != 2 {
+		t.Fatalf("expected 2 violations (labels 2 and 3), got %d: %v", len(v), v)
+	}
+}
+
+// TestMD052_ParserProvidedDefinitionsStillResolve guards the cases the removed
+// line scan was there for: goldmark exports definitions written inside a
+// blockquote, and labels containing a code span still match their usage.
+func TestMD052_ParserProvidedDefinitionsStillResolve(t *testing.T) {
+	cases := map[string]string{
+		"blockquote definition": "# T\n\n> Quote with [link][bq] inside.\n>\n> [bq]: http://example.com/bq\n",
+		"code span label":       "# T\n\nUse [`genawaiter`][`genawaiter`] here.\n\n[`genawaiter`]: http://example.com/g\n",
+	}
+	for name, src := range cases {
+		t.Run(name, func(t *testing.T) {
+			if v := lintString(t, rules.MD052{}, src); len(v) != 0 {
+				t.Errorf("expected no violations, got %v", v)
+			}
+		})
+	}
+}
