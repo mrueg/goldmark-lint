@@ -4,6 +4,12 @@
 # Uses two corpora at fixed commits as the benchmark data sets:
 #   - rust-lang/rfcs (580+ Markdown files)
 #   - tldr-pages/tldr (2000+ Markdown files)
+#   - commonmark/commonmark-spec (one ~9,800-line document)
+#
+# The first two measure per-file throughput over many small documents. The
+# third measures the other dimension entirely: how one large document scales.
+# They are reported as separate benchmarks because combining them would hide
+# both.
 #
 # Requirements:
 #   - git, go
@@ -34,6 +40,14 @@ RFCS_DIR="${SCRIPT_DIR}/rfcs"
 TLDR_REPO="https://github.com/tldr-pages/tldr"
 TLDR_COMMIT="05c563d1ecb0fe5c1f0de9d3348baa04f3b8b29d"
 TLDR_DIR="${SCRIPT_DIR}/tldr"
+
+# Fixed commit in commonmark/commonmark-spec used as the third benchmark
+# corpus: a single ~9,800-line document, benchmarked separately from the
+# many-small-files corpora above.
+COMMONMARK_REPO="https://github.com/commonmark/commonmark-spec"
+COMMONMARK_COMMIT="108bec0c217ed1c611cf666c231fd5e240d475dc"
+COMMONMARK_DIR="${SCRIPT_DIR}/commonmark"
+COMMONMARK_FILE="spec.txt"
 
 GOLDMARK_BIN="${REPO_ROOT}/bench/goldmark-lint"
 
@@ -123,6 +137,31 @@ TLDR_MD_COUNT=$(find "${TLDR_DIR}" -name '*.md' | wc -l | tr -d ' ')
 info "Corpus: ${TLDR_MD_COUNT} Markdown files in ${TLDR_DIR}"
 
 # ---------------------------------------------------------------------------
+# Clone / update the commonmark-spec corpus at the fixed commit
+# ---------------------------------------------------------------------------
+if [[ ! -d "${COMMONMARK_DIR}/.git" ]]; then
+  info "Cloning commonmark/commonmark-spec corpus (shallow)…"
+  git clone -q --filter=blob:none --no-checkout "${COMMONMARK_REPO}" "${COMMONMARK_DIR}"
+  git -c advice.detachedHead=false -C "${COMMONMARK_DIR}" checkout -q "${COMMONMARK_COMMIT}"
+else
+  current=$(git -C "${COMMONMARK_DIR}" rev-parse HEAD)
+  if [[ "${current}" != "${COMMONMARK_COMMIT}" ]]; then
+    info "Updating commonmark-spec corpus to ${COMMONMARK_COMMIT}…"
+    git -C "${COMMONMARK_DIR}" fetch -q origin "${COMMONMARK_COMMIT}"
+    git -c advice.detachedHead=false -C "${COMMONMARK_DIR}" checkout -q "${COMMONMARK_COMMIT}"
+  else
+    info "commonmark-spec corpus already at ${COMMONMARK_COMMIT}."
+  fi
+fi
+
+if [[ ! -f "${COMMONMARK_DIR}/${COMMONMARK_FILE}" ]]; then
+  echo "Error: ${COMMONMARK_DIR}/${COMMONMARK_FILE} is missing after checkout." >&2
+  exit 1
+fi
+SPEC_LINES=$(wc -l <"${COMMONMARK_DIR}/${COMMONMARK_FILE}" | tr -d ' ')
+info "Corpus: ${COMMONMARK_FILE} (${SPEC_LINES} lines) in ${COMMONMARK_DIR}"
+
+# ---------------------------------------------------------------------------
 # Build goldmark-lint
 # ---------------------------------------------------------------------------
 info "Building goldmark-lint…"
@@ -151,6 +190,20 @@ run_markdownlint() {
   markdownlint-cli2 --config "${NEUTRAL_CONFIG}" 'rfcs/**/*.md' 'tldr/**/*.md'
 }
 
+# run_goldmark_spec lints the single large document with the local build.
+run_goldmark_spec() {
+  if [[ "${NO_CACHE}" -eq 1 ]]; then
+    "${GOLDMARK_BIN}" --no-cache "commonmark/${COMMONMARK_FILE}"
+  else
+    "${GOLDMARK_BIN}" "commonmark/${COMMONMARK_FILE}"
+  fi
+}
+
+# run_markdownlint_spec lints the single large document with markdownlint-cli2.
+run_markdownlint_spec() {
+  markdownlint-cli2 "commonmark/${COMMONMARK_FILE}"
+}
+
 # Command strings used by hyperfine (--shell bash).  The single quotes around
 # the glob patterns are interpreted by the bash subprocess, preventing shell
 # glob expansion so that each tool receives the raw patterns and performs its
@@ -161,6 +214,12 @@ if [[ "${NO_CACHE}" -eq 1 ]]; then
 fi
 GOLDMARK_CMD="${GOLDMARK_BIN}${GOLDMARK_EXTRA} 'rfcs/**/*.md' 'tldr/**/*.md'"
 MARKDOWNLINT_CMD="markdownlint-cli2 --config ${NEUTRAL_CONFIG} 'rfcs/**/*.md' 'tldr/**/*.md'"
+
+# The spec is a single file rather than a glob, and .txt rather than .md, so
+# both tools are handed the path directly.
+SPEC_PATH="commonmark/${COMMONMARK_FILE}"
+GOLDMARK_SPEC_CMD="${GOLDMARK_BIN}${GOLDMARK_EXTRA} ${SPEC_PATH}"
+MARKDOWNLINT_SPEC_CMD="markdownlint-cli2 ${SPEC_PATH}"
 
 HAS_HYPERFINE=0
 if command -v hyperfine &>/dev/null; then
@@ -200,6 +259,28 @@ if [[ "${HAS_HYPERFINE}" -eq 1 ]]; then
 
   hyperfine "${HYPERFINE_ARGS[@]}" --ignore-failure
 
+  # Second benchmark: the single large document. Reported separately because
+  # it measures how one document scales rather than per-file overhead, and the
+  # two numbers move for different reasons.
+  echo ""
+  info "Single large document (${COMMONMARK_FILE}, ${SPEC_LINES} lines)…"
+
+  SPEC_ARGS=(
+    --runs "${RUNS}"
+    --warmup "${WARMUP}"
+    --shell bash
+    --command-name "goldmark-lint"
+    "${GOLDMARK_SPEC_CMD}"
+  )
+  if [[ "${HAS_MARKDOWNLINT}" -eq 1 ]]; then
+    SPEC_ARGS+=(
+      --command-name "markdownlint-cli2"
+      "${MARKDOWNLINT_SPEC_CMD}"
+    )
+  fi
+
+  hyperfine "${SPEC_ARGS[@]}" --ignore-failure
+
 else
   warn "hyperfine not found — falling back to shell 'time'."
   warn "Install hyperfine for more accurate results: https://github.com/sharkdp/hyperfine"
@@ -219,6 +300,13 @@ else
 
   if [[ "${HAS_MARKDOWNLINT}" -eq 1 ]]; then
     run_timed "markdownlint-cli2" run_markdownlint
+  fi
+
+  info "Single large document (${COMMONMARK_FILE}, ${SPEC_LINES} lines)…"
+  run_timed "goldmark-lint (spec)" run_goldmark_spec
+
+  if [[ "${HAS_MARKDOWNLINT}" -eq 1 ]]; then
+    run_timed "markdownlint-cli2 (spec)" run_markdownlint_spec
   else
     warn "markdownlint-cli2 not found on PATH — skipping comparison."
     warn "Install it with: npm install -g markdownlint-cli2"
