@@ -1019,3 +1019,111 @@ func TestCLI_WatchFix_HonoursOverrides(t *testing.T) {
 		t.Errorf("watch --fix ignored the MD009 override and rewrote the file:\n got: %q\nwant: %q", string(got), withTrailing)
 	}
 }
+
+// TestCLI_GlobMatchingNothingIsNotAnError asserts that a glob which matches no
+// files exits 0. A non-matching pattern used to be passed through as a literal
+// path, producing "Error reading docs/**/*.md: no such file or directory" and
+// exit code 2 — which breaks CI configs where an optional docs directory is
+// legitimately empty. markdownlint-cli2 treats zero matches as success.
+func TestCLI_GlobMatchingNothingIsNotAnError(t *testing.T) {
+	bin := buildBinary(t)
+	dir := t.TempDir()
+
+	cmd := exec.Command(bin, "--no-cache", "docs/**/*.md")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			t.Fatalf("glob matching nothing exited %d, want 0; output:\n%s", exitErr.ExitCode(), out)
+		}
+		t.Fatalf("unexpected error: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "No files matched") {
+		t.Errorf("expected a note that nothing matched, got: %q", string(out))
+	}
+	if strings.Contains(string(out), "no such file") {
+		t.Errorf("glob was still reported as a missing file: %q", string(out))
+	}
+}
+
+// TestCLI_GlobMatchingNothingQuiet asserts --quiet suppresses the informational
+// note while still exiting 0.
+func TestCLI_GlobMatchingNothingQuiet(t *testing.T) {
+	bin := buildBinary(t)
+	dir := t.TempDir()
+
+	cmd := exec.Command(bin, "--no-cache", "--quiet", "docs/**/*.md")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("expected exit 0, got %v; output:\n%s", err, out)
+	}
+	if len(strings.TrimSpace(string(out))) != 0 {
+		t.Errorf("--quiet should suppress the no-match note, got: %q", string(out))
+	}
+}
+
+// TestCLI_MissingLiteralPathStillErrors asserts the change above did not weaken
+// the case where the user names one specific file that does not exist.
+func TestCLI_MissingLiteralPathStillErrors(t *testing.T) {
+	bin := buildBinary(t)
+	dir := t.TempDir()
+
+	cmd := exec.Command(bin, "--no-cache", "definitely_not_here.md")
+	cmd.Dir = dir
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected non-zero exit for a missing literal path, got %v", err)
+	}
+	if exitErr.ExitCode() != 2 {
+		t.Errorf("missing literal path exit code = %d, want 2", exitErr.ExitCode())
+	}
+}
+
+// TestCLI_MalformedGlobIsAnError asserts that a syntactically invalid pattern
+// is reported as such rather than being silently treated as a filename.
+func TestCLI_MalformedGlobIsAnError(t *testing.T) {
+	bin := buildBinary(t)
+	dir := t.TempDir()
+
+	cmd := exec.Command(bin, "--no-cache", "bad[pattern")
+	cmd.Dir = dir
+	out, _ := cmd.CombinedOutput()
+	if !strings.Contains(string(out), "invalid glob pattern") {
+		t.Errorf("expected an invalid-glob error, got: %q", string(out))
+	}
+
+	cmd = exec.Command(bin, "--no-cache", "bad[pattern")
+	cmd.Dir = dir
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 2 {
+		t.Errorf("malformed glob should exit 2, got %v", err)
+	}
+}
+
+// TestCLI_MixedGlobsLintMatchesAndIgnoreEmpty asserts that an empty glob
+// alongside a matching one neither errors nor suppresses the real results.
+func TestCLI_MixedGlobsLintMatchesAndIgnoreEmpty(t *testing.T) {
+	bin := buildBinary(t)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "bad.md"), []byte("#  Heading\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, "--no-cache", "*.md", "docs/**/*.md")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+		t.Fatalf("expected exit 1 for real violations, got %v; output:\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "MD019") {
+		t.Errorf("violations from the matching glob were lost: %q", string(out))
+	}
+	if strings.Contains(string(out), "no such file") {
+		t.Errorf("empty glob was reported as a missing file: %q", string(out))
+	}
+}
