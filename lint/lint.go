@@ -257,6 +257,7 @@ func parseFrontMatterFieldsAt(source []byte, end int) map[string]string {
 	return fields
 }
 
+// frontMatterEnd returns the byte offset of the end of the source's leading
 // front matter block, or 0 if the source does not begin with valid front matter.
 // Front matter starts with "---" on the very first line and ends with a line
 // containing only "---" or "...".
