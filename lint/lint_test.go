@@ -1643,6 +1643,10 @@ func TestMD034_ProseParenURL_Violation(t *testing.T) {
 	}
 }
 
+// boolPtr returns a pointer to b, for rule options that distinguish an
+// explicit false from an unset value.
+func boolPtr(b bool) *bool { return &b }
+
 func TestMD054_Valid(t *testing.T) {
 	src := "[link](https://example.com)\n"
 	v := lintString(t, rules.MD054{}, src)
@@ -1652,11 +1656,35 @@ func TestMD054_Valid(t *testing.T) {
 }
 
 func TestMD054_Invalid(t *testing.T) {
-	// Only autolinks are allowed; inline links are disallowed.
+	// Inline links are disallowed; every other style stays allowed.
 	src := "[link](https://example.com)\n"
-	v := lintString(t, rules.MD054{Autolink: true}, src)
+	v := lintString(t, rules.MD054{Inline: boolPtr(false)}, src)
 	if len(v) != 1 {
 		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+// TestMD054_OptionsAreIndependent covers the option semantics directly.
+// markdownlint treats each style option as independent and defaulting to true,
+// so allowing one style must not disable the rest, and disabling one must not
+// disable the rule as a whole.
+func TestMD054_OptionsAreIndependent(t *testing.T) {
+	src := "[link](https://example.com)\n"
+
+	// Allowing autolinks says nothing about inline links, which stay allowed.
+	if v := lintString(t, rules.MD054{Autolink: boolPtr(true)}, src); len(v) != 0 {
+		t.Errorf("allowing autolink must not disallow inline links, got %v", v)
+	}
+
+	// Disabling an unrelated style must still leave inline links allowed...
+	if v := lintString(t, rules.MD054{Shortcut: boolPtr(false)}, src); len(v) != 0 {
+		t.Errorf("disabling shortcut must not affect inline links, got %v", v)
+	}
+	// ...while the disabled style is genuinely reported. With plain bools every
+	// option read as false here and the rule silently allowed everything.
+	shortcutSrc := "Shortcut [label] reference.\n\n[label]: https://example.com\n"
+	if v := lintString(t, rules.MD054{Shortcut: boolPtr(false)}, shortcutSrc); len(v) != 1 {
+		t.Errorf("expected shortcut reference to be reported, got %v", v)
 	}
 }
 
@@ -3880,5 +3908,97 @@ func TestHTMLBlockMask_CoversClosingLine(t *testing.T) {
 	src := "# T\n\n<!--\na comment\n\n\n-->\n\nText.\n"
 	if v := lintString(t, rules.MD012{}, src); len(v) != 0 {
 		t.Errorf("expected no MD012 violations for blank lines inside an HTML comment, got %v", v)
+	}
+}
+
+// ruleNeedsConfigToFire lists rules that cannot report anything under default
+// configuration, with the reason. testdata is linted with defaults, so an
+// _invalid.md fixture for one of these cannot demonstrate a violation; the file
+// is optional and, when present, only serves the markdownlint comparison as a
+// case where both tools should stay silent.
+var ruleNeedsConfigToFire = map[string]string{
+	"MD043": "requires a configured heading structure",
+	"MD044": "requires a configured list of proper names",
+	"MD054": "every link and image style is permitted by default",
+}
+
+// ruleKnownGap lists rules whose _invalid fixture is a genuine violation —
+// markdownlint reports it — that goldmark-lint does not detect yet. Keeping the
+// fixture and recording the gap here documents the bug instead of hiding it.
+// TestTestdataFixturesBehaveAsNamed fails if a listed rule starts detecting its
+// fixture, so the list cleans itself up when a gap is closed.
+var ruleKnownGap = map[string]string{
+	// MD037 only inspects ast.Emphasis nodes, but "* text *" never parses as
+	// emphasis in CommonMark, so the rule cannot fire on the very pattern it
+	// exists to catch. Detecting it needs a textual scan like markdownlint's.
+	"MD037": "only detects parsed emphasis, so spaced markers are never seen",
+}
+
+// TestTestdataFixtureCoverage asserts that every rule has fixtures in testdata.
+// The fixtures feed the markdownlint comparison, so a rule missing from them is
+// a rule that comparison silently never exercises — MD046, MD054 and MD060 were
+// each absent.
+func TestTestdataFixtureCoverage(t *testing.T) {
+	for _, rule := range rules.DefaultRules() {
+		id := strings.ToLower(rule.ID())
+		t.Run(rule.ID(), func(t *testing.T) {
+			if _, err := os.Stat(filepath.Join("..", "testdata", id+"_valid.md")); err != nil {
+				t.Errorf("missing fixture %s_valid.md", id)
+			}
+			if _, ok := ruleNeedsConfigToFire[rule.ID()]; ok {
+				return // an invalid fixture cannot demonstrate anything
+			}
+			if _, err := os.Stat(filepath.Join("..", "testdata", id+"_invalid.md")); err != nil {
+				t.Errorf("missing fixture %s_invalid.md", id)
+			}
+		})
+	}
+}
+
+// TestTestdataFixturesBehaveAsNamed checks that each fixture actually
+// demonstrates what its name claims: a _valid file must not trigger its own
+// rule, and an _invalid file must. Without this the fixtures are only inputs to
+// the opt-in markdownlint comparison and assert nothing on their own. It found
+// three mis-authored fixtures and one unimplemented rule.
+func TestTestdataFixturesBehaveAsNamed(t *testing.T) {
+	for _, rule := range rules.DefaultRules() {
+		rule := rule
+		id := strings.ToLower(rule.ID())
+		t.Run(rule.ID(), func(t *testing.T) {
+			violations := func(path string) ([]lint.Violation, bool) {
+				source, err := os.ReadFile(path)
+				if err != nil {
+					return nil, false // coverage is asserted separately
+				}
+				return lint.NewLinter(rule).Lint(source), true
+			}
+
+			if got, ok := violations(filepath.Join("..", "testdata", id+"_valid.md")); ok && len(got) != 0 {
+				t.Errorf("%s_valid.md triggers %s: %v", id, rule.ID(), got)
+			}
+
+			invalid := filepath.Join("..", "testdata", id+"_invalid.md")
+			got, ok := violations(invalid)
+			if !ok {
+				return
+			}
+			if reason, known := ruleKnownGap[rule.ID()]; known {
+				if len(got) != 0 {
+					t.Errorf("%s now detects %s_invalid.md (%q); remove it from ruleKnownGap",
+						rule.ID(), id, reason)
+				}
+				return
+			}
+			if _, needsConfig := ruleNeedsConfigToFire[rule.ID()]; needsConfig {
+				if len(got) != 0 {
+					t.Errorf("%s fired without configuration: %v; remove it from ruleNeedsConfigToFire",
+						rule.ID(), got)
+				}
+				return
+			}
+			if len(got) == 0 {
+				t.Errorf("%s_invalid.md triggers no %s violation", id, rule.ID())
+			}
+		})
 	}
 }
