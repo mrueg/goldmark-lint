@@ -3853,3 +3853,32 @@ func TestMD013_BareURLOutsideTableStillReported(t *testing.T) {
 		t.Errorf("expected 1 violation for a long paragraph with a bare URL, got %v", v)
 	}
 }
+
+// TestMD041_HTMLCommentClosingLineIsSkipped covers a leading HTML comment
+// followed by a non-top-level heading. goldmark keeps the line that closes an
+// HTML block ("-->") out of Lines() and in a separate ClosureLine segment, so
+// htmlBlockLineMask did not mask it and MD041 reported the violation on the
+// "-->" line instead of the first real content line.
+//
+// Reduced from tldr-pages .github/PULL_REQUEST_TEMPLATE.md.
+func TestMD041_HTMLCommentClosingLineIsSkipped(t *testing.T) {
+	src := "<!--\nA comment.\n\nStill the comment.\n-->\n\n### Checklist\n\n- an item\n"
+	v := lintString(t, rules.MD041{}, src)
+	if len(v) != 1 {
+		t.Fatalf("expected 1 violation, got %d: %v", len(v), v)
+	}
+	// Line 5 is "-->", line 7 is "### Checklist"; markdownlint reports line 7.
+	if v[0].Line != 7 {
+		t.Errorf("MD041 reported line %d, want 7 (the first content line, not the comment's closing line)", v[0].Line)
+	}
+}
+
+// TestHTMLBlockMask_CoversClosingLine exercises the same mask through MD012,
+// another rule that skips HTML block lines, so the helper is covered rather
+// than just MD041's use of it.
+func TestHTMLBlockMask_CoversClosingLine(t *testing.T) {
+	src := "# T\n\n<!--\na comment\n\n\n-->\n\nText.\n"
+	if v := lintString(t, rules.MD012{}, src); len(v) != 0 {
+		t.Errorf("expected no MD012 violations for blank lines inside an HTML comment, got %v", v)
+	}
+}
