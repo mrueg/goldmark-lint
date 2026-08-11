@@ -76,7 +76,7 @@ func (r MD049) Check(doc *lint.Document) []lint.Violation {
 		// Report opening marker violation.
 		violations = append(violations, lint.Violation{
 			Rule:    r.ID(),
-			Line:    inlineNodeLine(emph, doc.Source),
+			Line:    inlineNodeLine(emph, doc),
 			Column:  1,
 			Message: fmt.Sprintf("Emphasis style [Expected: %s; Actual: %s]", expected, actual),
 		})
@@ -88,7 +88,7 @@ func (r MD049) Check(doc *lint.Document) []lint.Violation {
 			}
 		}
 		if lastTextStop > 0 && lastTextStop < len(doc.Source) {
-			closingLine := countLine(doc.Source, lastTextStop)
+			closingLine := doc.LineAt(lastTextStop)
 			// Calculate column relative to the start of the line.
 			lineStart := lastTextStop
 			for lineStart > 0 && doc.Source[lineStart-1] != '\n' {

@@ -97,7 +97,7 @@ func (r MD039) Check(doc *lint.Document) []lint.Violation {
 
 		violations = append(violations, lint.Violation{
 			Rule:    r.ID(),
-			Line:    inlineNodeLine(link, doc.Source),
+			Line:    inlineNodeLine(link, doc),
 			Column:  1,
 			Message: "Spaces inside link text",
 		})

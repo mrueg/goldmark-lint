@@ -156,7 +156,7 @@ func (r MD034) run(doc *lint.Document, onViolation func(lineNum int, url string)
 
 		seg := t.Segment
 		text := string(doc.Source[seg.Start:seg.Stop])
-		lineBase := countLine(doc.Source, seg.Start)
+		lineBase := doc.LineAt(seg.Start)
 
 		for _, loc := range bareURLRE.FindAllStringIndex(text, -1) {
 			lineNum := lineBase + strings.Count(text[:loc[0]], "\n")

@@ -136,7 +136,7 @@ func (r MD005) Check(doc *lint.Document) []lint.Violation {
 			if !ok3 {
 				continue
 			}
-			lineIdx := countLine(doc.Source, seg.Start) - 1
+			lineIdx := doc.LineAt(seg.Start) - 1
 			if lineIdx < 0 || lineIdx >= len(doc.Lines) {
 				continue
 			}

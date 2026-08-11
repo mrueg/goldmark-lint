@@ -55,6 +55,43 @@ type Document struct {
 	// derived from the goldmark parser context rather than a hand-rolled regex,
 	// so it correctly handles angle-bracket destinations, title-on-next-line, etc.
 	LinkRefs map[string][]byte
+	// lineStarts holds the byte offset of the first byte of every line in
+	// Source, in ascending order. It backs LineAt.
+	lineStarts []int
+}
+
+// LineAt returns the 1-based number of the line containing byte offset pos.
+// Offsets before the start of the document report line 1; offsets at or past
+// the end report the last line. Lookup is O(log n) via binary search over the
+// precomputed line-start table, which matters because rules resolve many
+// thousands of AST positions per document.
+func (d *Document) LineAt(pos int) int {
+	// Documents assembled as plain struct literals (as the Fix methods of some
+	// rules do) have no index yet; build it on first use.
+	if d.lineStarts == nil {
+		d.lineStarts = buildLineStarts(d.Source)
+	}
+	if pos < 0 {
+		return 1
+	}
+	// sort.Search returns the first index whose line start is > pos; that index
+	// is exactly the 1-based line number of the line containing pos.
+	return sort.Search(len(d.lineStarts), func(i int) bool {
+		return d.lineStarts[i] > pos
+	})
+}
+
+// buildLineStarts returns the byte offset of the start of each line in source.
+// The result always has at least one entry (offset 0) so that LineAt never
+// reports line 0 for a valid offset.
+func buildLineStarts(source []byte) []int {
+	starts := make([]int, 1, bytes.Count(source, []byte{'\n'})+1)
+	for i, b := range source {
+		if b == '\n' {
+			starts = append(starts, i+1)
+		}
+	}
+	return starts
 }
 
 // Linter holds the list of rules and runs them on documents.
@@ -148,6 +185,7 @@ func (l *Linter) Lint(source []byte) []Violation {
 		FrontMatterFields: fmFields,
 		FrontMatterLines:  fmLines,
 		LinkRefs:          linkRefs,
+		lineStarts:        buildLineStarts(source),
 	}
 
 	var disabled []disableSet

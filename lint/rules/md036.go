@@ -171,7 +171,7 @@ func (r MD036) Check(doc *lint.Document) []lint.Violation {
 		line := 1
 		if para.Lines() != nil && para.Lines().Len() > 0 {
 			seg := para.Lines().At(0)
-			line = countLine(doc.Source, seg.Start)
+			line = doc.LineAt(seg.Start)
 		}
 		violations = append(violations, lint.Violation{
 			Rule:    r.ID(),

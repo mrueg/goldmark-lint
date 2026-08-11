@@ -34,7 +34,7 @@ func (r MD037) Check(doc *lint.Document) []lint.Violation {
 		if doc.Source[pos+emph.Level] == ' ' {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
-				Line:    countLine(doc.Source, pos),
+				Line:    doc.LineAt(pos),
 				Column:  1,
 				Message: "Spaces inside emphasis markers",
 			})
@@ -57,7 +57,7 @@ func (r MD037) Check(doc *lint.Document) []lint.Violation {
 			if lastStop > 0 && lastStop <= len(doc.Source) && doc.Source[lastStop-1] == ' ' {
 				violations = append(violations, lint.Violation{
 					Rule:    r.ID(),
-					Line:    countLine(doc.Source, pos),
+					Line:    doc.LineAt(pos),
 					Column:  1,
 					Message: "Spaces inside emphasis markers",
 				})

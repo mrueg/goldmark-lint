@@ -21,16 +21,16 @@ func (r MD024) Description() string { return "Multiple headings with the same co
 // headingRawContent returns the raw source content of a heading (after stripping
 // ATX markers like ##, or the raw first line for setext headings).
 // This preserves inline formatting characters and matches markdownlint's behavior.
-func headingRawContent(h *ast.Heading, source []byte, lines []string) string {
+func headingRawContent(h *ast.Heading, doc *lint.Document) string {
 	if h.Lines() == nil || h.Lines().Len() == 0 {
-		return headingText(h, source)
+		return headingText(h, doc.Source)
 	}
 	seg := h.Lines().At(0)
-	lineIdx := countLine(source, seg.Start) - 1
-	if lineIdx < 0 || lineIdx >= len(lines) {
-		return headingText(h, source)
+	lineIdx := doc.LineAt(seg.Start) - 1
+	if lineIdx < 0 || lineIdx >= len(doc.Lines) {
+		return headingText(h, doc.Source)
 	}
-	line := lines[lineIdx]
+	line := doc.Lines[lineIdx]
 
 	// Strip blockquote prefix(es).
 	for {
@@ -87,18 +87,18 @@ func (r MD024) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
-		text := headingRawContent(h, doc.Source, doc.Lines)
+		text := headingRawContent(h, doc)
 		if seen[text] {
 			line := 1
 			if h.Lines() != nil && h.Lines().Len() > 0 {
 				seg := h.Lines().At(0)
-				line = countLine(doc.Source, seg.Start)
+				line = doc.LineAt(seg.Start)
 			}
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
 				Line:    line,
 				Column:  1,
-				Message: fmt.Sprintf("Multiple headings with the same content [Context: \"%s\"]", headingRawContent(h, doc.Source, doc.Lines)),
+				Message: fmt.Sprintf("Multiple headings with the same content [Context: \"%s\"]", headingRawContent(h, doc)),
 			})
 		}
 		seen[text] = true
@@ -122,18 +122,18 @@ func (r MD024) checkSiblings(doc *lint.Document) []lint.Violation {
 			if !ok {
 				continue
 			}
-			text := headingRawContent(h, doc.Source, doc.Lines)
+			text := headingRawContent(h, doc)
 			if seen[text] {
 				line := 1
 				if h.Lines() != nil && h.Lines().Len() > 0 {
 					seg := h.Lines().At(0)
-					line = countLine(doc.Source, seg.Start)
+					line = doc.LineAt(seg.Start)
 				}
 				violations = append(violations, lint.Violation{
 					Rule:    r.ID(),
 					Line:    line,
 					Column:  1,
-					Message: fmt.Sprintf("Multiple headings with the same content [Context: \"%s\"]", headingRawContent(h, doc.Source, doc.Lines)),
+					Message: fmt.Sprintf("Multiple headings with the same content [Context: \"%s\"]", headingRawContent(h, doc)),
 				})
 			}
 			seen[text] = true

@@ -88,7 +88,7 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 		}
 		for i := 0; i < cb.Lines().Len(); i++ {
 			seg := cb.Lines().At(i)
-			lineNum := countLine(doc.Source, seg.Start) - 1
+			lineNum := doc.LineAt(seg.Start) - 1
 			if lineNum >= 0 && lineNum < len(extMask) {
 				extMask[lineNum] = true
 			}
@@ -154,9 +154,9 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 		var startLine int
 		var endLine int
 		if t := firstTextLeaf(link); t != nil {
-			startLine = countLine(doc.Source, t.Segment.Start)
+			startLine = doc.LineAt(t.Segment.Start)
 			if tl := lastTextLeaf(link); tl != nil {
-				endLine = countLine(doc.Source, tl.Segment.Stop)
+				endLine = doc.LineAt(tl.Segment.Stop)
 			} else {
 				endLine = startLine
 			}

@@ -57,7 +57,7 @@ func (r MD020) Check(doc *lint.Document) []lint.Violation {
 		if !ok {
 			return ast.WalkContinue, nil
 		}
-		lineNum := headingSourceLine(h, doc.Source)
+		lineNum := headingSourceLine(h, doc)
 		if lineNum == 0 {
 			return ast.WalkContinue, nil
 		}

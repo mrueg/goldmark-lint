@@ -76,7 +76,7 @@ func (r MD009) Check(doc *lint.Document) []lint.Violation {
 			}
 			for i := 0; i < cb.Lines().Len(); i++ {
 				seg := cb.Lines().At(i)
-				lineNum := countLine(doc.Source, seg.Start) - 1
+				lineNum := doc.LineAt(seg.Start) - 1
 				if lineNum >= 0 && lineNum < len(codeMask) {
 					codeMask[lineNum] = true
 				}

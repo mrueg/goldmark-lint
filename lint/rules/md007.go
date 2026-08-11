@@ -160,7 +160,7 @@ func (r MD007) run(doc *lint.Document, onViolation func(lineNum, expectedIndent,
 		if fc := li.FirstChild(); fc != nil {
 			if fc.Lines() != nil && fc.Lines().Len() > 0 {
 				seg := fc.Lines().At(0)
-				lineNum = countLine(doc.Source, seg.Start)
+				lineNum = doc.LineAt(seg.Start)
 			}
 		}
 		if lineNum < 1 || lineNum > len(doc.Lines) {
