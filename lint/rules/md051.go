@@ -20,7 +20,6 @@ func (r MD051) ID() string          { return "MD051" }
 func (r MD051) Aliases() []string   { return []string{"link-fragments"} }
 func (r MD051) Description() string { return "Link fragments should be valid" }
 
-
 // md051FragRE matches internal links with fragments: [text](#fragment).
 var md051FragRE = regexp.MustCompile(`\[([^\]]*)]\(#([^)"]*)`)
 
@@ -96,7 +95,7 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 		return ast.WalkContinue, nil
 	})
 
-		for i, line := range doc.Lines {
+	for i, line := range doc.Lines {
 		if extMask[i] {
 			continue
 		}

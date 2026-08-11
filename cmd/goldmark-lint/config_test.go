@@ -933,7 +933,6 @@ overrides:
 	}
 }
 
-
 func TestCLI_ConfigDisablesRule(t *testing.T) {
 	bin := buildBinary(t)
 

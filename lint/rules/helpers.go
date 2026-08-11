@@ -252,7 +252,6 @@ func isBlankInContext(line string, depth int) bool {
 	return found >= depth && strings.TrimSpace(s) == ""
 }
 
-
 // lastTextStopInInline returns the highest Segment.Stop value found among all
 // *ast.Text descendants of n, searching recursively. Returns 0 if none found.
 func lastTextStopInInline(n ast.Node) int {
@@ -270,7 +269,6 @@ func lastTextStopInInline(n ast.Node) int {
 	}
 	return best
 }
-
 
 // headingAnchor converts heading text to a GitHub-style anchor.
 func headingAnchor(text string) string {
@@ -598,47 +596,47 @@ func astTableMask(doc *lint.Document) []bool {
 // prevents patterns inside code spans from being matched by rules that operate
 // on raw line text (e.g. MD011 reversed-link detection).
 func blankInlineCodeSpans(line string) string {
-b := []byte(line)
-i := 0
-for i < len(b) {
-if b[i] != '`' {
-i++
-continue
-}
-// Count opening backtick run.
-start := i
-for i < len(b) && b[i] == '`' {
-i++
-}
-tickLen := i - start
-contentStart := i
-// Search for matching closing backtick run.
-found := false
-j := i
-for j < len(b) {
-if b[j] == '`' {
-k := j
-for k < len(b) && b[k] == '`' {
-k++
-}
-if k-j == tickLen {
-// Blank out content between backticks.
-for x := contentStart; x < j; x++ {
-b[x] = '_'
-}
-i = k
-found = true
-break
-}
-j = k
-} else {
-j++
-}
-}
-if !found {
-// Unclosed code span — leave the rest of the line unchanged.
-break
-}
-}
-return string(b)
+	b := []byte(line)
+	i := 0
+	for i < len(b) {
+		if b[i] != '`' {
+			i++
+			continue
+		}
+		// Count opening backtick run.
+		start := i
+		for i < len(b) && b[i] == '`' {
+			i++
+		}
+		tickLen := i - start
+		contentStart := i
+		// Search for matching closing backtick run.
+		found := false
+		j := i
+		for j < len(b) {
+			if b[j] == '`' {
+				k := j
+				for k < len(b) && b[k] == '`' {
+					k++
+				}
+				if k-j == tickLen {
+					// Blank out content between backticks.
+					for x := contentStart; x < j; x++ {
+						b[x] = '_'
+					}
+					i = k
+					found = true
+					break
+				}
+				j = k
+			} else {
+				j++
+			}
+		}
+		if !found {
+			// Unclosed code span — leave the rest of the line unchanged.
+			break
+		}
+	}
+	return string(b)
 }

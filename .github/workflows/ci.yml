@@ -29,6 +29,18 @@ jobs:
         with:
           go-version-file: .go-version
       - uses: golangci/golangci-lint-action@v9
+      # Belt and braces: golangci-lint reports formatting drift via the
+      # formatters section of .golangci.yml, but this step names the offending
+      # files and shows the diff directly in the log.
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l . | grep -v '^bench/' || true)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt-formatted. Run: gofmt -w ."
+            echo "$unformatted"
+            gofmt -d $unformatted
+            exit 1
+          fi
 
   build:
     name: Build

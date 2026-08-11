@@ -3000,237 +3000,237 @@ func TestMD013_MultiLineLinkRefDef_TitleLineExempt(t *testing.T) {
 }
 
 func TestMD001_Fix_SkipLevel(t *testing.T) {
-src := "# Heading 1\n\n### Heading 3\n"
-got := fixString(t, rules.MD001{}, src)
-want := "# Heading 1\n\n## Heading 3\n"
-if got != want {
-t.Errorf("MD001 Fix() = %q, want %q", got, want)
-}
+	src := "# Heading 1\n\n### Heading 3\n"
+	got := fixString(t, rules.MD001{}, src)
+	want := "# Heading 1\n\n## Heading 3\n"
+	if got != want {
+		t.Errorf("MD001 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD001_Fix_NoViolation(t *testing.T) {
-src := "# Heading 1\n\n## Heading 2\n\n### Heading 3\n"
-got := fixString(t, rules.MD001{}, src)
-if got != src {
-t.Errorf("MD001 Fix() modified valid source: got %q, want %q", got, src)
-}
+	src := "# Heading 1\n\n## Heading 2\n\n### Heading 3\n"
+	got := fixString(t, rules.MD001{}, src)
+	if got != src {
+		t.Errorf("MD001 Fix() modified valid source: got %q, want %q", got, src)
+	}
 }
 
 func TestMD001_Fix_MultiSkip(t *testing.T) {
-src := "# H1\n\n#### H4\n"
-got := fixString(t, rules.MD001{}, src)
-want := "# H1\n\n## H4\n"
-if got != want {
-t.Errorf("MD001 Fix() = %q, want %q", got, want)
-}
+	src := "# H1\n\n#### H4\n"
+	got := fixString(t, rules.MD001{}, src)
+	want := "# H1\n\n## H4\n"
+	if got != want {
+		t.Errorf("MD001 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD004_Fix_Dash(t *testing.T) {
-src := "* item 1\n* item 2\n"
-got := fixString(t, rules.MD004{Style: "dash"}, src)
-want := "- item 1\n- item 2\n"
-if got != want {
-t.Errorf("MD004 Fix() = %q, want %q", got, want)
-}
+	src := "* item 1\n* item 2\n"
+	got := fixString(t, rules.MD004{Style: "dash"}, src)
+	want := "- item 1\n- item 2\n"
+	if got != want {
+		t.Errorf("MD004 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD004_Fix_Asterisk(t *testing.T) {
-src := "- item 1\n- item 2\n"
-got := fixString(t, rules.MD004{Style: "asterisk"}, src)
-want := "* item 1\n* item 2\n"
-if got != want {
-t.Errorf("MD004 Fix() = %q, want %q", got, want)
-}
+	src := "- item 1\n- item 2\n"
+	got := fixString(t, rules.MD004{Style: "asterisk"}, src)
+	want := "* item 1\n* item 2\n"
+	if got != want {
+		t.Errorf("MD004 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD004_Fix_Consistent(t *testing.T) {
-src := "- item 1\n* item 2\n+ item 3\n"
-got := fixString(t, rules.MD004{Style: "consistent"}, src)
-want := "- item 1\n- item 2\n- item 3\n"
-if got != want {
-t.Errorf("MD004 Fix() = %q, want %q", got, want)
-}
+	src := "- item 1\n* item 2\n+ item 3\n"
+	got := fixString(t, rules.MD004{Style: "consistent"}, src)
+	want := "- item 1\n- item 2\n- item 3\n"
+	if got != want {
+		t.Errorf("MD004 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD004_Fix_NoChange(t *testing.T) {
-src := "- item 1\n- item 2\n"
-got := fixString(t, rules.MD004{Style: "dash"}, src)
-if got != src {
-t.Errorf("MD004 Fix() modified valid source: got %q, want %q", got, src)
-}
+	src := "- item 1\n- item 2\n"
+	got := fixString(t, rules.MD004{Style: "dash"}, src)
+	if got != src {
+		t.Errorf("MD004 Fix() modified valid source: got %q, want %q", got, src)
+	}
 }
 
 func TestMD022_Fix_AddBlanksAboveBelow(t *testing.T) {
-src := "Some text\n# Heading\nMore text\n"
-got := fixString(t, rules.MD022{}, src)
-want := "Some text\n\n# Heading\n\nMore text\n"
-if got != want {
-t.Errorf("MD022 Fix() = %q, want %q", got, want)
-}
+	src := "Some text\n# Heading\nMore text\n"
+	got := fixString(t, rules.MD022{}, src)
+	want := "Some text\n\n# Heading\n\nMore text\n"
+	if got != want {
+		t.Errorf("MD022 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD022_Fix_NoChange(t *testing.T) {
-src := "Some text\n\n# Heading\n\nMore text\n"
-got := fixString(t, rules.MD022{}, src)
-if got != src {
-t.Errorf("MD022 Fix() modified valid source: got %q, want %q", got, src)
-}
+	src := "Some text\n\n# Heading\n\nMore text\n"
+	got := fixString(t, rules.MD022{}, src)
+	if got != src {
+		t.Errorf("MD022 Fix() modified valid source: got %q, want %q", got, src)
+	}
 }
 
 func TestMD022_Fix_FirstLine(t *testing.T) {
-// First heading needs no blank line above when it's the first content.
-src := "# Heading\n\nSome text\n"
-got := fixString(t, rules.MD022{}, src)
-if got != src {
-t.Errorf("MD022 Fix() modified valid first-line heading: got %q, want %q", got, src)
-}
+	// First heading needs no blank line above when it's the first content.
+	src := "# Heading\n\nSome text\n"
+	got := fixString(t, rules.MD022{}, src)
+	if got != src {
+		t.Errorf("MD022 Fix() modified valid first-line heading: got %q, want %q", got, src)
+	}
 }
 
 func TestMD028_Fix_RemoveBlanks(t *testing.T) {
-src := "> quote 1\n\n> quote 2\n"
-got := fixString(t, rules.MD028{}, src)
-want := "> quote 1\n> quote 2\n"
-if got != want {
-t.Errorf("MD028 Fix() = %q, want %q", got, want)
-}
+	src := "> quote 1\n\n> quote 2\n"
+	got := fixString(t, rules.MD028{}, src)
+	want := "> quote 1\n> quote 2\n"
+	if got != want {
+		t.Errorf("MD028 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD028_Fix_NoChange(t *testing.T) {
-src := "> quote 1\n> quote 2\n"
-got := fixString(t, rules.MD028{}, src)
-if got != src {
-t.Errorf("MD028 Fix() modified valid source: got %q, want %q", got, src)
-}
+	src := "> quote 1\n> quote 2\n"
+	got := fixString(t, rules.MD028{}, src)
+	if got != src {
+		t.Errorf("MD028 Fix() modified valid source: got %q, want %q", got, src)
+	}
 }
 
 func TestMD028_Fix_NonBlockquoteBlanksPreserved(t *testing.T) {
-src := "> quote\n\nNot a blockquote\n"
-got := fixString(t, rules.MD028{}, src)
-if got != src {
-t.Errorf("MD028 Fix() should not remove blank before non-blockquote: got %q, want %q", got, src)
-}
+	src := "> quote\n\nNot a blockquote\n"
+	got := fixString(t, rules.MD028{}, src)
+	if got != src {
+		t.Errorf("MD028 Fix() should not remove blank before non-blockquote: got %q, want %q", got, src)
+	}
 }
 
 func TestMD034_Fix_WrapBareURL(t *testing.T) {
-src := "Visit https://example.com for info\n"
-got := fixString(t, rules.MD034{}, src)
-want := "Visit <https://example.com> for info\n"
-if got != want {
-t.Errorf("MD034 Fix() = %q, want %q", got, want)
-}
+	src := "Visit https://example.com for info\n"
+	got := fixString(t, rules.MD034{}, src)
+	want := "Visit <https://example.com> for info\n"
+	if got != want {
+		t.Errorf("MD034 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD034_Fix_NoChangeLink(t *testing.T) {
-src := "Visit [example](https://example.com) for info\n"
-got := fixString(t, rules.MD034{}, src)
-if got != src {
-t.Errorf("MD034 Fix() should not modify URL inside link: got %q, want %q", got, src)
-}
+	src := "Visit [example](https://example.com) for info\n"
+	got := fixString(t, rules.MD034{}, src)
+	if got != src {
+		t.Errorf("MD034 Fix() should not modify URL inside link: got %q, want %q", got, src)
+	}
 }
 
 func TestMD034_Fix_AlreadyAutoLink(t *testing.T) {
-src := "Visit <https://example.com> for info\n"
-got := fixString(t, rules.MD034{}, src)
-if got != src {
-t.Errorf("MD034 Fix() should not re-wrap already wrapped URL: got %q, want %q", got, src)
-}
+	src := "Visit <https://example.com> for info\n"
+	got := fixString(t, rules.MD034{}, src)
+	if got != src {
+		t.Errorf("MD034 Fix() should not re-wrap already wrapped URL: got %q, want %q", got, src)
+	}
 }
 
 func TestMD035_Fix_Consistent(t *testing.T) {
-src := "---\n\ntext\n\n***\n"
-got := fixString(t, rules.MD035{}, src)
-want := "---\n\ntext\n\n---\n"
-if got != want {
-t.Errorf("MD035 Fix() = %q, want %q", got, want)
-}
+	src := "---\n\ntext\n\n***\n"
+	got := fixString(t, rules.MD035{}, src)
+	want := "---\n\ntext\n\n---\n"
+	if got != want {
+		t.Errorf("MD035 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD035_Fix_Explicit(t *testing.T) {
-src := "---\n\ntext\n\n* * *\n"
-got := fixString(t, rules.MD035{Style: "---"}, src)
-want := "---\n\ntext\n\n---\n"
-if got != want {
-t.Errorf("MD035 Fix() = %q, want %q", got, want)
-}
+	src := "---\n\ntext\n\n* * *\n"
+	got := fixString(t, rules.MD035{Style: "---"}, src)
+	want := "---\n\ntext\n\n---\n"
+	if got != want {
+		t.Errorf("MD035 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD035_Fix_NoChange(t *testing.T) {
-src := "---\n\ntext\n\n---\n"
-got := fixString(t, rules.MD035{Style: "---"}, src)
-if got != src {
-t.Errorf("MD035 Fix() modified valid source: got %q, want %q", got, src)
-}
+	src := "---\n\ntext\n\n---\n"
+	got := fixString(t, rules.MD035{Style: "---"}, src)
+	if got != src {
+		t.Errorf("MD035 Fix() modified valid source: got %q, want %q", got, src)
+	}
 }
 
 func TestMD046_Fix_ToFenced(t *testing.T) {
-src := "Text\n\n    code line 1\n    code line 2\n\nMore text\n"
-got := fixString(t, rules.MD046{Style: "fenced"}, src)
-want := "Text\n\n```\ncode line 1\ncode line 2\n```\n\nMore text\n"
-if got != want {
-t.Errorf("MD046 Fix() = %q, want %q", got, want)
-}
+	src := "Text\n\n    code line 1\n    code line 2\n\nMore text\n"
+	got := fixString(t, rules.MD046{Style: "fenced"}, src)
+	want := "Text\n\n```\ncode line 1\ncode line 2\n```\n\nMore text\n"
+	if got != want {
+		t.Errorf("MD046 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD046_Fix_NoChange(t *testing.T) {
-src := "Text\n\n```\ncode\n```\n\nMore text\n"
-got := fixString(t, rules.MD046{Style: "fenced"}, src)
-if got != src {
-t.Errorf("MD046 Fix() modified valid fenced source: got %q, want %q", got, src)
-}
+	src := "Text\n\n```\ncode\n```\n\nMore text\n"
+	got := fixString(t, rules.MD046{Style: "fenced"}, src)
+	if got != src {
+		t.Errorf("MD046 Fix() modified valid fenced source: got %q, want %q", got, src)
+	}
 }
 
 func TestMD055_Fix_AddLeadingTrailing(t *testing.T) {
-src := "Header 1 | Header 2\n--- | ---\nCell 1 | Cell 2\n"
-got := fixString(t, rules.MD055{Style: "leading_and_trailing"}, src)
-want := "| Header 1 | Header 2 |\n| --- | --- |\n| Cell 1 | Cell 2 |\n"
-if got != want {
-t.Errorf("MD055 Fix() = %q, want %q", got, want)
-}
+	src := "Header 1 | Header 2\n--- | ---\nCell 1 | Cell 2\n"
+	got := fixString(t, rules.MD055{Style: "leading_and_trailing"}, src)
+	want := "| Header 1 | Header 2 |\n| --- | --- |\n| Cell 1 | Cell 2 |\n"
+	if got != want {
+		t.Errorf("MD055 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD055_Fix_RemoveLeadingTrailing(t *testing.T) {
-src := "| Header 1 | Header 2 |\n| --- | --- |\n| Cell 1 | Cell 2 |\n"
-got := fixString(t, rules.MD055{Style: "no_leading_or_trailing"}, src)
-want := "Header 1 | Header 2\n--- | ---\nCell 1 | Cell 2\n"
-if got != want {
-t.Errorf("MD055 Fix() = %q, want %q", got, want)
-}
+	src := "| Header 1 | Header 2 |\n| --- | --- |\n| Cell 1 | Cell 2 |\n"
+	got := fixString(t, rules.MD055{Style: "no_leading_or_trailing"}, src)
+	want := "Header 1 | Header 2\n--- | ---\nCell 1 | Cell 2\n"
+	if got != want {
+		t.Errorf("MD055 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD055_Fix_NoChange(t *testing.T) {
-src := "| Header 1 | Header 2 |\n| --- | --- |\n| Cell 1 | Cell 2 |\n"
-got := fixString(t, rules.MD055{Style: "leading_and_trailing"}, src)
-if got != src {
-t.Errorf("MD055 Fix() modified valid source: got %q, want %q", got, src)
-}
+	src := "| Header 1 | Header 2 |\n| --- | --- |\n| Cell 1 | Cell 2 |\n"
+	got := fixString(t, rules.MD055{Style: "leading_and_trailing"}, src)
+	if got != src {
+		t.Errorf("MD055 Fix() modified valid source: got %q, want %q", got, src)
+	}
 }
 
 // ─── MD040 Fix ─────────────────────────────────────────────────────────────
 
 func TestMD040_Fix_AddTextLanguage(t *testing.T) {
-src := "```\ncode\n```\n"
-got := fixString(t, rules.MD040{}, src)
-want := "``` text\ncode\n```\n"
-if got != want {
-t.Errorf("MD040 Fix() = %q, want %q", got, want)
-}
+	src := "```\ncode\n```\n"
+	got := fixString(t, rules.MD040{}, src)
+	want := "``` text\ncode\n```\n"
+	if got != want {
+		t.Errorf("MD040 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD040_Fix_NoChangeWhenLangPresent(t *testing.T) {
-src := "```go\ncode\n```\n"
-got := fixString(t, rules.MD040{}, src)
-if got != src {
-t.Errorf("MD040 Fix() modified source that already has a language: got %q", got)
-}
+	src := "```go\ncode\n```\n"
+	got := fixString(t, rules.MD040{}, src)
+	if got != src {
+		t.Errorf("MD040 Fix() modified source that already has a language: got %q", got)
+	}
 }
 
 func TestMD040_Fix_TildeFence(t *testing.T) {
-src := "~~~\ncode\n~~~\n"
-got := fixString(t, rules.MD040{}, src)
-want := "~~~ text\ncode\n~~~\n"
-if got != want {
-t.Errorf("MD040 Fix() = %q, want %q", got, want)
-}
+	src := "~~~\ncode\n~~~\n"
+	got := fixString(t, rules.MD040{}, src)
+	want := "~~~ text\ncode\n~~~\n"
+	if got != want {
+		t.Errorf("MD040 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD040_Fix_SkipInsideFencedBlock(t *testing.T) {
@@ -3247,143 +3247,143 @@ func TestMD040_Fix_SkipInsideFencedBlock(t *testing.T) {
 // ─── MD033 Fix ─────────────────────────────────────────────────────────────
 
 func TestMD033_Fix_RemoveInlineTag(t *testing.T) {
-src := "Some <b>bold</b> text\n"
-got := fixString(t, rules.MD033{}, src)
-want := "Some bold text\n"
-if got != want {
-t.Errorf("MD033 Fix() = %q, want %q", got, want)
-}
+	src := "Some <b>bold</b> text\n"
+	got := fixString(t, rules.MD033{}, src)
+	want := "Some bold text\n"
+	if got != want {
+		t.Errorf("MD033 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD033_Fix_KeepAllowedTag(t *testing.T) {
-src := "Some <b>bold</b> text\n"
-got := fixString(t, rules.MD033{AllowedElements: []string{"b"}}, src)
-if got != src {
-t.Errorf("MD033 Fix() removed an allowed element: got %q", got)
-}
+	src := "Some <b>bold</b> text\n"
+	got := fixString(t, rules.MD033{AllowedElements: []string{"b"}}, src)
+	if got != src {
+		t.Errorf("MD033 Fix() removed an allowed element: got %q", got)
+	}
 }
 
 func TestMD033_Fix_KeepHTMLComment(t *testing.T) {
-src := "<!-- comment -->\nSome text\n"
-got := fixString(t, rules.MD033{}, src)
-if got != src {
-t.Errorf("MD033 Fix() removed an HTML comment: got %q", got)
-}
+	src := "<!-- comment -->\nSome text\n"
+	got := fixString(t, rules.MD033{}, src)
+	if got != src {
+		t.Errorf("MD033 Fix() removed an HTML comment: got %q", got)
+	}
 }
 
 func TestMD033_Fix_RemoveSelfClosing(t *testing.T) {
-src := "Line break here<br/>.\n"
-got := fixString(t, rules.MD033{}, src)
-want := "Line break here.\n"
-if got != want {
-t.Errorf("MD033 Fix() = %q, want %q", got, want)
-}
+	src := "Line break here<br/>.\n"
+	got := fixString(t, rules.MD033{}, src)
+	want := "Line break here.\n"
+	if got != want {
+		t.Errorf("MD033 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD033_Fix_NoChangeWhenNoneDisallowed(t *testing.T) {
-src := "No HTML here\n"
-got := fixString(t, rules.MD033{}, src)
-if got != src {
-t.Errorf("MD033 Fix() modified source that has no HTML: got %q", got)
-}
+	src := "No HTML here\n"
+	got := fixString(t, rules.MD033{}, src)
+	if got != src {
+		t.Errorf("MD033 Fix() modified source that has no HTML: got %q", got)
+	}
 }
 
 // ─── MD036 Fix ─────────────────────────────────────────────────────────────
 
 func TestMD036_Fix_BoldToHeading(t *testing.T) {
-src := "**Section Title**\n\nSome text\n"
-got := fixString(t, rules.MD036{}, src)
-want := "## Section Title\n\nSome text\n"
-if got != want {
-t.Errorf("MD036 Fix() = %q, want %q", got, want)
-}
+	src := "**Section Title**\n\nSome text\n"
+	got := fixString(t, rules.MD036{}, src)
+	want := "## Section Title\n\nSome text\n"
+	if got != want {
+		t.Errorf("MD036 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD036_Fix_ItalicToHeading(t *testing.T) {
-src := "*Section Title*\n\nSome text\n"
-got := fixString(t, rules.MD036{}, src)
-want := "## Section Title\n\nSome text\n"
-if got != want {
-t.Errorf("MD036 Fix() = %q, want %q", got, want)
-}
+	src := "*Section Title*\n\nSome text\n"
+	got := fixString(t, rules.MD036{}, src)
+	want := "## Section Title\n\nSome text\n"
+	if got != want {
+		t.Errorf("MD036 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD036_Fix_SkipPunctuation(t *testing.T) {
-src := "**Not a heading.**\n\nSome text\n"
-got := fixString(t, rules.MD036{}, src)
-if got != src {
-t.Errorf("MD036 Fix() modified emphasis ending with punctuation: got %q", got)
-}
+	src := "**Not a heading.**\n\nSome text\n"
+	got := fixString(t, rules.MD036{}, src)
+	if got != src {
+		t.Errorf("MD036 Fix() modified emphasis ending with punctuation: got %q", got)
+	}
 }
 
 func TestMD036_Fix_SkipInsideList(t *testing.T) {
-// Emphasis inside a list item must not be converted.
-src := "- **Not a heading**\n"
-v := lintString(t, rules.MD036{}, src)
-if len(v) != 0 {
-t.Logf("(no violation expected for emphasis inside list)")
-}
-got := fixString(t, rules.MD036{}, src)
-if got != src {
-t.Errorf("MD036 Fix() modified a list item: got %q", got)
-}
+	// Emphasis inside a list item must not be converted.
+	src := "- **Not a heading**\n"
+	v := lintString(t, rules.MD036{}, src)
+	if len(v) != 0 {
+		t.Logf("(no violation expected for emphasis inside list)")
+	}
+	got := fixString(t, rules.MD036{}, src)
+	if got != src {
+		t.Errorf("MD036 Fix() modified a list item: got %q", got)
+	}
 }
 
 func TestMD036_Fix_NoChange(t *testing.T) {
-src := "## Real heading\n\nSome text\n"
-got := fixString(t, rules.MD036{}, src)
-if got != src {
-t.Errorf("MD036 Fix() modified a real heading: got %q", got)
-}
+	src := "## Real heading\n\nSome text\n"
+	got := fixString(t, rules.MD036{}, src)
+	if got != src {
+		t.Errorf("MD036 Fix() modified a real heading: got %q", got)
+	}
 }
 
 // ─── MD005 Fix ─────────────────────────────────────────────────────────────
 
 func TestMD005_Fix_NormaliseSiblingIndent(t *testing.T) {
-src := "- Item 1\n- Item 2\n - Item 3\n"
-got := fixString(t, rules.MD005{}, src)
-want := "- Item 1\n- Item 2\n- Item 3\n"
-if got != want {
-t.Errorf("MD005 Fix() = %q, want %q", got, want)
-}
+	src := "- Item 1\n- Item 2\n - Item 3\n"
+	got := fixString(t, rules.MD005{}, src)
+	want := "- Item 1\n- Item 2\n- Item 3\n"
+	if got != want {
+		t.Errorf("MD005 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD005_Fix_NoChangeWhenConsistent(t *testing.T) {
-src := "- Item 1\n- Item 2\n- Item 3\n"
-got := fixString(t, rules.MD005{}, src)
-if got != src {
-t.Errorf("MD005 Fix() modified consistent source: got %q", got)
-}
+	src := "- Item 1\n- Item 2\n- Item 3\n"
+	got := fixString(t, rules.MD005{}, src)
+	if got != src {
+		t.Errorf("MD005 Fix() modified consistent source: got %q", got)
+	}
 }
 
 func TestMD005_Fix_NestedList(t *testing.T) {
-src := "- Item 1\n  - Nested 1\n   - Nested 2\n"
-got := fixString(t, rules.MD005{}, src)
-want := "- Item 1\n  - Nested 1\n  - Nested 2\n"
-if got != want {
-t.Errorf("MD005 Fix() = %q, want %q", got, want)
-}
+	src := "- Item 1\n  - Nested 1\n   - Nested 2\n"
+	got := fixString(t, rules.MD005{}, src)
+	want := "- Item 1\n  - Nested 1\n  - Nested 2\n"
+	if got != want {
+		t.Errorf("MD005 Fix() = %q, want %q", got, want)
+	}
 }
 
 // ─── MD007 Fix ─────────────────────────────────────────────────────────────
 
 func TestMD007_Fix_NormaliseSingleLevel(t *testing.T) {
-// Top-level item at 1 space should be fixed to 0.
-src := " - Wrong\n"
-got := fixString(t, rules.MD007{}, src)
-want := "- Wrong\n"
-if got != want {
-t.Errorf("MD007 Fix() = %q, want %q", got, want)
-}
+	// Top-level item at 1 space should be fixed to 0.
+	src := " - Wrong\n"
+	got := fixString(t, rules.MD007{}, src)
+	want := "- Wrong\n"
+	if got != want {
+		t.Errorf("MD007 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD007_Fix_NormaliseNested(t *testing.T) {
-src := "- Item 1\n   - Nested\n"
-got := fixString(t, rules.MD007{}, src)
-want := "- Item 1\n  - Nested\n"
-if got != want {
-t.Errorf("MD007 Fix() = %q, want %q", got, want)
-}
+	src := "- Item 1\n   - Nested\n"
+	got := fixString(t, rules.MD007{}, src)
+	want := "- Item 1\n  - Nested\n"
+	if got != want {
+		t.Errorf("MD007 Fix() = %q, want %q", got, want)
+	}
 }
 
 func TestMD007_Fix_NoChange(t *testing.T) {
@@ -3404,134 +3404,134 @@ func TestMD007_Fix_NestedOrdered(t *testing.T) {
 }
 
 func TestMD007_Fix_CustomIndent(t *testing.T) {
-// With indent=4, a nested item at 5 spaces should become 4.
-src := "- Item\n     - Nested\n"
-got := fixString(t, rules.MD007{Indent: 4}, src)
-want := "- Item\n    - Nested\n"
-if got != want {
-t.Errorf("MD007 Fix(indent=4) = %q, want %q", got, want)
-}
+	// With indent=4, a nested item at 5 spaces should become 4.
+	src := "- Item\n     - Nested\n"
+	got := fixString(t, rules.MD007{Indent: 4}, src)
+	want := "- Item\n    - Nested\n"
+	if got != want {
+		t.Errorf("MD007 Fix(indent=4) = %q, want %q", got, want)
+	}
 }
 
 // ─── MD060 Fix ─────────────────────────────────────────────────────────────
 
 func TestMD060_Fix_CompactStyle(t *testing.T) {
-src := "|Name|Age|\n|----|---|\n|Alice|30|\n"
-got := fixString(t, rules.MD060{Style: "compact"}, src)
-want := "| Name | Age |\n|----|---|\n| Alice | 30 |\n"
-if got != want {
-t.Errorf("MD060 Fix(compact) = %q, want %q", got, want)
-}
+	src := "|Name|Age|\n|----|---|\n|Alice|30|\n"
+	got := fixString(t, rules.MD060{Style: "compact"}, src)
+	want := "| Name | Age |\n|----|---|\n| Alice | 30 |\n"
+	if got != want {
+		t.Errorf("MD060 Fix(compact) = %q, want %q", got, want)
+	}
 }
 
 func TestMD060_Fix_TightStyle(t *testing.T) {
-src := "| Name | Age |\n| ---- | --- |\n| Alice | 30 |\n"
-got := fixString(t, rules.MD060{Style: "tight"}, src)
-want := "|Name|Age|\n| ---- | --- |\n|Alice|30|\n"
-if got != want {
-t.Errorf("MD060 Fix(tight) = %q, want %q", got, want)
-}
+	src := "| Name | Age |\n| ---- | --- |\n| Alice | 30 |\n"
+	got := fixString(t, rules.MD060{Style: "tight"}, src)
+	want := "|Name|Age|\n| ---- | --- |\n|Alice|30|\n"
+	if got != want {
+		t.Errorf("MD060 Fix(tight) = %q, want %q", got, want)
+	}
 }
 
 func TestMD060_Fix_AnyNoChange(t *testing.T) {
-src := "| Name | Age |\n| ---- | --- |\n| Alice | 30 |\n"
-got := fixString(t, rules.MD060{Style: "any"}, src)
-if got != src {
-t.Errorf("MD060 Fix(any) = %q, want unchanged %q", got, src)
-}
+	src := "| Name | Age |\n| ---- | --- |\n| Alice | 30 |\n"
+	got := fixString(t, rules.MD060{Style: "any"}, src)
+	if got != src {
+		t.Errorf("MD060 Fix(any) = %q, want unchanged %q", got, src)
+	}
 }
 
 func TestMD060_Fix_AlignedStyle(t *testing.T) {
-src := "| Name | Age |\n| ---- | --- |\n| Alice | 30 |\n"
-got := fixString(t, rules.MD060{Style: "aligned"}, src)
-// After alignment, all rows should have pipes at the same positions.
-// Each column should be wide enough to fit the widest content.
-wantHeader := "| Name  | Age |"
-if !strings.Contains(got, wantHeader) {
-t.Errorf("MD060 Fix(aligned) header line = %q, want to contain %q\nfull output: %q", got, wantHeader, got)
-}
+	src := "| Name | Age |\n| ---- | --- |\n| Alice | 30 |\n"
+	got := fixString(t, rules.MD060{Style: "aligned"}, src)
+	// After alignment, all rows should have pipes at the same positions.
+	// Each column should be wide enough to fit the widest content.
+	wantHeader := "| Name  | Age |"
+	if !strings.Contains(got, wantHeader) {
+		t.Errorf("MD060 Fix(aligned) header line = %q, want to contain %q\nfull output: %q", got, wantHeader, got)
+	}
 }
 
 func TestMD060_Fix_ConsistentStyle(t *testing.T) {
-// First row is compact; second row is tight — fix to consistent (compact).
-src := "| Name | Age |\n| ---- | --- |\n|Alice|30|\n"
-got := fixString(t, rules.MD060{Style: "consistent"}, src)
-want := "| Name | Age |\n| ---- | --- |\n| Alice | 30 |\n"
-if got != want {
-t.Errorf("MD060 Fix(consistent) = %q, want %q", got, want)
-}
+	// First row is compact; second row is tight — fix to consistent (compact).
+	src := "| Name | Age |\n| ---- | --- |\n|Alice|30|\n"
+	got := fixString(t, rules.MD060{Style: "consistent"}, src)
+	want := "| Name | Age |\n| ---- | --- |\n| Alice | 30 |\n"
+	if got != want {
+		t.Errorf("MD060 Fix(consistent) = %q, want %q", got, want)
+	}
 }
 
 // ─── MD003 Fix ─────────────────────────────────────────────────────────────
 
 func TestMD003_Fix_ATXToSetextH1(t *testing.T) {
-src := "# Heading One\n\nText\n"
-got := fixString(t, rules.MD003{Style: "setext"}, src)
-want := "Heading One\n===========\n\nText\n"
-if got != want {
-t.Errorf("MD003 Fix(setext) h1 = %q, want %q", got, want)
-}
+	src := "# Heading One\n\nText\n"
+	got := fixString(t, rules.MD003{Style: "setext"}, src)
+	want := "Heading One\n===========\n\nText\n"
+	if got != want {
+		t.Errorf("MD003 Fix(setext) h1 = %q, want %q", got, want)
+	}
 }
 
 func TestMD003_Fix_ATXToSetextH2(t *testing.T) {
-src := "## Heading Two\n\nText\n"
-got := fixString(t, rules.MD003{Style: "setext"}, src)
-want := "Heading Two\n-----------\n\nText\n"
-if got != want {
-t.Errorf("MD003 Fix(setext) h2 = %q, want %q", got, want)
-}
+	src := "## Heading Two\n\nText\n"
+	got := fixString(t, rules.MD003{Style: "setext"}, src)
+	want := "Heading Two\n-----------\n\nText\n"
+	if got != want {
+		t.Errorf("MD003 Fix(setext) h2 = %q, want %q", got, want)
+	}
 }
 
 func TestMD003_Fix_SetextToATX(t *testing.T) {
-src := "Heading One\n===========\n\nText\n"
-got := fixString(t, rules.MD003{Style: "atx"}, src)
-want := "# Heading One\n\nText\n"
-if got != want {
-t.Errorf("MD003 Fix(atx) from setext = %q, want %q", got, want)
-}
+	src := "Heading One\n===========\n\nText\n"
+	got := fixString(t, rules.MD003{Style: "atx"}, src)
+	want := "# Heading One\n\nText\n"
+	if got != want {
+		t.Errorf("MD003 Fix(atx) from setext = %q, want %q", got, want)
+	}
 }
 
 func TestMD003_Fix_ATXToATXClosed(t *testing.T) {
-src := "# Heading\n"
-got := fixString(t, rules.MD003{Style: "atx_closed"}, src)
-want := "# Heading #\n"
-if got != want {
-t.Errorf("MD003 Fix(atx_closed) = %q, want %q", got, want)
-}
+	src := "# Heading\n"
+	got := fixString(t, rules.MD003{Style: "atx_closed"}, src)
+	want := "# Heading #\n"
+	if got != want {
+		t.Errorf("MD003 Fix(atx_closed) = %q, want %q", got, want)
+	}
 }
 
 func TestMD003_Fix_ATXClosedToATX(t *testing.T) {
-src := "# Heading #\n"
-got := fixString(t, rules.MD003{Style: "atx"}, src)
-want := "# Heading\n"
-if got != want {
-t.Errorf("MD003 Fix(atx) from atx_closed = %q, want %q", got, want)
-}
+	src := "# Heading #\n"
+	got := fixString(t, rules.MD003{Style: "atx"}, src)
+	want := "# Heading\n"
+	if got != want {
+		t.Errorf("MD003 Fix(atx) from atx_closed = %q, want %q", got, want)
+	}
 }
 
 func TestMD003_Fix_ConsistentATX(t *testing.T) {
-// First heading is ATX; setext heading should be converted to ATX.
-src := "# ATX First\n\nSetext\n------\n\nText\n"
-got := fixString(t, rules.MD003{Style: "consistent"}, src)
-want := "# ATX First\n\n## Setext\n\nText\n"
-if got != want {
-t.Errorf("MD003 Fix(consistent) = %q, want %q", got, want)
-}
+	// First heading is ATX; setext heading should be converted to ATX.
+	src := "# ATX First\n\nSetext\n------\n\nText\n"
+	got := fixString(t, rules.MD003{Style: "consistent"}, src)
+	want := "# ATX First\n\n## Setext\n\nText\n"
+	if got != want {
+		t.Errorf("MD003 Fix(consistent) = %q, want %q", got, want)
+	}
 }
 
 func TestMD003_Fix_NoChangeWhenAlreadyCorrect(t *testing.T) {
-src := "# ATX Heading\n\nText\n"
-got := fixString(t, rules.MD003{Style: "atx"}, src)
-if got != src {
-t.Errorf("MD003 Fix(atx) modified already-correct source: got %q", got)
-}
+	src := "# ATX Heading\n\nText\n"
+	got := fixString(t, rules.MD003{Style: "atx"}, src)
+	if got != src {
+		t.Errorf("MD003 Fix(atx) modified already-correct source: got %q", got)
+	}
 }
 
 func TestMD003_Fix_SetextWithATX_H3(t *testing.T) {
-// setext_with_atx: h3 must be ATX; if it's ATX already, leave it alone.
-src := "### H3 heading\n"
-got := fixString(t, rules.MD003{Style: "setext_with_atx"}, src)
-if got != src {
-t.Errorf("MD003 Fix(setext_with_atx) modified h3 ATX heading: got %q", got)
-}
+	// setext_with_atx: h3 must be ATX; if it's ATX already, leave it alone.
+	src := "### H3 heading\n"
+	got := fixString(t, rules.MD003{Style: "setext_with_atx"}, src)
+	if got != src {
+		t.Errorf("MD003 Fix(setext_with_atx) modified h3 ATX heading: got %q", got)
+	}
 }

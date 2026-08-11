@@ -184,4 +184,3 @@ func (r MD036) Check(doc *lint.Document) []lint.Violation {
 
 	return violations
 }
-

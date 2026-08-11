@@ -481,7 +481,6 @@ func TestCLI_Summary_NoViolations(t *testing.T) {
 	}
 }
 
-
 func TestCLI_Quiet_SuppressesSummary(t *testing.T) {
 	bin := buildBinary(t)
 	testfile := filepath.Join("..", "..", "testdata", "md001_invalid.md")

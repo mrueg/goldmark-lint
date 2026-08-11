@@ -227,9 +227,9 @@ type sarifDriver struct {
 }
 
 type sarifRule struct {
-	ID               string      `json:"id"`
-	ShortDescription sarifText   `json:"shortDescription"`
-	HelpUri          string      `json:"helpUri"`
+	ID               string    `json:"id"`
+	ShortDescription sarifText `json:"shortDescription"`
+	HelpUri          string    `json:"helpUri"`
 }
 
 type sarifText struct {
@@ -530,7 +530,7 @@ func parseOutputFormatters(raw []interface{}) []outputFormatterSpec {
 
 // diffOp is a single element of a line-level diff: a context, deleted, or added line.
 type diffOp struct {
-	op   byte   // ' ' context, '-' deleted, '+' added
+	op   byte // ' ' context, '-' deleted, '+' added
 	text string
 }
 
