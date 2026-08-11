@@ -7,33 +7,47 @@ import (
 )
 
 // MD054 checks that links and images use allowed styles.
+//
+// Every option independently allows one style and defaults to true, matching
+// markdownlint: disabling one style does not implicitly disable the others.
+// The fields are pointers so that an explicit false is distinguishable from an
+// unset option; with plain bools the two are the same value and any
+// configuration at all made the rule disable itself.
 type MD054 struct {
-	Autolink  bool `json:"autolink"`
-	Collapsed bool `json:"collapsed"`
-	Full      bool `json:"full"`
-	Inline    bool `json:"inline"`
-	Shortcut  bool `json:"shortcut"`
-	URLInline bool `json:"url_inline"`
+	Autolink  *bool `json:"autolink,omitempty"`
+	Collapsed *bool `json:"collapsed,omitempty"`
+	Full      *bool `json:"full,omitempty"`
+	Inline    *bool `json:"inline,omitempty"`
+	Shortcut  *bool `json:"shortcut,omitempty"`
+	URLInline *bool `json:"url_inline,omitempty"`
 }
 
 func (r MD054) ID() string          { return "MD054" }
 func (r MD054) Aliases() []string   { return []string{"link-image-style"} }
 func (r MD054) Description() string { return "Link and image style" }
 
-func (r MD054) defaults() MD054 {
-	result := r
-	// All default to true if not explicitly set (zero value = false means disabled).
-	// Since Go zero value is false, we can't distinguish "not set" from "false".
-	// The convention is: if all are false, use all defaults = true.
-	if !result.Autolink && !result.Collapsed && !result.Full && !result.Inline && !result.Shortcut && !result.URLInline {
-		result.Autolink = true
-		result.Collapsed = true
-		result.Full = true
-		result.Inline = true
-		result.Shortcut = true
-		result.URLInline = true
+// md054Allowed holds the resolved per-style permissions for one check run.
+type md054Allowed struct {
+	Autolink  bool
+	Collapsed bool
+	Full      bool
+	Inline    bool
+	Shortcut  bool
+	URLInline bool
+}
+
+// allowedOr resolves an option pointer, treating unset as allowed.
+func allowedOr(p *bool) bool { return p == nil || *p }
+
+func (r MD054) defaults() md054Allowed {
+	return md054Allowed{
+		Autolink:  allowedOr(r.Autolink),
+		Collapsed: allowedOr(r.Collapsed),
+		Full:      allowedOr(r.Full),
+		Inline:    allowedOr(r.Inline),
+		Shortcut:  allowedOr(r.Shortcut),
+		URLInline: allowedOr(r.URLInline),
 	}
-	return result
 }
 
 // md054AutolinkRE matches autolinks <url>.
@@ -117,6 +131,12 @@ func (r MD054) Check(doc *lint.Document) []lint.Violation {
 		}
 		// Check shortcut references.
 		if !cfg.Shortcut {
+			// A link reference definition ("[label]: url") opens with what looks
+			// like a shortcut reference but defines one rather than using one;
+			// markdownlint does not report those.
+			if linkRefLabel(line) != "" {
+				continue
+			}
 			clean := line
 			// Remove full and collapsed refs to avoid false positives.
 			clean = md054FullRefRE.ReplaceAllString(clean, "")
