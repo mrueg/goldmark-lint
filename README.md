@@ -539,37 +539,38 @@ goldmark-lint --watch '**/*.md'
 ## Performance & Conformance
 
 The numbers below were produced by running [`bench/bench.sh`](bench/bench.sh)
-and [`bench/conform.sh`](bench/conform.sh) against two real-world corpora at
-fixed commits.
+and [`bench/conform.sh`](bench/conform.sh) against three real-world sources at
+fixed commits: two collections of ordinary prose and the CommonMark
+specification, which exercises Markdown's edge cases deliberately.
 
 ### Benchmark
 
-**Corpus:** same two repositories as the conformance run:
+Both benchmarks below come from the CI job on a GitHub Actions runner, so they
+are measured on consistent hardware rather than a developer laptop. Measured
+with [hyperfine](https://github.com/sharkdp/hyperfine), 10 runs after 3 warmup
+runs, with `--no-cache` so that every run does the full parsing work rather
+than replaying goldmark-lint's result cache.
 
-- [rust-lang/rfcs](https://github.com/rust-lang/rfcs) `c143e315` — 636 files
-- [tldr-pages/tldr](https://github.com/tldr-pages/tldr) `05c563d1` — 33,769 files
-- **Total: 34,405 Markdown files**
+**Many small files** — the two prose corpora, 34,405 Markdown files averaging
+roughly 30 lines each. This measures per-file overhead.
 
-Measured with [hyperfine](https://github.com/sharkdp/hyperfine)
-(10 runs, 3 warmup runs). goldmark-lint's content cache was enabled (default).
+| Tool              |     Mean |      Min |      Max |
+| ----------------- | -------: | -------: | -------: |
+| goldmark-lint     |  5.617 s |  5.579 s |  5.770 s |
+| markdownlint-cli2 | 45.380 s | 41.182 s | 47.369 s |
 
-| Tool               | Mean       | Min        | Max        |
-|--------------------|------------|------------|------------|
-| goldmark-lint      | 7.941 s    | 7.898 s    | 8.054 s    |
-| markdownlint-cli2  | 46.866 s   | 45.376 s   | 48.124 s   |
+**goldmark-lint is 8.1× faster** (hyperfine reports 8.08 ± 0.47).
 
-**goldmark-lint is ~5.9× faster than markdownlint-cli2** on this corpus.
+**One large document** — the CommonMark spec, a single 9,811-line file. This
+measures how each tool scales within a document rather than across many of
+them, which the corpus above cannot show.
 
-Note that this corpus is made up of many small files — 34,405 files averaging
-roughly 30 lines each — so it measures per-file overhead rather than how either
-tool scales within a single large document. For that dimension, linting one
-synthetic file of mixed headings, prose and fenced code:
+| Tool              |     Mean |      Min |      Max |
+| ----------------- | -------: | -------: | -------: |
+| goldmark-lint     |  74.8 ms |  73.9 ms |  75.7 ms |
+| markdownlint-cli2 | 614.3 ms | 601.9 ms | 631.1 ms |
 
-| Lines in one file | goldmark-lint | markdownlint |
-|-------------------|---------------|--------------|
-| 5,000             | 0.29 s        | 1.76 s       |
-| 10,000            | 0.42 s        | 2.33 s       |
-| 20,000            | 0.87 s        | 3.91 s       |
+**goldmark-lint is 8.2× faster** (hyperfine reports 8.22 ± 0.15).
 
 To reproduce:
 
@@ -577,9 +578,11 @@ To reproduce:
 ./bench/bench.sh
 ```
 
-`bench/bench.sh` accepts `--runs N`, `--warmup N` and `--no-cache`. The CI
-benchmark workflow passes `--no-cache` so that every run does the full parsing
-work; the table above is from a default (cached) run.
+`bench/bench.sh` accepts `--runs N`, `--warmup N` and `--no-cache`. It also
+skips the comparison entirely when `markdownlint-cli2` is not on `PATH`, which
+is how the pull request CI job keeps itself short: markdownlint's speed is a
+fixed baseline that no change here can move, and re-measuring it accounts for
+almost all of the runtime.
 
 ### Conformance
 
