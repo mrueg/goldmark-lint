@@ -1,0 +1,23 @@
+version: "2"
+
+linters:
+  # Defaults are errcheck, govet, ineffassign, staticcheck and unused.
+  enable:
+    # Flag unhandled errors that the default errcheck configuration lets pass,
+    # in particular the Fprintf/Write calls the formatters rely on.
+    - errorlint
+    # Catch the copylocks/loop-variable style mistakes govet does not cover.
+    - bodyclose
+    - misspell
+
+formatters:
+  # gofmt is deliberately listed here: it is NOT part of golangci-lint's default
+  # linter set, which is why 16 files had drifted out of gofmt compliance
+  # without CI noticing. Run `golangci-lint fmt` to apply.
+  enable:
+    - gofmt
+
+issues:
+  # Report every occurrence rather than the first few per linter/file.
+  max-issues-per-linter: 0
+  max-same-issues: 0

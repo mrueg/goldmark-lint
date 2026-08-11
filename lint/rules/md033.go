@@ -267,6 +267,7 @@ func isHTMLComment(n *ast.RawHTML, source []byte) bool {
 	raw := seg.Value(source)
 	return len(raw) >= 4 && raw[0] == '<' && raw[1] == '!' && raw[2] == '-' && raw[3] == '-'
 }
+
 // (i.e., starts with "</"), such as </b> or </div>.
 func isClosingRawHTML(n *ast.RawHTML, source []byte) bool {
 	if n.Segments == nil || n.Segments.Len() == 0 {

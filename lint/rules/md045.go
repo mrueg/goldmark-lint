@@ -87,7 +87,7 @@ func (r MD045) Check(doc *lint.Document) []lint.Violation {
 				tag := blockText[match[0]:match[1]]
 				if !md045AltAttrRE.MatchString(tag) && !md045AriaHiddenTrueRE.MatchString(tag) {
 					// Report the line where the <img> starts.
-					lineNum := doc.LineAt(firstSeg.Start+match[0])
+					lineNum := doc.LineAt(firstSeg.Start + match[0])
 					violations = append(violations, lint.Violation{
 						Rule:    r.ID(),
 						Line:    lineNum,

@@ -716,4 +716,3 @@ func parseGitignore(path string) []string {
 	}
 	return patterns
 }
-

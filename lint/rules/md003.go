@@ -92,8 +92,8 @@ func (r MD003) Fix(source []byte) []byte {
 	mask := fencedCodeBlockMask(lines)
 
 	type hdgInfo struct {
-		lineIdx      int    // 0-based line index of the heading content (ATX) or text (setext)
-		underlineIdx int    // setext underline line index, or -1
+		lineIdx      int // 0-based line index of the heading content (ATX) or text (setext)
+		underlineIdx int // setext underline line index, or -1
 		level        int
 		text         string
 		actualStyle  string // "atx", "atx_closed", or "setext"

@@ -671,7 +671,6 @@ func TestFormatSummaryJSON_MultipleCounts(t *testing.T) {
 	}
 }
 
-
 func TestFormatGitHubActions_Output(t *testing.T) {
 	violations := makeViolations()
 	var buf bytes.Buffer

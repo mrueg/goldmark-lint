@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -59,7 +60,10 @@ Exit codes:
 			if msg := err.Error(); msg != "" {
 				fmt.Fprintln(os.Stderr, msg)
 			}
-			if exitCoder, ok := err.(cli.ExitCoder); ok {
+			// errors.As rather than a bare type assertion, so that an
+			// ExitCoder still sets the exit code when it arrives wrapped.
+			var exitCoder cli.ExitCoder
+			if errors.As(err, &exitCoder) {
 				os.Exit(exitCoder.ExitCode())
 			}
 		},

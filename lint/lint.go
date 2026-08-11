@@ -96,10 +96,10 @@ func buildLineStarts(source []byte) []int {
 
 // Linter holds the list of rules and runs them on documents.
 type Linter struct {
-	Rules              []Rule
-	aliasMap           map[string]string // upper(alias) → canonical rule ID
-	NoInlineConfig     bool
-	FrontMatterRegexp  *regexp.Regexp    // custom front matter pattern; nil uses default
+	Rules             []Rule
+	aliasMap          map[string]string // upper(alias) → canonical rule ID
+	NoInlineConfig    bool
+	FrontMatterRegexp *regexp.Regexp // custom front matter pattern; nil uses default
 }
 
 // NewLinter creates a new Linter with the given rules.

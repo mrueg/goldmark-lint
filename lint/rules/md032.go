@@ -322,7 +322,7 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 			}
 			if md032LeadingSpaces(line) >= offset {
 				lastContentLine = i + 1 // 1-based
-				continue // continuation/indented content of the last list item
+				continue                // continuation/indented content of the last list item
 			}
 			if !isBlockLevelBreaker(line) {
 				// Lazy continuation of the last list item's paragraph: keep scanning

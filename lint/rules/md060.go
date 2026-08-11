@@ -310,134 +310,134 @@ func (r MD060) Check(doc *lint.Document) []lint.Violation {
 // trailing edge pipes are consumed but the content between them is returned
 // verbatim.  For example "|a|b|" yields ["a", "b"].
 func md060CellsOf(line string) (cells []string, hasLeading, hasTrailing bool) {
-trimmed := strings.TrimSpace(line)
-hasLeading = strings.HasPrefix(trimmed, "|")
-hasTrailing = len(trimmed) > 1 && strings.HasSuffix(trimmed, "|")
+	trimmed := strings.TrimSpace(line)
+	hasLeading = strings.HasPrefix(trimmed, "|")
+	hasTrailing = len(trimmed) > 1 && strings.HasSuffix(trimmed, "|")
 
-work := trimmed
-if hasLeading {
-work = work[1:]
-}
-if hasTrailing {
-work = work[:len(work)-1]
-}
-cells = strings.Split(work, "|")
-return
+	work := trimmed
+	if hasLeading {
+		work = work[1:]
+	}
+	if hasTrailing {
+		work = work[:len(work)-1]
+	}
+	cells = strings.Split(work, "|")
+	return
 }
 
 // md060RebuildRow reassembles cells into a table row using the given padding
 // function and preserving whether the original row had leading/trailing pipes.
 func md060RebuildRow(cells []string, hasLeading, hasTrailing bool, padFn func(string) string) string {
-var b strings.Builder
-if hasLeading {
-b.WriteByte('|')
-}
-for ci, cell := range cells {
-b.WriteString(padFn(cell))
-if ci < len(cells)-1 || hasTrailing {
-b.WriteByte('|')
-}
-}
-return b.String()
+	var b strings.Builder
+	if hasLeading {
+		b.WriteByte('|')
+	}
+	for ci, cell := range cells {
+		b.WriteString(padFn(cell))
+		if ci < len(cells)-1 || hasTrailing {
+			b.WriteByte('|')
+		}
+	}
+	return b.String()
 }
 
 // md060ConvertRowToCompact converts a table row to compact style (one space on
 // each side of cell content).  The delimiter row is left unchanged.
 func md060ConvertRowToCompact(line string) string {
-if isTableDelimiterRow(line) {
-return line
-}
-cells, hasLeading, hasTrailing := md060CellsOf(line)
-pad := func(c string) string { return " " + strings.TrimSpace(c) + " " }
-return md060RebuildRow(cells, hasLeading, hasTrailing, pad)
+	if isTableDelimiterRow(line) {
+		return line
+	}
+	cells, hasLeading, hasTrailing := md060CellsOf(line)
+	pad := func(c string) string { return " " + strings.TrimSpace(c) + " " }
+	return md060RebuildRow(cells, hasLeading, hasTrailing, pad)
 }
 
 // md060ConvertRowToTight converts a table row to tight style (no spaces around
 // cell content).  The delimiter row is left unchanged.
 func md060ConvertRowToTight(line string) string {
-if isTableDelimiterRow(line) {
-return line
-}
-cells, hasLeading, hasTrailing := md060CellsOf(line)
-pad := func(c string) string { return strings.TrimSpace(c) }
-return md060RebuildRow(cells, hasLeading, hasTrailing, pad)
+	if isTableDelimiterRow(line) {
+		return line
+	}
+	cells, hasLeading, hasTrailing := md060CellsOf(line)
+	pad := func(c string) string { return strings.TrimSpace(c) }
+	return md060RebuildRow(cells, hasLeading, hasTrailing, pad)
 }
 
 // md060ConvertTableToAligned reformats all rows in the table slice so that
 // pipe characters align at the same column positions across every row.
 func md060ConvertTableToAligned(tableLines []string) []string {
-if len(tableLines) == 0 {
-return tableLines
-}
-
-type rowData struct {
-cells       []string
-hasLeading  bool
-hasTrailing bool
-isDelim     bool
-}
-rows := make([]rowData, len(tableLines))
-maxWidths := []int{}
-
-for ri, line := range tableLines {
-cells, hasLeading, hasTrailing := md060CellsOf(line)
-trimmed := make([]string, len(cells))
-for ci, c := range cells {
-trimmed[ci] = strings.TrimSpace(c)
-}
-	rows[ri] = rowData{
-		cells:       trimmed,
-		hasLeading:  hasLeading,
-		hasTrailing: hasTrailing,
-		isDelim:     isTableDelimiterRow(line),
+	if len(tableLines) == 0 {
+		return tableLines
 	}
-	for ci, c := range trimmed {
-		if ci >= len(maxWidths) {
-			maxWidths = append(maxWidths, 0)
+
+	type rowData struct {
+		cells       []string
+		hasLeading  bool
+		hasTrailing bool
+		isDelim     bool
+	}
+	rows := make([]rowData, len(tableLines))
+	maxWidths := []int{}
+
+	for ri, line := range tableLines {
+		cells, hasLeading, hasTrailing := md060CellsOf(line)
+		trimmed := make([]string, len(cells))
+		for ci, c := range cells {
+			trimmed[ci] = strings.TrimSpace(c)
 		}
-		if len(c) > maxWidths[ci] {
-			maxWidths[ci] = len(c)
+		rows[ri] = rowData{
+			cells:       trimmed,
+			hasLeading:  hasLeading,
+			hasTrailing: hasTrailing,
+			isDelim:     isTableDelimiterRow(line),
+		}
+		for ci, c := range trimmed {
+			if ci >= len(maxWidths) {
+				maxWidths = append(maxWidths, 0)
+			}
+			if len(c) > maxWidths[ci] {
+				maxWidths[ci] = len(c)
+			}
 		}
 	}
-}
 
-result := make([]string, len(tableLines))
-for ri, rd := range rows {
-var b strings.Builder
-if rd.hasLeading {
-b.WriteByte('|')
-}
-for ci, cell := range rd.cells {
-colWidth := 0
-if ci < len(maxWidths) {
-colWidth = maxWidths[ci]
-}
-if colWidth < len(cell) {
-colWidth = len(cell)
-}
-if rd.isDelim {
-// Pad delimiter dashes to align.
-dashes := cell
-if len(dashes) == 0 {
-dashes = "-"
-}
-padded := dashes + strings.Repeat("-", colWidth-len(dashes))
-b.WriteByte(' ')
-b.WriteString(padded)
-b.WriteByte(' ')
-} else {
-b.WriteByte(' ')
-b.WriteString(cell)
-b.WriteString(strings.Repeat(" ", colWidth-len(cell)))
-b.WriteByte(' ')
-}
-if ci < len(rd.cells)-1 || rd.hasTrailing {
-b.WriteByte('|')
-}
-}
-result[ri] = b.String()
-}
-return result
+	result := make([]string, len(tableLines))
+	for ri, rd := range rows {
+		var b strings.Builder
+		if rd.hasLeading {
+			b.WriteByte('|')
+		}
+		for ci, cell := range rd.cells {
+			colWidth := 0
+			if ci < len(maxWidths) {
+				colWidth = maxWidths[ci]
+			}
+			if colWidth < len(cell) {
+				colWidth = len(cell)
+			}
+			if rd.isDelim {
+				// Pad delimiter dashes to align.
+				dashes := cell
+				if len(dashes) == 0 {
+					dashes = "-"
+				}
+				padded := dashes + strings.Repeat("-", colWidth-len(dashes))
+				b.WriteByte(' ')
+				b.WriteString(padded)
+				b.WriteByte(' ')
+			} else {
+				b.WriteByte(' ')
+				b.WriteString(cell)
+				b.WriteString(strings.Repeat(" ", colWidth-len(cell)))
+				b.WriteByte(' ')
+			}
+			if ci < len(rd.cells)-1 || rd.hasTrailing {
+				b.WriteByte('|')
+			}
+		}
+		result[ri] = b.String()
+	}
+	return result
 }
 
 // Fix rewrites table rows in source to match the configured column style.
@@ -445,74 +445,74 @@ return result
 // pipes align across all rows; "consistent" applies the first row's detected
 // style to every row; "any" performs no changes.
 func (r MD060) Fix(source []byte) []byte {
-style := r.Style
-if style == "" {
-style = "any"
-}
-if style == "any" {
-return source
-}
+	style := r.Style
+	if style == "" {
+		style = "any"
+	}
+	if style == "any" {
+		return source
+	}
 
-lines := strings.Split(string(source), "\n")
-mask := fencedCodeBlockMask(lines)
-tables := findTables(lines, mask)
-if len(tables) == 0 {
-return source
-}
+	lines := strings.Split(string(source), "\n")
+	mask := fencedCodeBlockMask(lines)
+	tables := findTables(lines, mask)
+	if len(tables) == 0 {
+		return source
+	}
 
-changed := false
+	changed := false
 
-for _, t := range tables {
-targetStyle := style
+	for _, t := range tables {
+		targetStyle := style
 
-if style == "consistent" {
-firstStyle := ""
-for row := t[0]; row <= t[1]; row++ {
-if isTableDelimiterRow(lines[row]) {
-continue
-}
-s := tableColumnStyle(lines[row])
-if s != "other" {
-firstStyle = s
-break
-}
-}
-if firstStyle == "" {
-continue
-}
-targetStyle = firstStyle
-}
+		if style == "consistent" {
+			firstStyle := ""
+			for row := t[0]; row <= t[1]; row++ {
+				if isTableDelimiterRow(lines[row]) {
+					continue
+				}
+				s := tableColumnStyle(lines[row])
+				if s != "other" {
+					firstStyle = s
+					break
+				}
+			}
+			if firstStyle == "" {
+				continue
+			}
+			targetStyle = firstStyle
+		}
 
-switch targetStyle {
-case "compact":
-for row := t[0]; row <= t[1]; row++ {
-newLine := md060ConvertRowToCompact(lines[row])
-if newLine != lines[row] {
-lines[row] = newLine
-changed = true
-}
-}
-case "tight":
-for row := t[0]; row <= t[1]; row++ {
-newLine := md060ConvertRowToTight(lines[row])
-if newLine != lines[row] {
-lines[row] = newLine
-changed = true
-}
-}
-case "aligned":
-newRows := md060ConvertTableToAligned(lines[t[0] : t[1]+1])
-for j, newLine := range newRows {
-if newLine != lines[t[0]+j] {
-lines[t[0]+j] = newLine
-changed = true
-}
-}
-}
-}
+		switch targetStyle {
+		case "compact":
+			for row := t[0]; row <= t[1]; row++ {
+				newLine := md060ConvertRowToCompact(lines[row])
+				if newLine != lines[row] {
+					lines[row] = newLine
+					changed = true
+				}
+			}
+		case "tight":
+			for row := t[0]; row <= t[1]; row++ {
+				newLine := md060ConvertRowToTight(lines[row])
+				if newLine != lines[row] {
+					lines[row] = newLine
+					changed = true
+				}
+			}
+		case "aligned":
+			newRows := md060ConvertTableToAligned(lines[t[0] : t[1]+1])
+			for j, newLine := range newRows {
+				if newLine != lines[t[0]+j] {
+					lines[t[0]+j] = newLine
+					changed = true
+				}
+			}
+		}
+	}
 
-if !changed {
-return source
-}
-return []byte(strings.Join(lines, "\n"))
+	if !changed {
+		return source
+	}
+	return []byte(strings.Join(lines, "\n"))
 }
