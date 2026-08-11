@@ -305,7 +305,12 @@ print_loc_breakdown() {
   echo "${title}:"
   while read -r rule count; do
     printf '  %-8s %d\n' "$rule" "$count"
-    grep ":${rule}\$" "$file" | head -3 | sed 's|^|      |'
+    # awk rather than "head -3": head exits after three lines and closes the
+    # pipe, grep dies of SIGPIPE, and under "set -o pipefail" that aborts the
+    # whole script with 141. awk reads its input to the end, so nothing is
+    # signalled. Whether the race is lost depends on how much grep still has
+    # buffered, which is why this passed locally and failed in CI.
+    grep ":${rule}\$" "$file" | awk 'NR <= 3 { print "      " $0 }'
     if [[ "$count" -gt 3 ]]; then
       printf '      ... and %d more\n' "$(( count - 3 ))"
     fi
