@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # conform.sh — validation conformance test: goldmark-lint vs markdownlint-cli2
 #
-# Runs both linters against the rust-lang/rfcs and tldr-pages/tldr corpora at
-# fixed commits and reports per-rule deltas and a summary of discrepancies
-# between their outputs.
+# Runs both linters against the rust-lang/rfcs, tldr-pages/tldr and
+# commonmark/commonmark-spec corpora at fixed commits and reports per-rule
+# deltas and a summary of discrepancies between their outputs.
 #
 # Requirements:
 #   - git, go, jq
@@ -26,6 +26,18 @@ RFCS_DIR="${SCRIPT_DIR}/rfcs"
 TLDR_REPO="https://github.com/tldr-pages/tldr"
 TLDR_COMMIT="05c563d1ecb0fe5c1f0de9d3348baa04f3b8b29d"
 TLDR_DIR="${SCRIPT_DIR}/tldr"
+
+# Fixed commit in commonmark/commonmark-spec used as the third conformance
+# corpus. Unlike the other two this is a single ~9,800-line document, and it is
+# written to exercise Markdown's edge cases on purpose: deeply nested lists,
+# 32-backtick fences, tabs used as indentation, entity references and so on. It
+# is the densest source of parser disagreement of the three, and it also covers
+# the large-single-document path that thousands of small files do not.
+COMMONMARK_REPO="https://github.com/commonmark/commonmark-spec"
+COMMONMARK_COMMIT="108bec0c217ed1c611cf666c231fd5e240d475dc"
+COMMONMARK_DIR="${SCRIPT_DIR}/commonmark"
+# The spec is spec.txt, not *.md, so it is linted by name rather than by glob.
+COMMONMARK_FILE="spec.txt"
 
 GOLDMARK_BIN="${SCRIPT_DIR}/goldmark-lint"
 
@@ -85,11 +97,37 @@ else
   fi
 fi
 
+# ---------------------------------------------------------------------------
+# Clone / update the commonmark-spec corpus at the fixed commit
+# ---------------------------------------------------------------------------
+if [[ ! -d "${COMMONMARK_DIR}/.git" ]]; then
+  info "Cloning commonmark/commonmark-spec corpus (shallow)…"
+  git clone -q --filter=blob:none --no-checkout "${COMMONMARK_REPO}" "${COMMONMARK_DIR}"
+  git -c advice.detachedHead=false -C "${COMMONMARK_DIR}" checkout -q "${COMMONMARK_COMMIT}"
+else
+  current=$(git -C "${COMMONMARK_DIR}" rev-parse HEAD)
+  if [[ "${current}" != "${COMMONMARK_COMMIT}" ]]; then
+    info "Updating commonmark-spec corpus to ${COMMONMARK_COMMIT}…"
+    git -C "${COMMONMARK_DIR}" fetch -q origin "${COMMONMARK_COMMIT}"
+    git -c advice.detachedHead=false -C "${COMMONMARK_DIR}" checkout -q "${COMMONMARK_COMMIT}"
+  else
+    info "commonmark-spec corpus already at ${COMMONMARK_COMMIT}."
+  fi
+fi
+
+if [[ ! -f "${COMMONMARK_DIR}/${COMMONMARK_FILE}" ]]; then
+  echo "Error: ${COMMONMARK_DIR}/${COMMONMARK_FILE} is missing after checkout." >&2
+  exit 1
+fi
+
 RFCS_MD_COUNT=$(find "${RFCS_DIR}" -name '*.md' | wc -l | tr -d ' ')
 TLDR_MD_COUNT=$(find "${TLDR_DIR}" -name '*.md' | wc -l | tr -d ' ')
-MD_COUNT=$(( RFCS_MD_COUNT + TLDR_MD_COUNT ))
+COMMONMARK_MD_COUNT=1
+COMMONMARK_LINES=$(wc -l <"${COMMONMARK_DIR}/${COMMONMARK_FILE}" | tr -d ' ')
+MD_COUNT=$(( RFCS_MD_COUNT + TLDR_MD_COUNT + COMMONMARK_MD_COUNT ))
 info "Corpus 1: ${RFCS_MD_COUNT} Markdown files in ${RFCS_DIR}"
 info "Corpus 2: ${TLDR_MD_COUNT} Markdown files in ${TLDR_DIR}"
+info "Corpus 3: ${COMMONMARK_FILE} (${COMMONMARK_LINES} lines) in ${COMMONMARK_DIR}"
 
 # ---------------------------------------------------------------------------
 # Build goldmark-lint
@@ -105,7 +143,9 @@ GOLDMARK_OUT_RFCS=$(mktemp)
 GOLDMARK_OUT_TLDR=$(mktemp)
 MDLINT_OUT_RFCS=$(mktemp)
 MDLINT_OUT_TLDR=$(mktemp)
-trap 'rm -f "${GOLDMARK_OUT_RFCS}" "${GOLDMARK_OUT_TLDR}" "${MDLINT_OUT_RFCS}" "${MDLINT_OUT_TLDR}"' EXIT
+GOLDMARK_OUT_CM=$(mktemp)
+MDLINT_OUT_CM=$(mktemp)
+trap 'rm -f "${GOLDMARK_OUT_RFCS}" "${GOLDMARK_OUT_TLDR}" "${GOLDMARK_OUT_CM}" "${MDLINT_OUT_RFCS}" "${MDLINT_OUT_TLDR}" "${MDLINT_OUT_CM}"' EXIT
 
 info "Running goldmark-lint on rfcs…"
 # goldmark-lint writes JSON violations to stdout; exit code 1 when violations found.
@@ -114,12 +154,18 @@ info "Running goldmark-lint on rfcs…"
 info "Running goldmark-lint on tldr…"
 (cd "${TLDR_DIR}" && "${GOLDMARK_BIN}" --no-cache --output-format json '**/*.md') >"${GOLDMARK_OUT_TLDR}" 2>/dev/null || true
 
+info "Running goldmark-lint on commonmark-spec…"
+(cd "${COMMONMARK_DIR}" && "${GOLDMARK_BIN}" --no-cache --output-format json "${COMMONMARK_FILE}") >"${GOLDMARK_OUT_CM}" 2>/dev/null || true
+
 info "Running markdownlint-cli2 on rfcs…"
 # markdownlint-cli2 writes violation lines to stderr; capture them for parsing.
 (cd "${RFCS_DIR}" && markdownlint-cli2 '**/*.md') 2>"${MDLINT_OUT_RFCS}" >/dev/null || true
 
 info "Running markdownlint-cli2 on tldr…"
 (cd "${TLDR_DIR}" && markdownlint-cli2 '**/*.md') 2>"${MDLINT_OUT_TLDR}" >/dev/null || true
+
+info "Running markdownlint-cli2 on commonmark-spec…"
+(cd "${COMMONMARK_DIR}" && markdownlint-cli2 "${COMMONMARK_FILE}") 2>"${MDLINT_OUT_CM}" >/dev/null || true
 
 # ---------------------------------------------------------------------------
 # Extract per-rule violation counts.
@@ -149,19 +195,20 @@ declare -A GM_RULE ML_RULE
 
 while read -r count rule; do
   GM_RULE["$rule"]=$count
-done < <(extract_gm_rules "${GOLDMARK_OUT_RFCS}" "${GOLDMARK_OUT_TLDR}" | sort | uniq -c | awk '{print $1, $2}')
+done < <(extract_gm_rules "${GOLDMARK_OUT_RFCS}" "${GOLDMARK_OUT_TLDR}" "${GOLDMARK_OUT_CM}" | sort | uniq -c | awk '{print $1, $2}')
 
 while read -r count rule; do
   ML_RULE["$rule"]=$count
-done < <(extract_ml_rules "${MDLINT_OUT_RFCS}" "${MDLINT_OUT_TLDR}" | sort | uniq -c | awk '{print $1, $2}')
+done < <(extract_ml_rules "${MDLINT_OUT_RFCS}" "${MDLINT_OUT_TLDR}" "${MDLINT_OUT_CM}" | sort | uniq -c | awk '{print $1, $2}')
 
-GM_TOTAL=$(extract_gm_rules "${GOLDMARK_OUT_RFCS}" "${GOLDMARK_OUT_TLDR}" | wc -l | tr -d ' ')
-ML_TOTAL=$(extract_ml_rules "${MDLINT_OUT_RFCS}" "${MDLINT_OUT_TLDR}" | wc -l | tr -d ' ')
+GM_TOTAL=$(extract_gm_rules "${GOLDMARK_OUT_RFCS}" "${GOLDMARK_OUT_TLDR}" "${GOLDMARK_OUT_CM}" | wc -l | tr -d ' ')
+ML_TOTAL=$(extract_ml_rules "${MDLINT_OUT_RFCS}" "${MDLINT_OUT_TLDR}" "${MDLINT_OUT_CM}" | wc -l | tr -d ' ')
 
 # Collect all rules seen by either tool, sorted alphabetically.
 SORTED_RULES=()
 mapfile -t SORTED_RULES < <(
-  { extract_gm_rules "${GOLDMARK_OUT_RFCS}" "${GOLDMARK_OUT_TLDR}"; extract_ml_rules "${MDLINT_OUT_RFCS}" "${MDLINT_OUT_TLDR}"; } | sort -u
+  { extract_gm_rules "${GOLDMARK_OUT_RFCS}" "${GOLDMARK_OUT_TLDR}" "${GOLDMARK_OUT_CM}"
+    extract_ml_rules "${MDLINT_OUT_RFCS}" "${MDLINT_OUT_TLDR}" "${MDLINT_OUT_CM}"; } | sort -u
 )
 
 # ---------------------------------------------------------------------------
@@ -171,6 +218,7 @@ echo ""
 echo "=== Conformance Report: goldmark-lint vs markdownlint-cli2 ==="
 printf "Corpus 1: %s (%s files, commit %.10s)\n" "${RFCS_DIR}" "${RFCS_MD_COUNT}" "${RFCS_COMMIT}"
 printf "Corpus 2: %s (%s files, commit %.10s)\n" "${TLDR_DIR}" "${TLDR_MD_COUNT}" "${TLDR_COMMIT}"
+printf "Corpus 3: %s (%s, %s lines, commit %.10s)\n" "${COMMONMARK_DIR}" "${COMMONMARK_FILE}" "${COMMONMARK_LINES}" "${COMMONMARK_COMMIT}"
 printf "Total   : %s Markdown files\n" "${MD_COUNT}"
 echo ""
 printf "%-10s  %13s  %13s  %10s\n" "RULE" "goldmark-lint" "markdownlint" "delta"
@@ -278,10 +326,12 @@ trap 'rm -f "${GOLDMARK_OUT_RFCS}" "${GOLDMARK_OUT_TLDR}" "${MDLINT_OUT_RFCS}" "
 {
   extract_gm_locations "${GOLDMARK_OUT_RFCS}" | sed 's|^|rfcs/|'
   extract_gm_locations "${GOLDMARK_OUT_TLDR}" | sed 's|^|tldr/|'
+  extract_gm_locations "${GOLDMARK_OUT_CM}" | sed 's|^|commonmark/|'
 } | LC_ALL=C sort -u >"${GM_LOCS}"
 {
   extract_ml_locations "${MDLINT_OUT_RFCS}" | sed 's|^|rfcs/|'
   extract_ml_locations "${MDLINT_OUT_TLDR}" | sed 's|^|tldr/|'
+  extract_ml_locations "${MDLINT_OUT_CM}" | sed 's|^|commonmark/|'
 } | LC_ALL=C sort -u >"${ML_LOCS}"
 
 LC_ALL=C comm -23 "${GM_LOCS}" "${ML_LOCS}" >"${ONLY_GM_LOCS}"
