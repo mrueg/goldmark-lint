@@ -42,7 +42,7 @@ func (r MD045) Check(doc *lint.Document) []lint.Violation {
 			if node.FirstChild() == nil {
 				violations = append(violations, lint.Violation{
 					Rule:    r.ID(),
-					Line:    inlineNodeLine(node, doc.Source),
+					Line:    inlineNodeLine(node, doc),
 					Column:  1,
 					Message: "Images should have alternate text (alt text)",
 				})
@@ -64,7 +64,7 @@ func (r MD045) Check(doc *lint.Document) []lint.Violation {
 			}
 			if !md045AltAttrRE.MatchString(tagText) && !md045AriaHiddenTrueRE.MatchString(tagText) {
 				seg := node.Segments.At(0)
-				lineNum := countLine(doc.Source, seg.Start)
+				lineNum := doc.LineAt(seg.Start)
 				violations = append(violations, lint.Violation{
 					Rule:    r.ID(),
 					Line:    lineNum,
@@ -87,7 +87,7 @@ func (r MD045) Check(doc *lint.Document) []lint.Violation {
 				tag := blockText[match[0]:match[1]]
 				if !md045AltAttrRE.MatchString(tag) && !md045AriaHiddenTrueRE.MatchString(tag) {
 					// Report the line where the <img> starts.
-					lineNum := countLine(doc.Source, firstSeg.Start+match[0])
+					lineNum := doc.LineAt(firstSeg.Start+match[0])
 					violations = append(violations, lint.Violation{
 						Rule:    r.ID(),
 						Line:    lineNum,

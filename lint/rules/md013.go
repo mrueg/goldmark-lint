@@ -126,7 +126,7 @@ func (r MD013) Check(doc *lint.Document) []lint.Violation {
 			if n.Kind() != ast.KindLink && n.Kind() != ast.KindImage {
 				return ast.WalkContinue, nil
 			}
-			lineNum := inlineLinkLine(n, doc.Source)
+			lineNum := inlineLinkLine(n, doc)
 			if lineNum > 0 && lineNum <= len(tableMask) && tableMask[lineNum-1] {
 				tableRowLinkLines[lineNum] = true
 			}
@@ -236,14 +236,14 @@ func linkRefLabel(line string) string {
 // inlineLinkLine returns the 1-based line number for a Link or Image node by
 // using Pos() when available, then falling back to the first Text descendant
 // or the nearest parent block line.
-func inlineLinkLine(n ast.Node, source []byte) int {
+func inlineLinkLine(n ast.Node, doc *lint.Document) int {
 	if pos := n.Pos(); pos >= 0 {
-		return countLine(source, pos)
+		return doc.LineAt(pos)
 	}
 	if t := firstTextLeaf(n); t != nil {
-		return countLine(source, t.Segment.Start)
+		return doc.LineAt(t.Segment.Start)
 	}
-	return blockFirstLine(n, source)
+	return blockFirstLine(n, doc)
 }
 
 // firstTextLeaf returns the first *ast.Text leaf under n (depth-first), or nil.
@@ -275,13 +275,13 @@ func lastTextLeaf(n ast.Node) *ast.Text {
 
 // blockFirstLine returns the 1-based line number of the first line of the
 // nearest ancestor block node that has line information.
-func blockFirstLine(n ast.Node, source []byte) int {
+func blockFirstLine(n ast.Node, doc *lint.Document) int {
 	for p := n.Parent(); p != nil; p = p.Parent() {
 		if p.Type() != ast.TypeBlock {
 			continue
 		}
 		if p.Lines() != nil && p.Lines().Len() > 0 {
-			return countLine(source, p.Lines().At(0).Start)
+			return doc.LineAt(p.Lines().At(0).Start)
 		}
 	}
 	return 0
@@ -351,10 +351,10 @@ func md013LinkOnlyLines(doc *lint.Document) map[int]bool {
 			// each line marked; otherwise those continuation lines would not be
 			// considered link-only and would be incorrectly flagged.
 			if first := firstTextLeaf(n); first != nil {
-				startLine := countLine(doc.Source, first.Segment.Start)
+				startLine := doc.LineAt(first.Segment.Start)
 				endLine := startLine
 				if last := lastTextLeaf(n); last != nil {
-					endLine = countLine(doc.Source, last.Segment.Start)
+					endLine = doc.LineAt(last.Segment.Start)
 					if endLine < startLine {
 						endLine = startLine
 					}
@@ -370,17 +370,17 @@ func md013LinkOnlyLines(doc *lint.Document) map[int]bool {
 			// line "link-containing" for the link-only check.
 			lineNum := 0
 			if pos := n.Pos(); pos >= 0 {
-				lineNum = countLine(doc.Source, pos)
+				lineNum = doc.LineAt(pos)
 			} else if next := n.NextSibling(); next != nil {
 				if t, ok := next.(*ast.Text); ok {
-					lineNum = countLine(doc.Source, t.Segment.Start)
+					lineNum = doc.LineAt(t.Segment.Start)
 				}
 			} else if prev := n.PreviousSibling(); prev != nil {
 				if t, ok := prev.(*ast.Text); ok {
-					lineNum = countLine(doc.Source, t.Segment.Start)
+					lineNum = doc.LineAt(t.Segment.Start)
 				}
 			} else {
-				lineNum = blockFirstLine(n, doc.Source)
+				lineNum = blockFirstLine(n, doc)
 			}
 			if lineNum > 0 {
 				linkLines[lineNum] = true
@@ -406,7 +406,7 @@ func md013LinkOnlyLines(doc *lint.Document) map[int]bool {
 			if t.Segment.Start == t.Segment.Stop {
 				break
 			}
-			lineNum := countLine(doc.Source, t.Segment.Start)
+			lineNum := doc.LineAt(t.Segment.Start)
 			if lineNum > 0 {
 				paragraphDataLines[lineNum] = true
 			}

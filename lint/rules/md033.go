@@ -140,7 +140,7 @@ func (r MD033) Check(doc *lint.Document) []lint.Violation {
 			if node.Lines() != nil {
 				for i := 0; i < node.Lines().Len(); i++ {
 					seg := node.Lines().At(i)
-					lineNum := countLine(doc.Source, seg.Start)
+					lineNum := doc.LineAt(seg.Start)
 					lineContent := strings.TrimRight(string(seg.Value(doc.Source)), "\r\n")
 					// Skip HTML comment lines.
 					if strings.HasPrefix(strings.TrimSpace(lineContent), "<!--") {
@@ -195,7 +195,7 @@ func (r MD033) Check(doc *lint.Document) []lint.Violation {
 			lineNum := 1
 			if node.Segments != nil && node.Segments.Len() > 0 {
 				seg := node.Segments.At(0)
-				lineNum = countLine(doc.Source, seg.Start)
+				lineNum = doc.LineAt(seg.Start)
 			}
 			// Skip closing tags (e.g. </b>) — only opening tags are reported,
 			// matching markdownlint-cli2 behaviour.

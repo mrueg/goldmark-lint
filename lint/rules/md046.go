@@ -242,11 +242,11 @@ func (r MD046) Check(doc *lint.Document) []lint.Violation {
 		switch node := n.(type) {
 		case *ast.FencedCodeBlock:
 			blockStyle = "fenced"
-			lineNum = fencedCodeBlockLine(node, doc.Source)
+			lineNum = fencedCodeBlockLine(node, doc)
 		case *ast.CodeBlock:
 			blockStyle = "indented"
 			if node.Lines() != nil && node.Lines().Len() > 0 {
-				lineNum = countLine(doc.Source, node.Lines().At(0).Start)
+				lineNum = doc.LineAt(node.Lines().At(0).Start)
 			}
 		default:
 			return ast.WalkContinue, nil

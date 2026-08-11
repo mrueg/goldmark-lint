@@ -134,7 +134,7 @@ func (r MD038) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
-		line := countLine(doc.Source, firstText.Segment.Start)
+		line := doc.LineAt(firstText.Segment.Start)
 		if reportedLines[line] {
 			return ast.WalkContinue, nil
 		}

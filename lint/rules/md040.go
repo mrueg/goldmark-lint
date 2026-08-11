@@ -89,7 +89,7 @@ func (r MD040) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
-		line := fencedCodeBlockLine(fcb, doc.Source)
+		line := fencedCodeBlockLine(fcb, doc)
 		lang := fcb.Language(doc.Source)
 
 		if len(lang) == 0 {

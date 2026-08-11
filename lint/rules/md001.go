@@ -116,7 +116,7 @@ func (r MD001) run(doc *lint.Document, onViolation func(lineNum, expectedLevel, 
 			line := 1
 			if h.Lines() != nil && h.Lines().Len() > 0 {
 				seg := h.Lines().At(0)
-				line = countLine(doc.Source, seg.Start)
+				line = doc.LineAt(seg.Start)
 			}
 			onViolation(line, prevLevel+1, level)
 		}

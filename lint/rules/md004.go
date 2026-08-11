@@ -168,11 +168,11 @@ func (r MD004) Check(doc *lint.Document) []lint.Violation {
 						lineNum := 1
 						if li.Lines() != nil && li.Lines().Len() > 0 {
 							seg := li.Lines().At(0)
-							lineNum = countLine(doc.Source, seg.Start)
+							lineNum = doc.LineAt(seg.Start)
 						} else if fc := li.FirstChild(); fc != nil {
 							if fc.Lines() != nil && fc.Lines().Len() > 0 {
 								seg := fc.Lines().At(0)
-								lineNum = countLine(doc.Source, seg.Start)
+								lineNum = doc.LineAt(seg.Start)
 							}
 						}
 						violations = append(violations, lint.Violation{
@@ -220,11 +220,11 @@ func (r MD004) Check(doc *lint.Document) []lint.Violation {
 				lineNum := 1
 				if li.Lines() != nil && li.Lines().Len() > 0 {
 					seg := li.Lines().At(0)
-					lineNum = countLine(doc.Source, seg.Start)
+					lineNum = doc.LineAt(seg.Start)
 				} else if fc := li.FirstChild(); fc != nil {
 					if fc.Lines() != nil && fc.Lines().Len() > 0 {
 						seg := fc.Lines().At(0)
-						lineNum = countLine(doc.Source, seg.Start)
+						lineNum = doc.LineAt(seg.Start)
 					}
 				}
 				violations = append(violations, lint.Violation{

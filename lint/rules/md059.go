@@ -46,7 +46,7 @@ func (r MD059) Check(doc *lint.Document) []lint.Violation {
 			if strings.EqualFold(text, p) {
 				violations = append(violations, lint.Violation{
 					Rule:    r.ID(),
-					Line:    inlineNodeLine(link, doc.Source),
+					Line:    inlineNodeLine(link, doc),
 					Column:  1,
 					Message: "Link text should be descriptive [Text: " + text + "]",
 				})

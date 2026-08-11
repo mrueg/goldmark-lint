@@ -48,17 +48,6 @@ func (x IntOrArray) Get(level int) int {
 	return x[idx]
 }
 
-// countLine counts the 1-based line number of byte offset pos in source.
-func countLine(source []byte, pos int) int {
-	line := 1
-	for i := 0; i < pos && i < len(source); i++ {
-		if source[i] == '\n' {
-			line++
-		}
-	}
-	return line
-}
-
 // headingText returns the text content of a heading node by recursively
 // extracting text from all inline descendants. This includes text inside
 // code spans, emphasis, strong, links, etc., matching GitHub's anchor
@@ -87,12 +76,12 @@ func inlineNodeText(n ast.Node, source []byte) []byte {
 // fencedCodeBlockLine returns the 1-based line number of the opening fence of a
 // FencedCodeBlock node. It tries Info segment first, then first content line minus
 // one, and falls back to 1 for empty blocks with no info string.
-func fencedCodeBlockLine(n *ast.FencedCodeBlock, source []byte) int {
+func fencedCodeBlockLine(n *ast.FencedCodeBlock, doc *lint.Document) int {
 	if n.Info != nil {
-		return countLine(source, n.Info.Segment.Start)
+		return doc.LineAt(n.Info.Segment.Start)
 	}
 	if n.Lines() != nil && n.Lines().Len() > 0 {
-		line := countLine(source, n.Lines().At(0).Start)
+		line := doc.LineAt(n.Lines().At(0).Start)
 		if line > 1 {
 			return line - 1
 		}
@@ -144,11 +133,11 @@ func firstTextStartInInline(n ast.Node, prefixChars int) (int, bool) {
 
 // headingSourceLine returns the 1-based line number of a heading node in source
 // using the first content segment, or 0 if no line information is available.
-func headingSourceLine(h *ast.Heading, source []byte) int {
+func headingSourceLine(h *ast.Heading, doc *lint.Document) int {
 	if h.Lines() == nil || h.Lines().Len() == 0 {
 		return 0
 	}
-	return countLine(source, h.Lines().At(0).Start)
+	return doc.LineAt(h.Lines().At(0).Start)
 }
 
 // fencedCodeBlockMask returns a bool slice with true for each line that is
@@ -433,7 +422,7 @@ func indentedCodeBlockMask(doc *lint.Document) []bool {
 		}
 		for i := 0; i < n.Lines().Len(); i++ {
 			seg := n.Lines().At(i)
-			lineIdx := countLine(doc.Source, seg.Start) - 1
+			lineIdx := doc.LineAt(seg.Start) - 1
 			if lineIdx >= 0 && lineIdx < len(mask) {
 				mask[lineIdx] = true
 			}
@@ -455,7 +444,7 @@ func htmlBlockLineMask(doc *lint.Document) []bool {
 		}
 		for i := 0; i < n.Lines().Len(); i++ {
 			seg := n.Lines().At(i)
-			lineIdx := countLine(doc.Source, seg.Start) - 1
+			lineIdx := doc.LineAt(seg.Start) - 1
 			if lineIdx >= 0 && lineIdx < len(mask) {
 				mask[lineIdx] = true
 			}
@@ -485,8 +474,8 @@ func astFencedCodeBlockMask(doc *lint.Document) []bool {
 		}
 		firstSeg := lines.At(0)
 		lastSeg := lines.At(lines.Len() - 1)
-		firstCodeIdx := countLine(doc.Source, firstSeg.Start) - 1 // 0-indexed
-		lastCodeIdx := countLine(doc.Source, lastSeg.Start) - 1   // 0-indexed
+		firstCodeIdx := doc.LineAt(firstSeg.Start) - 1 // 0-indexed
+		lastCodeIdx := doc.LineAt(lastSeg.Start) - 1   // 0-indexed
 
 		// Opening fence delimiter: line immediately before first code line.
 		if firstCodeIdx > 0 {
@@ -534,7 +523,7 @@ func astHeadingMask(doc *lint.Document) []bool {
 			return ast.WalkContinue, nil
 		}
 		firstSeg := lines.At(0)
-		lineIdx := countLine(doc.Source, firstSeg.Start) - 1 // 0-indexed
+		lineIdx := doc.LineAt(firstSeg.Start) - 1 // 0-indexed
 		if lineIdx < 0 || lineIdx >= len(mask) {
 			return ast.WalkContinue, nil
 		}
@@ -574,7 +563,7 @@ func astTableMask(doc *lint.Document) []bool {
 				return ast.WalkContinue, nil
 			}
 			if txt, ok := child.(*ast.Text); ok {
-				ln := countLine(doc.Source, txt.Segment.Start)
+				ln := doc.LineAt(txt.Segment.Start)
 				if first == -1 || ln < first {
 					first = ln
 				}

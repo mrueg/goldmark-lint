@@ -240,7 +240,7 @@ func (r MD029) Check(doc *lint.Document) []lint.Violation {
 			lineNum := -1
 			num := -1
 			if segStart, found := listItemFirstSeg(li); found {
-				lineNum = countLine(doc.Source, segStart)
+				lineNum = doc.LineAt(segStart)
 				// First try fast backward scan from the segment start.
 				num = listItemNumFromSeg(doc.Source, segStart)
 			}

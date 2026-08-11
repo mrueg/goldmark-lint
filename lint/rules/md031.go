@@ -117,7 +117,7 @@ func (r MD031) Check(doc *lint.Document) []lint.Violation {
 		}
 
 		// Determine the opening fence line number (1-based).
-		openLineNum := fencedCodeBlockLine(cb, doc.Source)
+		openLineNum := fencedCodeBlockLine(cb, doc)
 		if openLineNum <= 0 {
 			return ast.WalkContinue, nil
 		}
@@ -128,10 +128,10 @@ func (r MD031) Check(doc *lint.Document) []lint.Violation {
 		var closeIdx int
 		if cb.Lines() != nil && cb.Lines().Len() > 0 {
 			lastSeg := cb.Lines().At(cb.Lines().Len() - 1)
-			// countLine counts newlines before pos; for the end of the last
+			// LineAt resolves the line containing pos; for the end of the last
 			// content line (which includes the trailing newline), this gives
 			// the line number of the closing fence.
-			closeLineNum := countLine(doc.Source, lastSeg.Stop)
+			closeLineNum := doc.LineAt(lastSeg.Stop)
 			closeIdx = closeLineNum - 1
 		} else {
 			// Empty code block: closing fence is immediately after opening fence.

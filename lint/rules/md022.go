@@ -161,7 +161,7 @@ func (r MD022) Check(doc *lint.Document) []lint.Violation {
 		}
 
 		seg := h.Lines().At(0)
-		lineNum := countLine(doc.Source, seg.Start)
+		lineNum := doc.LineAt(seg.Start)
 		lineIdx := lineNum - 1 // 0-based
 		linesAbove := linesAboveFor(h.Level)
 		linesBelow := linesBelowFor(h.Level)

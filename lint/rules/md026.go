@@ -51,7 +51,7 @@ func (r MD026) Check(doc *lint.Document) []lint.Violation {
 		line := 1
 		if h.Lines() != nil && h.Lines().Len() > 0 {
 			lastSeg := h.Lines().At(h.Lines().Len() - 1)
-			line = countLine(doc.Source, lastSeg.Start)
+			line = doc.LineAt(lastSeg.Start)
 		}
 		if line < 1 || line > len(doc.Lines) {
 			return ast.WalkContinue, nil

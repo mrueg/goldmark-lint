@@ -95,15 +95,15 @@ func isBlockLevelBreaker(line string) bool {
 // firstBlockLine recursively walks the children of n to find the first
 // block-level node that has source line information, and returns its 1-based
 // line number. Returns 0 if none is found.
-func firstBlockLine(n ast.Node, source []byte) int {
+func firstBlockLine(n ast.Node, doc *lint.Document) int {
 	if n == nil {
 		return 0
 	}
 	if n.Type() == ast.TypeBlock && n.Lines() != nil && n.Lines().Len() > 0 {
-		return countLine(source, n.Lines().At(0).Start)
+		return doc.LineAt(n.Lines().At(0).Start)
 	}
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-		if line := firstBlockLine(c, source); line > 0 {
+		if line := firstBlockLine(c, doc); line > 0 {
 			return line
 		}
 	}
@@ -120,27 +120,27 @@ var listMarkerOnlyRE = regexp.MustCompile(`^( *)(?:[-*+]|\d+[.)])[ \t]*$`)
 // line of the given list item. The direct children of a ListItem are always
 // block-level nodes (TextBlock, Paragraph, nested List, etc.) so it is safe to
 // call Lines() on them.
-func listItemFirstLine(item *ast.ListItem, source []byte, lines []string) int {
+func listItemFirstLine(item *ast.ListItem, doc *lint.Document) int {
 	child := item.FirstChild()
 	if child == nil {
 		return 0
 	}
 	if child.Lines() != nil && child.Lines().Len() > 0 {
-		return countLine(source, child.Lines().At(0).Start)
+		return doc.LineAt(child.Lines().At(0).Start)
 	}
 
 	// Fallback: the first child has no line information (e.g. when the list
 	// item contains only a nested list with no preceding text).  Walk deeper
 	// to find the first block with lines.
-	deepLine := firstBlockLine(child, source)
+	deepLine := firstBlockLine(child, doc)
 	if deepLine <= 0 {
 		return 0
 	}
 
 	// If the line immediately before deepLine looks like a bare list marker
 	// (e.g. "-" or "- "), the outer list item's marker is on that line.
-	if deepLine >= 2 && deepLine-1 <= len(lines) {
-		prevLine := lines[deepLine-2] // 0-based
+	if deepLine >= 2 && deepLine-1 <= len(doc.Lines) {
+		prevLine := doc.Lines[deepLine-2] // 0-based
 		if listItemRE.MatchString(prevLine) || listMarkerOnlyRE.MatchString(prevLine) {
 			return deepLine - 1
 		}
@@ -248,13 +248,13 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
-		firstLine := listItemFirstLine(firstItem, doc.Source, lines)
+		firstLine := listItemFirstLine(firstItem, doc)
 		if firstLine <= 0 {
 			return ast.WalkContinue, nil
 		}
 		firstLineIdx := firstLine - 1 // 0-based
 
-		lastItemLine := listItemFirstLine(lastItem, doc.Source, lines)
+		lastItemLine := listItemFirstLine(lastItem, doc)
 		if lastItemLine <= 0 {
 			// Cannot determine the last item's position; skip this list.
 			return ast.WalkContinue, nil

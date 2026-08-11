@@ -15,12 +15,12 @@ func (r MD042) Description() string { return "No empty links" }
 // inlineNodeLine returns the 1-based line number of an inline node.
 // It first tries to find the exact source line via a descendant Text node,
 // then falls back to the first line of the nearest ancestor block.
-func inlineNodeLine(n ast.Node, source []byte) int {
+func inlineNodeLine(n ast.Node, doc *lint.Document) int {
 	// Use the first text leaf to get the actual line where the node appears,
 	// rather than the block's first line.  This is important for multi-line
 	// paragraphs where a link may appear on a line other than the first.
 	if t := firstTextLeaf(n); t != nil {
-		return countLine(source, t.Segment.Start)
+		return doc.LineAt(t.Segment.Start)
 	}
 	for p := n.Parent(); p != nil; p = p.Parent() {
 		if p.Type() != ast.TypeBlock {
@@ -28,7 +28,7 @@ func inlineNodeLine(n ast.Node, source []byte) int {
 		}
 		if p.Lines() != nil && p.Lines().Len() > 0 {
 			seg := p.Lines().At(0)
-			return countLine(source, seg.Start)
+			return doc.LineAt(seg.Start)
 		}
 	}
 	return 1
@@ -51,7 +51,7 @@ func (r MD042) Check(doc *lint.Document) []lint.Violation {
 		if dest == "" || dest == "#" {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
-				Line:    inlineNodeLine(link, doc.Source),
+				Line:    inlineNodeLine(link, doc),
 				Column:  1,
 				Message: "No empty links",
 			})
@@ -78,7 +78,7 @@ func (r MD042) Check(doc *lint.Document) []lint.Violation {
 		if !hasText {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
-				Line:    inlineNodeLine(link, doc.Source),
+				Line:    inlineNodeLine(link, doc),
 				Column:  1,
 				Message: "No empty links",
 			})

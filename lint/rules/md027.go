@@ -187,7 +187,7 @@ func md027ListInBQMask(doc *lint.Document) []bool {
 			}
 			for i := startSeg; i < n.Lines().Len(); i++ {
 				seg := n.Lines().At(i)
-				lineNum := countLine(doc.Source, seg.Start) - 1
+				lineNum := doc.LineAt(seg.Start) - 1
 				if lineNum >= 0 && lineNum < len(mask) {
 					mask[lineNum] = true
 				}
