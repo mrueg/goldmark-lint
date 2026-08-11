@@ -3551,3 +3551,62 @@ func TestMD003_Fix_SetextWithATX_H3(t *testing.T) {
 		t.Errorf("MD003 Fix(setext_with_atx) modified h3 ATX heading: got %q", got)
 	}
 }
+
+// TestMD029_InterruptedListRestartsNumbering covers the constructs that split
+// an ordered list. markdownlint requires the fragment after a block-level
+// interruption to restart at 1, so a fragment continuing "4., 5." is a
+// violation. goldmark-lint used to suppress these, which accounted for 6 of the
+// conformance deltas against the tldr-pages corpus.
+func TestMD029_InterruptedListRestartsNumbering(t *testing.T) {
+	interrupters := map[string]string{
+		"blockquote":     "> [!WARNING]\n> Careful.",
+		"fenced code":    "```sh\necho hi\n```",
+		"thematic break": "---",
+		"html block":     "<!-- a comment -->",
+		"heading":        "## A heading",
+		"paragraph":      "A plain paragraph.",
+		"link reference": "[ref]: https://example.com",
+	}
+	for name, interrupter := range interrupters {
+		t.Run(name, func(t *testing.T) {
+			src := "# T\n\n1. One\n\n2. Two\n\n" + interrupter + "\n\n3. Three\n\n4. Four\n"
+			v := lintString(t, rules.MD029{}, src)
+			if len(v) != 2 {
+				t.Fatalf("expected 2 violations for a list restarted after %s, got %d: %v", name, len(v), v)
+			}
+			if !strings.Contains(v[0].Message, "Expected: 1; Actual: 3") {
+				t.Errorf("first violation = %q, want Expected: 1; Actual: 3", v[0].Message)
+			}
+		})
+	}
+}
+
+// TestMD029_IndentedContentKeepsListOpen covers the opposite case: goldmark
+// ends a list at a link reference definition written flush left, while
+// micromark (which markdownlint uses) keeps the list open when the surrounding
+// content is indented into it. The fragment after such a gap continues the
+// earlier numbering and must not be flagged.
+//
+// Reduced from rust-lang/rfcs text/0736-privacy-respecting-fru.md.
+func TestMD029_IndentedContentKeepsListOpen(t *testing.T) {
+	src := "# T\n\n" +
+		"  1. First item\n     with a continuation line.\n\n" +
+		"  2. Second item citing [a ref].\n\n" +
+		"[a ref]: https://example.com\n\n" +
+		"     An indented paragraph belonging to item two.\n\n" +
+		"  3. Third item.\n\n" +
+		"  4. Fourth item.\n"
+	if v := lintString(t, rules.MD029{}, src); len(v) != 0 {
+		t.Errorf("expected no violations for a list held open by indented content, got %v", v)
+	}
+}
+
+// TestMD029_LinkRefAloneDoesNotKeepListOpen guards the boundary of the rule
+// above: a flush-left link reference definition with no indented content around
+// it does end the list in markdownlint too, so the next fragment must restart.
+func TestMD029_LinkRefAloneDoesNotKeepListOpen(t *testing.T) {
+	src := "# T\n\n1. One\n\n2. Two citing [a ref].\n\n[a ref]: https://example.com\n\n3. Three\n\n4. Four\n"
+	if v := lintString(t, rules.MD029{}, src); len(v) != 2 {
+		t.Errorf("expected 2 violations when only a link definition separates the fragments, got %v", v)
+	}
+}
