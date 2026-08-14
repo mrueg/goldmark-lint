@@ -23,7 +23,7 @@ jobs:
       # The corpora are pinned to fixed commits, so this key never changes and
       # the clone happens once for the life of the cache rather than per run.
       - name: Cache benchmark corpora
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             bench/rfcs
