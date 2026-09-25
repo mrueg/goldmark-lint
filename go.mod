@@ -3,7 +3,7 @@ module github.com/mrueg/goldmark-lint
 go 1.27.0
 
 require (
-	github.com/bmatcuk/doublestar/v4 v4.10.0
+	github.com/bmatcuk/doublestar/v4 v4.10.2
 	github.com/mattn/go-runewidth v0.0.30
 	github.com/urfave/cli/v3 v3.12.0
 	github.com/yuin/goldmark v1.8.6
