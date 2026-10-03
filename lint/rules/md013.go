@@ -6,7 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD013 checks for lines that are too long.
@@ -253,7 +253,7 @@ func inlineLinkLine(n ast.Node, doc *lint.Document) int {
 		return doc.LineAt(pos)
 	}
 	if t := firstTextLeaf(n); t != nil {
-		return doc.LineAt(t.Segment.Start)
+		return doc.LineAt(textSeg(t).Start)
 	}
 	return blockFirstLine(n, doc)
 }
@@ -289,11 +289,11 @@ func lastTextLeaf(n ast.Node) *ast.Text {
 // nearest ancestor block node that has line information.
 func blockFirstLine(n ast.Node, doc *lint.Document) int {
 	for p := n.Parent(); p != nil; p = p.Parent() {
-		if p.Type() != ast.TypeBlock {
+		if !isBlockNode(p) {
 			continue
 		}
-		if p.Lines() != nil && p.Lines().Len() > 0 {
-			return doc.LineAt(p.Lines().At(0).Start)
+		if len(blockLines(p)) > 0 {
+			return doc.LineAt(blockLines(p)[0].Start)
 		}
 	}
 	return 0
@@ -362,11 +362,11 @@ func md013LinkOnlyLines(doc *lint.Document) map[int]bool {
 			// Multiline images/links (alt text spanning multiple lines) must have
 			// each line marked; otherwise those continuation lines would not be
 			// considered link-only and would be incorrectly flagged.
-			if first := firstTextLeaf(n); first != nil {
-				startLine := doc.LineAt(first.Segment.Start)
+			if pos := n.Pos(); pos >= 0 {
+				startLine := doc.LineAt(pos)
 				endLine := startLine
 				if last := lastTextLeaf(n); last != nil {
-					endLine = doc.LineAt(last.Segment.Start)
+					endLine = doc.LineAt(textSeg(last).Start)
 					if endLine < startLine {
 						endLine = startLine
 					}
@@ -385,11 +385,11 @@ func md013LinkOnlyLines(doc *lint.Document) map[int]bool {
 				lineNum = doc.LineAt(pos)
 			} else if next := n.NextSibling(); next != nil {
 				if t, ok := next.(*ast.Text); ok {
-					lineNum = doc.LineAt(t.Segment.Start)
+					lineNum = doc.LineAt(textSeg(t).Start)
 				}
 			} else if prev := n.PreviousSibling(); prev != nil {
 				if t, ok := prev.(*ast.Text); ok {
-					lineNum = doc.LineAt(t.Segment.Start)
+					lineNum = doc.LineAt(textSeg(t).Start)
 				}
 			} else {
 				lineNum = blockFirstLine(n, doc)
@@ -406,7 +406,7 @@ func md013LinkOnlyLines(doc *lint.Document) map[int]bool {
 			//   - text inside headings is not counted (headings are not "paragraph"
 			//     tokens in micromark, so their text never enters paragraphDataLines)
 			parent := n.Parent()
-			if parent == nil || parent.Type() == ast.TypeInline || parent.Kind() == ast.KindHeading {
+			if parent == nil || isInlineNode(parent) || parent.Kind() == ast.KindHeading {
 				break
 			}
 			t, ok := n.(*ast.Text)
@@ -415,10 +415,10 @@ func md013LinkOnlyLines(doc *lint.Document) map[int]bool {
 			}
 			// Skip empty text segments (e.g. paragraph-end markers generated
 			// by the goldmark parser at line breaks adjacent to inline nodes).
-			if t.Segment.Start == t.Segment.Stop {
+			if textSeg(t).Start == textSeg(t).Stop {
 				break
 			}
-			lineNum := doc.LineAt(t.Segment.Start)
+			lineNum := doc.LineAt(textSeg(t).Start)
 			if lineNum > 0 {
 				paragraphDataLines[lineNum] = true
 			}

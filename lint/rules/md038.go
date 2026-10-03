@@ -1,10 +1,11 @@
 package rules
 
 import (
+	"bytes"
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD038 checks for spaces inside code span elements.
@@ -26,6 +27,34 @@ func leadingSpaceIsRequired(content string) bool {
 // leadingSpaceIsRequired.
 func trailingSpaceIsRequired(content string) bool {
 	return strings.HasSuffix(strings.TrimRight(content, " "), "`")
+}
+
+// codeSpanEdges returns the content of the first and last source lines of a
+// code span, without line endings. One space is stripped from both ends when
+// the content, with line endings read as spaces, starts AND ends with a space,
+// as CommonMark specifies. A line ending at either end of the span is not
+// reported as a space.
+func codeSpanEdges(cs *ast.CodeSpan, source []byte) (first, last []byte) {
+	indices := cs.Value.Indices()
+	if cs.Value.IsOwned() || len(indices) == 0 {
+		// The value is not backed by the source (a code span with an escaped
+		// pipe in a table cell); Str is already normalised.
+		content := []byte(cs.Value.Str(source))
+		return content, content
+	}
+	var raw []byte
+	for _, idx := range indices {
+		raw = append(raw, source[idx.Start:idx.Stop]...)
+	}
+	first = bytes.TrimRight(source[indices[0].Start:indices[0].Stop], "\r\n")
+	lastIdx := indices[len(indices)-1]
+	last = bytes.TrimRight(source[lastIdx.Start:lastIdx.Stop], "\r\n")
+	isSpace := func(c byte) bool { return c == ' ' || c == '\r' || c == '\n' }
+	if len(bytes.TrimSpace(raw)) > 0 && isSpace(raw[0]) && isSpace(raw[len(raw)-1]) {
+		first = bytes.TrimPrefix(first, []byte(" "))
+		last = bytes.TrimSuffix(last, []byte(" "))
+	}
+	return first, last
 }
 
 // trimCodeSpanContent strips the leading and trailing spaces of a code span's
@@ -114,34 +143,12 @@ func (r MD038) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
-		// CodeSpan children are Text nodes (one per source line).
-		first := cs.FirstChild()
-		if first == nil {
+		if cs.Value.IsEmpty() {
 			return ast.WalkContinue, nil
 		}
-		firstText, ok := first.(*ast.Text)
-		if !ok {
-			return ast.WalkContinue, nil
-		}
+		firstContent, lastContent := codeSpanEdges(cs, doc.Source)
 
-		// Find last text child.
-		var lastText *ast.Text
-		for c := cs.FirstChild(); c != nil; c = c.NextSibling() {
-			if t, ok := c.(*ast.Text); ok {
-				lastText = t
-			}
-		}
-		if lastText == nil {
-			return ast.WalkContinue, nil
-		}
-
-		firstContent := firstText.Segment.Value(doc.Source)
-		lastContent := lastText.Segment.Value(doc.Source)
-
-		// Check for leading space: only check actual content, not stripped bytes.
-		// CommonMark symmetrically strips one space from both ends of code span content
-		// when the raw content starts AND ends with a space. Goldmark applies this before
-		// populating the segment, so we must rely solely on the segment content itself.
+		// Check for leading space in the normalised content.
 		hasLeadingSpace := len(firstContent) > 0 && firstContent[0] == ' '
 
 		// Check for trailing space: only check actual content.
@@ -175,7 +182,7 @@ func (r MD038) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
-		line := doc.LineAt(firstText.Segment.Start)
+		line := nodeLine(cs, doc)
 		if reportedLines[line] {
 			return ast.WalkContinue, nil
 		}

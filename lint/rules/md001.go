@@ -5,11 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/parser"
-	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD001 checks that heading levels only increment by one level at a time.
@@ -31,10 +27,7 @@ func (r MD001) Description() string {
 // to h2. Subsequent headings are also adjusted to maintain valid increments.
 func (r MD001) Fix(source []byte) []byte {
 	// Re-parse source to get an AST for accurate detection.
-	pctx := parser.NewContext()
-	reader := text.NewReader(source)
-	md := goldmark.New(goldmark.WithExtensions(extension.Table, extension.Strikethrough, extension.TaskList, extension.CJK))
-	node := md.Parser().Parse(reader, parser.WithContext(pctx))
+	node := lint.Parse(source)
 
 	lines := strings.Split(string(source), "\n")
 	doc := &lint.Document{
@@ -114,8 +107,8 @@ func (r MD001) run(doc *lint.Document, onViolation func(lineNum, expectedLevel, 
 		level := h.Level
 		if prevLevel > 0 && level > prevLevel+1 {
 			line := 1
-			if h.Lines() != nil && h.Lines().Len() > 0 {
-				seg := h.Lines().At(0)
+			if len(blockLines(h)) > 0 {
+				seg := blockLines(h)[0]
 				line = doc.LineAt(seg.Start)
 			}
 			onViolation(line, prevLevel+1, level)

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD004 checks that unordered list markers are consistent.
@@ -166,12 +166,12 @@ func (r MD004) Check(doc *lint.Document) []lint.Violation {
 							continue
 						}
 						lineNum := 1
-						if li.Lines() != nil && li.Lines().Len() > 0 {
-							seg := li.Lines().At(0)
+						if len(blockLines(li)) > 0 {
+							seg := blockLines(li)[0]
 							lineNum = doc.LineAt(seg.Start)
 						} else if fc := li.FirstChild(); fc != nil {
-							if fc.Lines() != nil && fc.Lines().Len() > 0 {
-								seg := fc.Lines().At(0)
+							if len(blockLines(fc)) > 0 {
+								seg := blockLines(fc)[0]
 								lineNum = doc.LineAt(seg.Start)
 							}
 						}
@@ -218,12 +218,12 @@ func (r MD004) Check(doc *lint.Document) []lint.Violation {
 					continue
 				}
 				lineNum := 1
-				if li.Lines() != nil && li.Lines().Len() > 0 {
-					seg := li.Lines().At(0)
+				if len(blockLines(li)) > 0 {
+					seg := blockLines(li)[0]
 					lineNum = doc.LineAt(seg.Start)
 				} else if fc := li.FirstChild(); fc != nil {
-					if fc.Lines() != nil && fc.Lines().Len() > 0 {
-						seg := fc.Lines().At(0)
+					if len(blockLines(fc)) > 0 {
+						seg := blockLines(fc)[0]
 						lineNum = doc.LineAt(seg.Start)
 					}
 				}

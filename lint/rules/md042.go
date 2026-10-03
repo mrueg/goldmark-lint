@@ -2,7 +2,7 @@ package rules
 
 import (
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD042 checks that links are not empty (no empty destination or empty text).
@@ -20,14 +20,17 @@ func inlineNodeLine(n ast.Node, doc *lint.Document) int {
 	// rather than the block's first line.  This is important for multi-line
 	// paragraphs where a link may appear on a line other than the first.
 	if t := firstTextLeaf(n); t != nil {
-		return doc.LineAt(t.Segment.Start)
+		return doc.LineAt(textSeg(t).Start)
+	}
+	if pos := n.Pos(); pos >= 0 {
+		return doc.LineAt(pos)
 	}
 	for p := n.Parent(); p != nil; p = p.Parent() {
-		if p.Type() != ast.TypeBlock {
+		if !isBlockNode(p) {
 			continue
 		}
-		if p.Lines() != nil && p.Lines().Len() > 0 {
-			seg := p.Lines().At(0)
+		if len(blockLines(p)) > 0 {
+			seg := blockLines(p)[0]
 			return doc.LineAt(seg.Start)
 		}
 	}
@@ -46,7 +49,7 @@ func (r MD042) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
-		dest := string(link.Destination)
+		dest := link.Destination.Str(doc.Source)
 		// Check for empty destination
 		if dest == "" || dest == "#" {
 			violations = append(violations, lint.Violation{
@@ -63,7 +66,7 @@ func (r MD042) Check(doc *lint.Document) []lint.Violation {
 		for c := link.FirstChild(); c != nil; c = c.NextSibling() {
 			switch ct := c.(type) {
 			case *ast.Text:
-				seg := ct.Segment
+				seg := textSeg(ct)
 				if seg.Start < seg.Stop {
 					hasText = true
 				}

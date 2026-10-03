@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD024 checks that no two headings have the same text content.
@@ -22,10 +22,10 @@ func (r MD024) Description() string { return "Multiple headings with the same co
 // ATX markers like ##, or the raw first line for setext headings).
 // This preserves inline formatting characters and matches markdownlint's behavior.
 func headingRawContent(h *ast.Heading, doc *lint.Document) string {
-	if h.Lines() == nil || h.Lines().Len() == 0 {
+	if len(blockLines(h)) == 0 {
 		return headingText(h, doc.Source)
 	}
-	seg := h.Lines().At(0)
+	seg := blockLines(h)[0]
 	lineIdx := doc.LineAt(seg.Start) - 1
 	if lineIdx < 0 || lineIdx >= len(doc.Lines) {
 		return headingText(h, doc.Source)
@@ -90,8 +90,8 @@ func (r MD024) Check(doc *lint.Document) []lint.Violation {
 		text := headingRawContent(h, doc)
 		if seen[text] {
 			line := 1
-			if h.Lines() != nil && h.Lines().Len() > 0 {
-				seg := h.Lines().At(0)
+			if len(blockLines(h)) > 0 {
+				seg := blockLines(h)[0]
 				line = doc.LineAt(seg.Start)
 			}
 			violations = append(violations, lint.Violation{
@@ -125,8 +125,8 @@ func (r MD024) checkSiblings(doc *lint.Document) []lint.Violation {
 			text := headingRawContent(h, doc)
 			if seen[text] {
 				line := 1
-				if h.Lines() != nil && h.Lines().Len() > 0 {
-					seg := h.Lines().At(0)
+				if len(blockLines(h)) > 0 {
+					seg := blockLines(h)[0]
 					line = doc.LineAt(seg.Start)
 				}
 				violations = append(violations, lint.Violation{

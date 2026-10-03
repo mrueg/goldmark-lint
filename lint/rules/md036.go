@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD036 checks that emphasis is not used instead of a heading.
@@ -139,8 +139,8 @@ func (r MD036) Check(doc *lint.Document) []lint.Violation {
 		if first == nil || first.NextSibling() != nil {
 			return ast.WalkContinue, nil
 		}
-		emph, ok := first.(*ast.Emphasis)
-		if !ok {
+		emph := first
+		if emphasisLevel(emph) == 0 {
 			return ast.WalkContinue, nil
 		}
 
@@ -169,8 +169,8 @@ func (r MD036) Check(doc *lint.Document) []lint.Violation {
 		}
 
 		line := 1
-		if para.Lines() != nil && para.Lines().Len() > 0 {
-			seg := para.Lines().At(0)
+		if len(blockLines(para)) > 0 {
+			seg := blockLines(para)[0]
 			line = doc.LineAt(seg.Start)
 		}
 		violations = append(violations, lint.Violation{

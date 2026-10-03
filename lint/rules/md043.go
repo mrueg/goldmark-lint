@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD043 checks that headings match a required structure.
@@ -40,8 +40,8 @@ func (r MD043) Check(doc *lint.Document) []lint.Violation {
 		}
 		text := headingText(h, doc.Source)
 		line := 1
-		if h.Lines() != nil && h.Lines().Len() > 0 {
-			seg := h.Lines().At(0)
+		if len(blockLines(h)) > 0 {
+			seg := blockLines(h)[0]
 			line = doc.LineAt(seg.Start)
 		}
 		// Include level prefix for matching: "# Heading", "## Heading", etc.

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD026 checks for trailing punctuation in headings.
@@ -45,12 +45,12 @@ func (r MD026) Check(doc *lint.Document) []lint.Violation {
 		}
 
 		// Determine the line number of the (last) heading content line.
-		// For ATX headings h.Lines() contains the heading source line (with '#').
-		// For setext headings h.Lines() contains the content lines (not the underline).
+		// For ATX headings the source holds the heading content line.
+		// For setext headings it holds the content lines (not the underline).
 		// Use the LAST line to capture the trailing character of the heading.
 		line := 1
-		if h.Lines() != nil && h.Lines().Len() > 0 {
-			lastSeg := h.Lines().At(h.Lines().Len() - 1)
+		if len(blockLines(h)) > 0 {
+			lastSeg := blockLines(h)[len(blockLines(h))-1]
 			line = doc.LineAt(lastSeg.Start)
 		}
 		if line < 1 || line > len(doc.Lines) {

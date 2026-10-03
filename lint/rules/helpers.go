@@ -7,9 +7,79 @@ import (
 	"unicode"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
-	extast "github.com/yuin/goldmark/extension/ast"
+	"github.com/yuin/goldmark/v2/ast"
+	extast "github.com/yuin/goldmark/v2/extension/ast"
+	"github.com/yuin/goldmark/v2/text"
 )
+
+// textSeg returns the source segment of a Text node.
+func textSeg(t *ast.Text) text.Segment {
+	idx := t.Value.Index()
+	return text.NewSegment(idx.Start, idx.Stop)
+}
+
+// blockLines returns the source line segments of a block node: the content
+// lines for code and HTML blocks, and the inline source for other blocks.
+// It returns nil for inline nodes.
+func blockLines(n ast.Node) []text.Segment {
+	switch b := n.(type) {
+	case *ast.CodeBlock:
+		return b.Value.Segments()
+	case *ast.HTMLBlock:
+		return b.Value.Segments()
+	case ast.BlockNode:
+		return b.Source()
+	}
+	return nil
+}
+
+// nodeLine returns the 1-based line number of n. When n has no source position
+// (for example a code span containing an escaped pipe in a table cell, whose
+// value goldmark rewrites), the nearest ancestor with a position is used.
+func nodeLine(n ast.Node, doc *lint.Document) int {
+	for ; n != nil; n = n.Parent() {
+		if pos := n.Pos(); pos >= 0 {
+			return doc.LineAt(pos)
+		}
+	}
+	return 1
+}
+
+// isBlockNode reports whether n is a block-level node.
+func isBlockNode(n ast.Node) bool {
+	_, ok := n.(ast.BlockNode)
+	return ok
+}
+
+// isInlineNode reports whether n is an inline node.
+func isInlineNode(n ast.Node) bool {
+	_, ok := n.(ast.InlineNode)
+	return ok
+}
+
+// isFencedCodeBlock reports whether n is a fenced code block.
+func isFencedCodeBlock(n ast.Node) bool {
+	cb, ok := n.(*ast.CodeBlock)
+	return ok && cb.CodeBlockKind == ast.CodeBlockKindFenced
+}
+
+// isIndentedCodeBlock reports whether n is an indented code block.
+func isIndentedCodeBlock(n ast.Node) bool {
+	cb, ok := n.(*ast.CodeBlock)
+	return ok && cb.CodeBlockKind == ast.CodeBlockKindIndented
+}
+
+// emphasisLevel returns the delimiter count of an emphasis node: 1 for
+// *ast.Emphasis, 2 for *ast.Strong and 0 for any other node.
+func emphasisLevel(n ast.Node) int {
+	switch n.(type) {
+	case *ast.Emphasis:
+		return 1
+	case *ast.Strong:
+		return 2
+	}
+	return 0
+}
 
 // IntOrArray is a JSON-compatible type that can be either a single integer or
 // an array of integers. When used for per-heading-level config (e.g. lines_above
@@ -62,8 +132,11 @@ func headingText(n ast.Node, source []byte) string {
 
 // inlineNodeText recursively extracts raw text bytes from an inline AST node.
 func inlineNodeText(n ast.Node, source []byte) []byte {
-	if t, ok := n.(*ast.Text); ok {
-		return source[t.Segment.Start:t.Segment.Stop]
+	switch t := n.(type) {
+	case *ast.Text:
+		return source[textSeg(t).Start:textSeg(t).Stop]
+	case *ast.CodeSpan:
+		return []byte(t.Value.Str(source))
 	}
 	// For any other node, recurse into its children.
 	var b []byte
@@ -74,70 +147,18 @@ func inlineNodeText(n ast.Node, source []byte) []byte {
 }
 
 // fencedCodeBlockLine returns the 1-based line number of the opening fence of a
-// FencedCodeBlock node. It tries Info segment first, then first content line minus
-// one, and falls back to 1 for empty blocks with no info string.
-func fencedCodeBlockLine(n *ast.FencedCodeBlock, doc *lint.Document) int {
-	if n.Info != nil {
-		return doc.LineAt(n.Info.Segment.Start)
-	}
-	if n.Lines() != nil && n.Lines().Len() > 0 {
-		line := doc.LineAt(n.Lines().At(0).Start)
-		if line > 1 {
-			return line - 1
-		}
-	}
-	return 1
-}
-
-// emphasisStartPos returns the byte position in source of the opening marker of
-// the given Emphasis node. It tries Pos() first, then walks to the first Text
-// descendant and subtracts nesting levels and inline-wrapper prefix characters.
-func emphasisStartPos(emph *ast.Emphasis) int {
-	if pos := emph.Pos(); pos >= 0 {
-		return pos
-	}
-	pos, ok := firstTextStartInInline(emph.FirstChild(), emph.Level)
-	if ok {
-		return pos
-	}
-	return -1
-}
-
-// firstTextStartInInline recursively finds the first *ast.Text in an inline
-// subtree and returns (start_of_emphasis_marker, true) by subtracting
-// accumulated prefix character counts.
-func firstTextStartInInline(n ast.Node, prefixChars int) (int, bool) {
-	if n == nil {
-		return 0, false
-	}
-	switch node := n.(type) {
-	case *ast.Text:
-		p := node.Segment.Start - prefixChars
-		if p >= 0 {
-			return p, true
-		}
-		return 0, false
-	case *ast.Emphasis:
-		return firstTextStartInInline(node.FirstChild(), prefixChars+node.Level)
-	case *ast.Link:
-		// Link starts with '['; account for that extra char.
-		return firstTextStartInInline(node.FirstChild(), prefixChars+1)
-	case *ast.Image:
-		// Image starts with '!['; account for those 2 extra chars.
-		return firstTextStartInInline(node.FirstChild(), prefixChars+2)
-	default:
-		// For any other inline node (CodeSpan, etc.), try its first child.
-		return firstTextStartInInline(n.FirstChild(), prefixChars)
-	}
+// fenced code block node.
+func fencedCodeBlockLine(n *ast.CodeBlock, doc *lint.Document) int {
+	return doc.LineAt(n.Pos())
 }
 
 // headingSourceLine returns the 1-based line number of a heading node in source
 // using the first content segment, or 0 if no line information is available.
 func headingSourceLine(h *ast.Heading, doc *lint.Document) int {
-	if h.Lines() == nil || h.Lines().Len() == 0 {
+	if len(blockLines(h)) == 0 {
 		return 0
 	}
-	return doc.LineAt(h.Lines().At(0).Start)
+	return doc.LineAt(blockLines(h)[0].Start)
 }
 
 // fencedCodeBlockMask returns a bool slice with true for each line that is
@@ -258,8 +279,8 @@ func lastTextStopInInline(n ast.Node) int {
 	var best int
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 		if t, ok := c.(*ast.Text); ok {
-			if t.Segment.Stop > best {
-				best = t.Segment.Stop
+			if textSeg(t).Stop > best {
+				best = textSeg(t).Stop
 			}
 		} else {
 			if v := lastTextStopInInline(c); v > best {
@@ -415,11 +436,11 @@ func indentedCodeBlockMask(doc *lint.Document) []bool {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
-		if n.Kind() != ast.KindCodeBlock {
+		if !isIndentedCodeBlock(n) {
 			return ast.WalkContinue, nil
 		}
-		for i := 0; i < n.Lines().Len(); i++ {
-			seg := n.Lines().At(i)
+		for i := 0; i < len(blockLines(n)); i++ {
+			seg := blockLines(n)[i]
 			lineIdx := doc.LineAt(seg.Start) - 1
 			if lineIdx >= 0 && lineIdx < len(mask) {
 				mask[lineIdx] = true
@@ -447,15 +468,8 @@ func htmlBlockLineMask(doc *lint.Document) []bool {
 		if n.Kind() != ast.KindHTMLBlock {
 			return ast.WalkContinue, nil
 		}
-		for i := 0; i < n.Lines().Len(); i++ {
-			markLine(n.Lines().At(i).Start)
-		}
-		// goldmark keeps the line that closes an HTML block (the "-->" of a
-		// comment, for instance) out of Lines() and in a separate ClosureLine
-		// segment. Without this it is not masked, so rules that skip HTML blocks
-		// see the closing line as ordinary content.
-		if hb, ok := n.(*ast.HTMLBlock); ok && hb.HasClosure() {
-			markLine(hb.ClosureLine.Start)
+		for i := 0; i < len(blockLines(n)); i++ {
+			markLine(blockLines(n)[i].Start)
 		}
 		return ast.WalkContinue, nil
 	})
@@ -471,17 +485,17 @@ func astFencedCodeBlockMask(doc *lint.Document) []bool {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
-		if n.Kind() != ast.KindFencedCodeBlock {
+		if !isFencedCodeBlock(n) {
 			return ast.WalkContinue, nil
 		}
-		lines := n.Lines()
-		if lines.Len() == 0 {
+		lines := blockLines(n)
+		if len(lines) == 0 {
 			// Empty fenced code block: fall through to string-based detection
 			// (cannot locate fence delimiters via AST alone when there are no content lines).
 			return ast.WalkContinue, nil
 		}
-		firstSeg := lines.At(0)
-		lastSeg := lines.At(lines.Len() - 1)
+		firstSeg := lines[0]
+		lastSeg := lines[len(lines)-1]
 		firstCodeIdx := doc.LineAt(firstSeg.Start) - 1 // 0-indexed
 		lastCodeIdx := doc.LineAt(lastSeg.Start) - 1   // 0-indexed
 
@@ -503,7 +517,7 @@ func astFencedCodeBlockMask(doc *lint.Document) []bool {
 		}
 		return ast.WalkContinue, nil
 	})
-	// For empty fenced code blocks (AST Lines() == 0), fall back to the
+	// For empty fenced code blocks (no content lines), fall back to the
 	// string-based scanner to catch their fence delimiter lines.
 	stringMask := fencedCodeBlockMask(doc.Lines)
 	for i, v := range stringMask {
@@ -526,11 +540,11 @@ func astHeadingMask(doc *lint.Document) []bool {
 		if n.Kind() != ast.KindHeading {
 			return ast.WalkContinue, nil
 		}
-		lines := n.Lines()
-		if lines.Len() == 0 {
+		lines := blockLines(n)
+		if len(lines) == 0 {
 			return ast.WalkContinue, nil
 		}
-		firstSeg := lines.At(0)
+		firstSeg := lines[0]
 		lineIdx := doc.LineAt(firstSeg.Start) - 1 // 0-indexed
 		if lineIdx < 0 || lineIdx >= len(mask) {
 			return ast.WalkContinue, nil
@@ -571,7 +585,7 @@ func astTableMask(doc *lint.Document) []bool {
 				return ast.WalkContinue, nil
 			}
 			if txt, ok := child.(*ast.Text); ok {
-				ln := doc.LineAt(txt.Segment.Start)
+				ln := doc.LineAt(textSeg(txt).Start)
 				if first == -1 || ln < first {
 					first = ln
 				}

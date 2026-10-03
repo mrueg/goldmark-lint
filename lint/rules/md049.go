@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD049 checks that emphasis markers use a consistent style (asterisk or underscore).
@@ -42,11 +42,11 @@ func (r MD049) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 		emph, ok := n.(*ast.Emphasis)
-		if !ok || emph.Level != 1 {
+		if !ok {
 			return ast.WalkContinue, nil
 		}
 
-		pos := emphasisStartPos(emph)
+		pos := emph.Pos()
 		if pos < 0 || pos >= len(doc.Source) {
 			return ast.WalkContinue, nil
 		}
@@ -83,8 +83,8 @@ func (r MD049) Check(doc *lint.Document) []lint.Violation {
 		// Report closing marker violation (markdownlint reports both opening and closing).
 		var lastTextStop int
 		for c := emph.FirstChild(); c != nil; c = c.NextSibling() {
-			if t, ok2 := c.(*ast.Text); ok2 && t.Segment.Stop > lastTextStop {
-				lastTextStop = t.Segment.Stop
+			if t, ok2 := c.(*ast.Text); ok2 && textSeg(t).Stop > lastTextStop {
+				lastTextStop = textSeg(t).Stop
 			}
 		}
 		if lastTextStop > 0 && lastTextStop < len(doc.Source) {

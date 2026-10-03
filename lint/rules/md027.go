@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD027 checks for multiple spaces after blockquote symbols.
@@ -138,14 +138,12 @@ func md027ListInBQMask(doc *lint.Document) []bool {
 			return ast.WalkContinue, nil
 		}
 		// Only process block-level nodes that carry line information.
-		// Calling Lines() on inline nodes panics in goldmark.
 		switch n.(type) {
-		case *ast.Paragraph, *ast.TextBlock, *ast.Heading,
-			*ast.CodeBlock, *ast.FencedCodeBlock, *ast.HTMLBlock:
+		case *ast.Paragraph, *ast.Heading, *ast.CodeBlock, *ast.HTMLBlock:
 		default:
 			return ast.WalkContinue, nil
 		}
-		if n.Lines() == nil || n.Lines().Len() == 0 {
+		if len(blockLines(n)) == 0 {
 			return ast.WalkContinue, nil
 		}
 		// Walk up ancestors: check that a List is found before (more immediate
@@ -185,8 +183,8 @@ func md027ListInBQMask(doc *lint.Document) []bool {
 			if listDepth == 1 {
 				startSeg = 1
 			}
-			for i := startSeg; i < n.Lines().Len(); i++ {
-				seg := n.Lines().At(i)
+			for i := startSeg; i < len(blockLines(n)); i++ {
+				seg := blockLines(n)[i]
 				lineNum := doc.LineAt(seg.Start) - 1
 				if lineNum >= 0 && lineNum < len(mask) {
 					mask[lineNum] = true

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD009 checks for trailing spaces at the end of lines.
@@ -71,23 +71,14 @@ func (r MD009) Check(doc *lint.Document) []lint.Violation {
 			indentedBase[i] = -1
 		}
 		markBlockLines := func(n ast.Node) {
-			var cb *ast.BaseBlock
-			indented := false
-			switch node := n.(type) {
-			case *ast.CodeBlock:
-				cb = &node.BaseBlock
-				indented = true
-			case *ast.FencedCodeBlock:
-				cb = &node.BaseBlock
-			default:
+			cb, ok := n.(*ast.CodeBlock)
+			if !ok {
 				return
 			}
-			if cb.Lines() == nil {
-				return
-			}
+			indented := cb.CodeBlockKind == ast.CodeBlockKindIndented
 			base := -1
-			for i := 0; i < cb.Lines().Len(); i++ {
-				seg := cb.Lines().At(i)
+			for i := 0; i < len(blockLines(cb)); i++ {
+				seg := blockLines(cb)[i]
 				lineNum := doc.LineAt(seg.Start) - 1
 				if lineNum < 0 || lineNum >= len(codeMask) {
 					continue

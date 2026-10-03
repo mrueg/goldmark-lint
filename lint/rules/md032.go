@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD032 checks that lists are surrounded by blank lines.
@@ -99,8 +99,8 @@ func firstBlockLine(n ast.Node, doc *lint.Document) int {
 	if n == nil {
 		return 0
 	}
-	if n.Type() == ast.TypeBlock && n.Lines() != nil && n.Lines().Len() > 0 {
-		return doc.LineAt(n.Lines().At(0).Start)
+	if isBlockNode(n) && len(blockLines(n)) > 0 {
+		return doc.LineAt(blockLines(n)[0].Start)
 	}
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 		if line := firstBlockLine(c, doc); line > 0 {
@@ -118,15 +118,14 @@ var listMarkerOnlyRE = regexp.MustCompile(`^( *)(?:[-*+]|\d+[.)])[ \t]*$`)
 
 // listItemFirstLine returns the 1-based source line number of the first content
 // line of the given list item. The direct children of a ListItem are always
-// block-level nodes (TextBlock, Paragraph, nested List, etc.) so it is safe to
-// call Lines() on them.
+// block-level nodes (Paragraph, nested List, etc.).
 func listItemFirstLine(item *ast.ListItem, doc *lint.Document) int {
 	child := item.FirstChild()
 	if child == nil {
 		return 0
 	}
-	if child.Lines() != nil && child.Lines().Len() > 0 {
-		return doc.LineAt(child.Lines().At(0).Start)
+	if len(blockLines(child)) > 0 {
+		return doc.LineAt(blockLines(child)[0].Start)
 	}
 
 	// Fallback: the first child has no line information (e.g. when the list
@@ -313,7 +312,7 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 
 		afterViolation := -1
 		lastContentLine := lastItemLine // last non-blank line seen while scanning
-		offset := lastItem.Offset
+		offset := lastItem.Offset()
 		for i := lastItemLineIdx + 1; i < n; i++ {
 			rawLine := lines[i]
 			line := normalizeForAfterCheck(rawLine)

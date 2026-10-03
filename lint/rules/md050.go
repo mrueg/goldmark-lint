@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD050 checks that strong markers use a consistent style (asterisk or underscore).
@@ -38,12 +38,12 @@ func (r MD050) Check(doc *lint.Document) []lint.Violation {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
-		emph, ok := n.(*ast.Emphasis)
-		if !ok || emph.Level != 2 {
+		emph, ok := n.(*ast.Strong)
+		if !ok {
 			return ast.WalkContinue, nil
 		}
 
-		pos := emphasisStartPos(emph)
+		pos := emph.Pos()
 		if pos < 0 || pos >= len(doc.Source) {
 			return ast.WalkContinue, nil
 		}

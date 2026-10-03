@@ -2,7 +2,7 @@ package rules
 
 import (
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD037 checks for spaces inside emphasis markers.
@@ -22,16 +22,17 @@ func (r MD037) Check(doc *lint.Document) []lint.Violation {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
-		emph, ok := n.(*ast.Emphasis)
-		if !ok {
+		level := emphasisLevel(n)
+		if level == 0 {
 			return ast.WalkContinue, nil
 		}
-		pos := emphasisStartPos(emph)
-		if pos < 0 || pos+emph.Level >= len(doc.Source) {
+		emph := n
+		pos := emph.Pos()
+		if pos < 0 || pos+level >= len(doc.Source) {
 			return ast.WalkContinue, nil
 		}
 		// Check for space immediately after opening marker.
-		if doc.Source[pos+emph.Level] == ' ' {
+		if doc.Source[pos+level] == ' ' {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
 				Line:    doc.LineAt(pos),
@@ -49,8 +50,8 @@ func (r MD037) Check(doc *lint.Document) []lint.Violation {
 		var lastChild ast.Node
 		for c := emph.FirstChild(); c != nil; c = c.NextSibling() {
 			lastChild = c
-			if t, ok2 := c.(*ast.Text); ok2 && t.Segment.Stop > lastStop {
-				lastStop = t.Segment.Stop
+			if t, ok2 := c.(*ast.Text); ok2 && textSeg(t).Stop > lastStop {
+				lastStop = textSeg(t).Stop
 			}
 		}
 		if _, ok := lastChild.(*ast.Text); ok {

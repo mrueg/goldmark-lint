@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD003 checks that headings use a consistent style (ATX or Setext).
@@ -247,10 +247,10 @@ func (r MD003) Fix(source []byte) []byte {
 // looking back in the source to find the start of the line: if it starts
 // with '#' it is ATX (possibly closed), otherwise it is setext.
 func headingStyleOf(h *ast.Heading, source []byte) string {
-	if h.Lines() == nil || h.Lines().Len() == 0 {
+	if len(blockLines(h)) == 0 {
 		return "atx"
 	}
-	seg := h.Lines().At(0)
+	seg := blockLines(h)[0]
 	if seg.Start > len(source) {
 		return "atx"
 	}
@@ -325,8 +325,8 @@ func (r MD003) Check(doc *lint.Document) []lint.Violation {
 		}
 
 		line := 1
-		if h.Lines() != nil && h.Lines().Len() > 0 {
-			seg := h.Lines().At(0)
+		if len(blockLines(h)) > 0 {
+			seg := blockLines(h)[0]
 			line = doc.LineAt(seg.Start)
 		}
 

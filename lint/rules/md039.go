@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD039 checks for spaces inside link text.
@@ -52,8 +52,8 @@ func (r MD039) Check(doc *lint.Document) []lint.Violation {
 		// For inline links, source[lastTextStop] == ']' and source[lastTextStop+1] == '('.
 		var lastTextStop int
 		for c := link.FirstChild(); c != nil; c = c.NextSibling() {
-			if t, ok2 := c.(*ast.Text); ok2 && t.Segment.Stop > lastTextStop {
-				lastTextStop = t.Segment.Stop
+			if t, ok2 := c.(*ast.Text); ok2 && textSeg(t).Stop > lastTextStop {
+				lastTextStop = textSeg(t).Stop
 			}
 		}
 		isInline := lastTextStop > 0 && lastTextStop < len(doc.Source)-1 &&
@@ -81,8 +81,8 @@ func (r MD039) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
-		firstContent := firstText.Segment.Value(doc.Source)
-		lastContent := lastText.Segment.Value(doc.Source)
+		firstContent := textSeg(firstText).Bytes(doc.Source)
+		lastContent := textSeg(lastText).Bytes(doc.Source)
 
 		// Leading space: only if the first child of the link is the Text node
 		// (i.e. the link text starts with a space).
