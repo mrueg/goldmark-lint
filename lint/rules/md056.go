@@ -14,7 +14,7 @@ func (r MD056) Aliases() []string   { return []string{"table-column-count"} }
 func (r MD056) Description() string { return "Table column count" }
 
 func (r MD056) Check(doc *lint.Document) []lint.Violation {
-	mask := fencedCodeBlockMask(doc.Lines)
+	mask := fencedContentMask(doc)
 	tables := findTables(doc.Lines, mask)
 	var violations []lint.Violation
 

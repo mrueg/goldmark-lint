@@ -71,7 +71,7 @@ var md054URLInlineRE = regexp.MustCompile(`\[(https?://[^\]]+)\]\((https?://[^)]
 
 func (r MD054) Check(doc *lint.Document) []lint.Violation {
 	cfg := r.defaults()
-	mask := fencedCodeBlockMask(doc.Lines)
+	mask := fencedContentMask(doc)
 	var violations []lint.Violation
 
 	for i, line := range doc.Lines {

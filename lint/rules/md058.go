@@ -14,7 +14,7 @@ func (r MD058) Aliases() []string   { return []string{"blanks-around-tables"} }
 func (r MD058) Description() string { return "Tables should be surrounded by blank lines" }
 
 func (r MD058) Check(doc *lint.Document) []lint.Violation {
-	mask := fencedCodeBlockMask(doc.Lines)
+	mask := fencedContentMask(doc)
 	tables := findTables(doc.Lines, mask)
 	lines := doc.Lines
 	var violations []lint.Violation

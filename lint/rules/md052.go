@@ -2,9 +2,11 @@ package rules
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD052 checks that reference links and images use defined labels.
@@ -91,7 +93,7 @@ func (r MD052) ignoredLabels() map[string]bool {
 }
 
 func (r MD052) Check(doc *lint.Document) []lint.Violation {
-	mask := fencedCodeBlockMask(doc.Lines)
+	mask := fencedContentMask(doc)
 	// Also skip indented code block lines and HTML block lines to avoid false positives.
 	indentedMask := indentedCodeBlockMask(doc)
 	htmlMask := htmlBlockLineMask(doc)
@@ -184,5 +186,59 @@ func (r MD052) Check(doc *lint.Document) []lint.Violation {
 			}
 		}
 	}
+	// References whose text or label spans a line break are invisible to the
+	// line scan above; match them against each paragraph's joined lines.
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering || n.Kind() != ast.KindParagraph {
+			return ast.WalkContinue, nil
+		}
+		segs := blockLines(n)
+		if len(segs) < 2 {
+			return ast.WalkContinue, nil
+		}
+		var joined strings.Builder
+		starts := make([]int, len(segs)) // offset of each segment in joined
+		for i, seg := range segs {
+			starts[i] = joined.Len()
+			joined.WriteString(blankCodeSpans(string(seg.Bytes(doc.Source))))
+		}
+		text := joined.String()
+		for _, m := range md052FullMultilineRE.FindAllStringSubmatchIndex(text, -1) {
+			if !strings.Contains(text[m[0]:m[1]], "\n") {
+				continue // already handled by the line scan
+			}
+			raw := text[m[4]:m[5]]
+			if raw == "" {
+				raw = text[m[2]:m[3]] // collapsed reference: the text is the label
+			}
+			label := normalizeLabel(raw)
+			if label == "" || ignored[label] || isFootnoteLabel(label) || defined[label] {
+				continue
+			}
+			segIdx := 0
+			for segIdx+1 < len(starts) && starts[segIdx+1] <= m[0] {
+				segIdx++
+			}
+			violations = append(violations, lint.Violation{
+				Rule:    r.ID(),
+				Line:    doc.LineAt(segs[segIdx].Start),
+				Column:  1,
+				Message: "Reference links and images should use a label that is defined [Label: " + raw + "]",
+			})
+		}
+		return ast.WalkContinue, nil
+	})
+	sort.SliceStable(violations, func(i, j int) bool { return violations[i].Line < violations[j].Line })
 	return violations
+}
+
+// md052FullMultilineRE matches full and collapsed references, [text][label]
+// and [text][], whose text or label may contain line breaks. Group 1 is the
+// text and group 2 the label.
+var md052FullMultilineRE = regexp.MustCompile(`!?\[([^\]]*)\]\[([^\]]*)\]`)
+
+// normalizeLabel lower-cases a reference label and collapses runs of
+// whitespace, including line breaks, into single spaces.
+func normalizeLabel(label string) string {
+	return strings.ToLower(strings.Join(strings.Fields(label), " "))
 }

@@ -68,7 +68,7 @@ func isMultiLineListItem(lines []string, i int) bool {
 
 func (r MD030) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
-	fencedMask := fencedCodeBlockMask(doc.Lines)
+	fencedMask := fencedContentMask(doc)
 	indentMask := indentedCodeBlockMask(doc)
 	ulSpaces := r.ulSpaces()
 	olSpaces := r.olSpaces()

@@ -67,7 +67,7 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 	}
 
 	var violations []lint.Violation
-	mask := fencedCodeBlockMask(doc.Lines)
+	mask := fencedContentMask(doc)
 	htmlMask := htmlBlockLineMask(doc)
 	// Build an extended mask that also covers indented code block lines and HTML blocks.
 	extMask := make([]bool, len(mask))

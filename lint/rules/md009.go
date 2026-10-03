@@ -57,7 +57,7 @@ func (r MD009) Check(doc *lint.Document) []lint.Violation {
 		brSpaces = 2
 	}
 	checkCodeBlocks := r.CodeBlocks != nil && *r.CodeBlocks
-	codeMask := fencedCodeBlockMask(doc.Lines)
+	codeMask := fencedContentMask(doc)
 	if !checkCodeBlocks {
 		// Also mark indented and fenced code block lines via the AST.
 		// The raw-line fencedCodeBlockMask misses fenced code blocks inside

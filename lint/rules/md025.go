@@ -30,7 +30,11 @@ func (r MD025) Check(doc *lint.Document) []lint.Violation {
 	count := 0
 
 	// If the front matter contains a title, count it as the first top-level heading.
-	if frontMatterHasTitle(doc, r.FrontMatterTitle) {
+	fmTitle := r.FrontMatterTitle
+	if fmTitle == "" {
+		fmTitle = "title"
+	}
+	if frontMatterHasTitle(doc, fmTitle) {
 		count = 1
 	}
 

@@ -208,6 +208,26 @@ func fencedCodeBlockMask(lines []string) []bool {
 	return mask
 }
 
+// fencedContentMask returns a bool slice with true for each line inside (not
+// on the fence delimiters of) a fenced code block. Unlike fencedCodeBlockMask
+// it uses the goldmark AST, so fence-like lines inside HTML blocks, indented
+// code blocks or other constructs are not mistaken for fences.
+func fencedContentMask(doc *lint.Document) []bool {
+	mask := make([]bool, len(doc.Lines))
+	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering || !isFencedCodeBlock(n) {
+			return ast.WalkContinue, nil
+		}
+		for _, seg := range blockLines(n) {
+			if idx := doc.LineAt(seg.Start) - 1; idx >= 0 && idx < len(mask) {
+				mask[idx] = true
+			}
+		}
+		return ast.WalkContinue, nil
+	})
+	return mask
+}
+
 // tableDelimiterCellRE matches a GFM table delimiter cell.
 var tableDelimiterCellRE = regexp.MustCompile(`^\s*:?-+:?\s*$`)
 
