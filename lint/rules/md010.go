@@ -45,7 +45,7 @@ func (r MD010) isIgnoredLang(lang string) bool {
 
 func (r MD010) Check(doc *lint.Document) []lint.Violation {
 	checkCodeBlocks := r.CodeBlocks == nil || *r.CodeBlocks
-	codeMask := fencedCodeBlockMask(doc.Lines)
+	codeMask := fencedContentMask(doc)
 	var langMap map[int]string
 	if len(r.IgnoreCodeLanguages) > 0 {
 		langMap = fencedCodeBlockLanguages(doc.Lines)

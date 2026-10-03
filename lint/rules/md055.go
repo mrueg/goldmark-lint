@@ -113,7 +113,7 @@ func (r MD055) Check(doc *lint.Document) []lint.Violation {
 		style = "consistent"
 	}
 
-	mask := fencedCodeBlockMask(doc.Lines)
+	mask := fencedContentMask(doc)
 	tables := findTables(doc.Lines, mask)
 	var violations []lint.Violation
 	firstStyle := ""

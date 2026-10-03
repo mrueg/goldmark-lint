@@ -33,7 +33,7 @@ func (r MD018) Fix(source []byte) []byte {
 
 func (r MD018) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
-	fenceMask := fencedCodeBlockMask(doc.Lines)
+	fenceMask := fencedContentMask(doc)
 	htmlMask := htmlBlockLineMask(doc)
 	for i, line := range doc.Lines {
 		if fenceMask[i] || htmlMask[i] {

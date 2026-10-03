@@ -26,7 +26,7 @@ func (r MD044) Check(doc *lint.Document) []lint.Violation {
 		return nil
 	}
 
-	mask := fencedCodeBlockMask(doc.Lines)
+	mask := fencedContentMask(doc)
 	var violations []lint.Violation
 
 	for _, name := range r.Names {

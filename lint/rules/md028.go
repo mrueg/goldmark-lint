@@ -71,7 +71,7 @@ func (r MD028) Fix(source []byte) []byte {
 
 func (r MD028) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
-	fencedMask := fencedCodeBlockMask(doc.Lines)
+	fencedMask := fencedContentMask(doc)
 	indentMask := indentedCodeBlockMask(doc)
 	n := len(doc.Lines)
 

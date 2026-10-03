@@ -851,8 +851,8 @@ func TestMD032_MultilineListItem_Fix(t *testing.T) {
 }
 
 func TestMD032_SingleItem_NoDoubleViolation(t *testing.T) {
-	// A single-item list missing blank lines both before and after must produce
-	// exactly one violation, not two (matching markdownlint behaviour).
+	// "More text" is a lazy continuation of the item, not a block after the
+	// list, so only the missing blank line before the list is reported.
 	src := "Text\n- item 1\nMore text\n"
 	v := lintString(t, rules.MD032{}, src)
 	if len(v) != 1 {
@@ -1031,13 +1031,13 @@ func TestMD038_Fix(t *testing.T) {
 	}
 }
 
-func TestMD038_MultipleSpansOnSameLine_OneViolation(t *testing.T) {
-	// Two code spans with trailing spaces on the same line should produce only
-	// one violation (markdownlint deduplicates by line).
+func TestMD038_MultipleSpansOnSameLine(t *testing.T) {
+	// Each code span with spaces is reported, even when several share a line
+	// (markdownlint reports one violation per code span).
 	src := "text `: ` and `, ` more\n"
 	v := lintString(t, rules.MD038{}, src)
-	if len(v) != 1 {
-		t.Errorf("expected 1 violation for two code spans with spaces on same line, got %d: %v", len(v), v)
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations for two code spans with spaces on same line, got %d: %v", len(v), v)
 	}
 }
 
@@ -4063,5 +4063,92 @@ func TestTestdataFixturesBehaveAsNamed(t *testing.T) {
 				t.Errorf("%s_invalid.md triggers no %s violation", id, rule.ID())
 			}
 		})
+	}
+}
+
+func TestMD032_EmptyItemFollowedByParagraph(t *testing.T) {
+	// An empty list item cannot be continued lazily, so the paragraph right
+	// after it needs a blank line.
+	src := "# Title\n\n1)\nText.\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) != 1 || v[0].Line != 3 {
+		t.Errorf("expected 1 violation on line 3, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD032_SingleLineListReportedBeforeAndAfter(t *testing.T) {
+	// markdownlint reports a single-line list missing blank lines on both
+	// sides twice on the same line.
+	src := "Text.\n- item\n# Heading\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) != 2 || v[0].Line != 2 || v[1].Line != 2 {
+		t.Errorf("expected 2 violations on line 2, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD032_FootnoteDefinitionEndsList(t *testing.T) {
+	// A footnote definition is a block of its own, not a lazy continuation of
+	// the list item above it.
+	src := "- Name: x[^a]\n[^a]: Note.\n"
+	v := lintString(t, rules.MD032{}, src)
+	if len(v) != 1 || v[0].Line != 1 {
+		t.Errorf("expected 1 violation on line 1, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD052_MultilineReference(t *testing.T) {
+	// A reference whose text or label spans a line break is reported on the
+	// line where it starts.
+	src := "See [some\ntext][missing label] and [other][multi\nline].\n\n[multi line]: https://example.com\n"
+	v := lintString(t, rules.MD052{}, src)
+	if len(v) != 1 || v[0].Line != 1 {
+		t.Errorf("expected 1 violation on line 1, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD025_FrontMatterTitleDefault(t *testing.T) {
+	// By default a front matter title counts as the first top-level heading.
+	src := "---\ntitle: My Page\n---\n\n# Heading 1\n"
+	v := lintString(t, rules.MD025{}, src)
+	if len(v) != 1 || v[0].Line != 5 {
+		t.Errorf("expected 1 violation on line 5, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD001_FrontMatterTitleDefault(t *testing.T) {
+	// By default a front matter title is treated as an h1.
+	src := "---\ntitle: My Page\n---\n\n### Heading 3\n"
+	v := lintString(t, rules.MD001{}, src)
+	if len(v) != 1 || v[0].Line != 5 {
+		t.Errorf("expected 1 violation on line 5, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD012_FenceLikeLineInHTMLBlock(t *testing.T) {
+	// A fence-like line inside an HTML block does not open a code block, so
+	// the blank lines after the block are still checked.
+	src := "<hr />\n````\n\n\nText.\n"
+	v := lintString(t, rules.MD012{}, src)
+	if len(v) != 1 || v[0].Line != 4 {
+		t.Errorf("expected 1 violation on line 4, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD034_URLRunWithoutWhitespace(t *testing.T) {
+	// An autolink literal runs until whitespace, so a second URL in the same
+	// unbroken run (as in CJK text) is part of the first.
+	src := "文字https://a.example/x)文字(https://b.example/y)文字\n"
+	v := lintString(t, rules.MD034{}, src)
+	if len(v) != 1 {
+		t.Errorf("expected 1 violation, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD034_URLRunEndsAtLinkSyntax(t *testing.T) {
+	// A "](" ends an autolink literal, so a URL after it is reported again.
+	src := "文字https://a.example/x文字](https://b.example/y)\n"
+	v := lintString(t, rules.MD034{}, src)
+	if len(v) != 2 {
+		t.Errorf("expected 2 violations, got %d: %v", len(v), v)
 	}
 }

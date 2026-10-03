@@ -226,7 +226,7 @@ func (r MD060) Check(doc *lint.Document) []lint.Violation {
 		style = "any"
 	}
 
-	mask := fencedCodeBlockMask(doc.Lines)
+	mask := fencedContentMask(doc)
 	tables := findTables(doc.Lines, mask)
 	var violations []lint.Violation
 

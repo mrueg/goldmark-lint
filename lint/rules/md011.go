@@ -30,7 +30,7 @@ func (r MD011) Fix(source []byte) []byte {
 
 func (r MD011) Check(doc *lint.Document) []lint.Violation {
 	var violations []lint.Violation
-	mask := fencedCodeBlockMask(doc.Lines)
+	mask := fencedContentMask(doc)
 	for i, line := range doc.Lines {
 		if mask[i] {
 			continue

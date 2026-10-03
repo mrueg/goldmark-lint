@@ -3,6 +3,8 @@ package rules
 import (
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/mrueg/goldmark-lint/lint"
 	"github.com/yuin/goldmark/v2/ast"
@@ -131,6 +133,9 @@ func (r MD034) run(doc *lint.Document, onViolation func(lineNum int, url string)
 		onViolation(lineNum, url)
 	}
 
+	// A URL that starts inside an earlier one's autolink run (common in CJK
+	// text, which has no spaces) is part of it rather than a separate bare URL.
+	urlRunEnd := 0
 	_ = ast.Walk(doc.AST, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
@@ -171,6 +176,11 @@ func (r MD034) run(doc *lint.Document, onViolation func(lineNum int, url string)
 					continue
 				}
 			}
+			start := seg.Start + loc[0]
+			if start < urlRunEnd {
+				continue
+			}
+			urlRunEnd = autolinkRunEnd(doc.Source, start)
 			addViolation(lineNum, text[loc[0]:loc[1]])
 		}
 
@@ -184,7 +194,7 @@ func (r MD034) run(doc *lint.Document, onViolation func(lineNum int, url string)
 		return ast.WalkContinue, nil
 	})
 
-	fencedMask := fencedCodeBlockMask(doc.Lines)
+	fencedMask := fencedContentMask(doc)
 	indentMask := indentedCodeBlockMask(doc)
 	for i, line := range doc.Lines {
 		if fencedMask[i] || indentMask[i] {
@@ -204,4 +214,21 @@ func (r MD034) run(doc *lint.Document, onViolation func(lineNum int, url string)
 			addViolation(i+1, m)
 		}
 	}
+}
+
+// autolinkRunEnd returns the offset in source where a GFM autolink literal
+// starting at start can extend to at most: the first whitespace, '<', or ']'
+// followed by '(' or '[', or the end of the source.
+func autolinkRunEnd(source []byte, start int) int {
+	for i := start; i < len(source); {
+		r, size := utf8.DecodeRune(source[i:])
+		if unicode.IsSpace(r) || r == '<' {
+			return i
+		}
+		if r == ']' && i+1 < len(source) && (source[i+1] == '(' || source[i+1] == '[') {
+			return i
+		}
+		i += size
+	}
+	return len(source)
 }

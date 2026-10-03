@@ -92,7 +92,11 @@ func (r MD001) run(doc *lint.Document, onViolation func(lineNum, expectedLevel, 
 	prevLevel := 0
 
 	// If the front matter contains a title, treat it as an h1.
-	if frontMatterHasTitle(doc, r.FrontMatterTitle) {
+	fmTitle := r.FrontMatterTitle
+	if fmTitle == "" {
+		fmTitle = "title"
+	}
+	if frontMatterHasTitle(doc, fmTitle) {
 		prevLevel = 1
 	}
 

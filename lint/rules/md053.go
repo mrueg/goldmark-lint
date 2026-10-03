@@ -29,7 +29,7 @@ func (r MD053) ignoredDefs() map[string]bool {
 }
 
 func (r MD053) Check(doc *lint.Document) []lint.Violation {
-	mask := fencedCodeBlockMask(doc.Lines)
+	mask := fencedContentMask(doc)
 	// Also skip indented code block lines and HTML block lines to avoid false negatives
 	// from bracket-like patterns in code blocks being counted as usages.
 	indentedMask := indentedCodeBlockMask(doc)

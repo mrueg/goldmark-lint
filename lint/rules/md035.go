@@ -88,7 +88,7 @@ func (r MD035) Check(doc *lint.Document) []lint.Violation {
 
 	var violations []lint.Violation
 	firstStyle := ""
-	mask := fencedCodeBlockMask(doc.Lines)
+	mask := fencedContentMask(doc)
 
 	for i, line := range doc.Lines {
 		if mask[i] {

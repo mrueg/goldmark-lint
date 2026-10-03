@@ -612,26 +612,26 @@ violation counts; a delta of `0` means the tools agree on that rule's total.
 | MD009     |           415 |               415 |      +0 |
 | MD010     |           124 |               124 |      +0 |
 | MD011     |             5 |                 5 |      +0 |
-| MD012     |         1,449 |             1,450 |      -1 |
+| MD012     |         1,450 |             1,450 |      +0 |
 | MD013     |        33,217 |            33,217 |      +0 |
 | MD014     |            13 |                13 |      +0 |
 | MD019     |             2 |                 2 |      +0 |
 | MD020     |             2 |                 2 |      +0 |
 | MD022     |         3,166 |             3,166 |      +0 |
 | MD024     |            91 |                91 |      +0 |
-| MD025     |             0 |                 3 |      -3 |
+| MD025     |             3 |                 3 |      +0 |
 | MD026     |           169 |               169 |      +0 |
 | MD027     |            15 |                15 |      +0 |
 | MD028     |            66 |                66 |      +0 |
 | MD029     |           120 |               120 |      +0 |
 | MD030     |            90 |                90 |      +0 |
 | MD031     |           910 |               910 |      +0 |
-| MD032     |           539 |               562 |     -23 |
+| MD032     |           562 |               562 |      +0 |
 | MD033     |           217 |               217 |      +0 |
-| MD034     |           355 |               351 |      +4 |
+| MD034     |           351 |               351 |      +0 |
 | MD035     |             3 |                 3 |      +0 |
 | MD036     |            63 |                63 |      +0 |
-| MD038     |            24 |                25 |      -1 |
+| MD038     |            25 |                25 |      +0 |
 | MD039     |             3 |                 3 |      +0 |
 | MD040     |           540 |               540 |      +0 |
 | MD041     |           621 |               621 |      +0 |
@@ -641,19 +641,17 @@ violation counts; a delta of `0` means the tools agree on that rule's total.
 | MD049     |           346 |               346 |      +0 |
 | MD050     |            24 |                24 |      +0 |
 | MD051     |           236 |               236 |      +0 |
-| MD052     |            22 |                26 |      -4 |
+| MD052     |            26 |                26 |      +0 |
 | MD053     |         3,220 |             3,220 |      +0 |
 | MD055     |            71 |                71 |      +0 |
 | MD056     |             6 |                 6 |      +0 |
 | MD058     |            48 |                48 |      +0 |
 | MD059     |            71 |                71 |      +0 |
 | MD060     |         2,151 |             2,151 |      +0 |
-| **TOTAL** |    **54,448** |        **54,480** | **-32** |
+| **TOTAL** |    **54,476** |        **54,480** |  **-4** |
 
-37 of the 44 rules produce identical counts. The remaining seven (MD012,
-MD025, MD032, MD034, MD038, MD046 and MD052) differ by 40 violations in total
-when counted without regard to direction, and by -32 on balance — under 0.1%
-of the total either way.
+43 of the 44 rules produce identical counts. The remaining one, MD046,
+differs by 4 violations — under 0.01% of the total.
 
 Counts alone can hide disagreement, because a false positive in one file and a
 missed violation in another cancel out. `conform.sh` therefore also compares
@@ -661,16 +659,16 @@ the individual `(file, line, rule)` locations:
 
 | Measure                            |  Count |
 | ---------------------------------- | -----: |
-| Locations both tools agree on      | 52,660 |
+| Locations both tools agree on      | 52,671 |
 | Reported only by goldmark-lint     |      0 |
-| Reported only by markdownlint-cli2 |     15 |
+| Reported only by markdownlint-cli2 |      4 |
 
-**goldmark-lint reports no violation that markdownlint does not.** The 15
-locations it misses are MD046 (4) and MD032 (3), where goldmark and micromark
-disagree about whether indented text following a flush-left link reference
-definition is list content or an indented code block; MD052 (4+1), reference
-links whose text spans two source lines; MD025 (3); and MD012 (1), a blank-line
-run that begins immediately after front matter.
+**goldmark-lint reports no violation that markdownlint does not.** The 4
+locations it misses are MD046, caused by a micromark bug: after an indented
+code block and a blank line, micromark does not start an ordered list whose
+first number is not 1, and reads that item's indented continuation lines as
+further indented code blocks. The CommonMark reference implementation and
+goldmark both parse a list there.
 
 To reproduce:
 

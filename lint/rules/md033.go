@@ -112,7 +112,7 @@ func (r MD033) Check(doc *lint.Document) []lint.Violation {
 	// Build a line-based table mask for table_allowed_elements support.
 	var tableMask []bool
 	if len(r.TableAllowedElements) > 0 {
-		codeMask := fencedCodeBlockMask(doc.Lines)
+		codeMask := fencedContentMask(doc)
 		tableMask = make([]bool, len(doc.Lines))
 		for _, tbl := range findTables(doc.Lines, codeMask) {
 			for i := tbl[0]; i <= tbl[1]; i++ {

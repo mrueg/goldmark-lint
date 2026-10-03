@@ -46,7 +46,7 @@ func (r MD012) Check(doc *lint.Document) []lint.Violation {
 	}
 	var violations []lint.Violation
 	consecutive := 0
-	fencedMask := fencedCodeBlockMask(doc.Lines)
+	fencedMask := fencedContentMask(doc)
 
 	// Build a mask for indented code block lines using the goldmark AST.
 	// Blank lines inside indented code blocks should not trigger MD012.

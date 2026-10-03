@@ -152,7 +152,7 @@ func (l *Linter) Fix(source []byte) []byte {
 
 // mdParser is the shared goldmark parser. It is safe for concurrent use.
 var mdParser = parser.New(
-	parser.WithExtensions(extension.TableParser, extension.StrikethroughParser, extension.TaskListItemParser),
+	parser.WithExtensions(extension.TableParser, extension.StrikethroughParser, extension.TaskListItemParser, extension.FootnoteParser),
 	parser.WithEscapedSpace(),
 )
 

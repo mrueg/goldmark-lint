@@ -122,6 +122,10 @@ var listMarkerOnlyRE = regexp.MustCompile(`^( *)(?:[-*+]|\d+[.)])[ \t]*$`)
 func listItemFirstLine(item *ast.ListItem, doc *lint.Document) int {
 	child := item.FirstChild()
 	if child == nil {
+		// Empty item: only the marker is on the line.
+		if pos := item.Pos(); pos >= 0 {
+			return doc.LineAt(pos)
+		}
 		return 0
 	}
 	if len(blockLines(child)) > 0 {
@@ -311,6 +315,9 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 		}
 
 		afterViolation := -1
+		// An empty item has no paragraph to continue lazily, so an unindented
+		// line right after it ends the list.
+		canLazyContinue := lastItem.HasChildren()
 		lastContentLine := lastItemLine // last non-blank line seen while scanning
 		offset := lastItem.Offset()
 		for i := lastItemLineIdx + 1; i < n; i++ {
@@ -323,7 +330,7 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 				lastContentLine = i + 1 // 1-based
 				continue                // continuation/indented content of the last list item
 			}
-			if !isBlockLevelBreaker(line) {
+			if canLazyContinue && !isBlockLevelBreaker(line) {
 				// Lazy continuation of the last list item's paragraph: keep scanning
 				// rather than breaking, so that a subsequent block-level element on
 				// the very next line (e.g. a fenced code block) is still detected.
@@ -342,9 +349,9 @@ func (r MD032) Check(doc *lint.Document) []lint.Violation {
 				Message: "Lists should be surrounded by blank lines",
 			})
 		}
-		// Avoid double-reporting on the same line (e.g. a single-item list
-		// that is missing blank lines both before and after it).
-		if afterViolation > 0 && afterViolation != beforeViolation {
+		// A single-line list missing blank lines both before and after it is
+		// reported twice on the same line, as markdownlint does.
+		if afterViolation > 0 {
 			violations = append(violations, lint.Violation{
 				Rule:    r.ID(),
 				Line:    afterViolation,
