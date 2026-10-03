@@ -5,11 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/parser"
-	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD034 checks for bare URLs that are not wrapped in angle brackets or a proper link.
@@ -31,10 +27,7 @@ var inlineLinkRE = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
 
 func (r MD034) Fix(source []byte) []byte {
 	// Re-parse source to get an AST for accurate detection.
-	pctx := parser.NewContext()
-	reader := text.NewReader(source)
-	md := goldmark.New(goldmark.WithExtensions(extension.Table, extension.Strikethrough, extension.TaskList, extension.CJK))
-	docAST := md.Parser().Parse(reader, parser.WithContext(pctx))
+	docAST := lint.Parse(source)
 
 	lines := strings.Split(string(source), "\n")
 	doc := &lint.Document{
@@ -154,7 +147,7 @@ func (r MD034) run(doc *lint.Document, onViolation func(lineNum int, url string)
 			}
 		}
 
-		seg := t.Segment
+		seg := textSeg(t)
 		text := string(doc.Source[seg.Start:seg.Stop])
 		lineBase := doc.LineAt(seg.Start)
 

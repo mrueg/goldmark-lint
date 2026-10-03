@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD025 checks for multiple top-level headings in a document.
@@ -51,7 +51,7 @@ func (r MD025) Check(doc *lint.Document) []lint.Violation {
 			if _, isHTML := child.(*ast.HTMLBlock); isHTML {
 				continue
 			}
-			if child.Type() == ast.TypeBlock {
+			if isBlockNode(child) {
 				hasContentBefore = true
 			}
 		}
@@ -72,8 +72,8 @@ func (r MD025) Check(doc *lint.Document) []lint.Violation {
 			count++
 			if count > 1 {
 				line := 1
-				if h.Lines() != nil && h.Lines().Len() > 0 {
-					seg := h.Lines().At(0)
+				if len(blockLines(h)) > 0 {
+					seg := blockLines(h)[0]
 					line = doc.LineAt(seg.Start)
 				}
 				violations = append(violations, lint.Violation{

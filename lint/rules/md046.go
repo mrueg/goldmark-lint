@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD046 checks code block style consistency.
@@ -239,17 +239,18 @@ func (r MD046) Check(doc *lint.Document) []lint.Violation {
 		var blockStyle string
 		var lineNum int
 
-		switch node := n.(type) {
-		case *ast.FencedCodeBlock:
+		node, ok := n.(*ast.CodeBlock)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+		if node.CodeBlockKind == ast.CodeBlockKindFenced {
 			blockStyle = "fenced"
 			lineNum = fencedCodeBlockLine(node, doc)
-		case *ast.CodeBlock:
+		} else {
 			blockStyle = "indented"
-			if node.Lines() != nil && node.Lines().Len() > 0 {
-				lineNum = doc.LineAt(node.Lines().At(0).Start)
+			if len(blockLines(node)) > 0 {
+				lineNum = doc.LineAt(blockLines(node)[0].Start)
 			}
-		default:
-			return ast.WalkContinue, nil
 		}
 
 		if lineNum == 0 {

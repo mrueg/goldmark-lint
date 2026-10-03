@@ -2,10 +2,9 @@ package rules
 
 import (
 	"regexp"
-	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD045 checks that images have alternate text (alt text).
@@ -38,8 +37,9 @@ func (r MD045) Check(doc *lint.Document) []lint.Violation {
 
 		switch node := n.(type) {
 		case *ast.Image:
-			// Check if the image has non-empty alt text (any non-nil child node).
-			if node.FirstChild() == nil {
+			// Check if the image has non-empty alt text. goldmark gives an image
+			// with empty alt text a single empty Text child.
+			if !hasNonEmptyChild(node) {
 				violations = append(violations, lint.Violation{
 					Rule:    r.ID(),
 					Line:    inlineNodeLine(node, doc),
@@ -50,21 +50,15 @@ func (r MD045) Check(doc *lint.Document) []lint.Violation {
 
 		case *ast.RawHTML:
 			// Check inline HTML <img> tags that lack an alt attribute.
-			if node.Segments == nil || node.Segments.Len() == 0 {
+			if node.Value.IsEmpty() {
 				return ast.WalkContinue, nil
 			}
-			var sb strings.Builder
-			for i := 0; i < node.Segments.Len(); i++ {
-				seg := node.Segments.At(i)
-				sb.Write(doc.Source[seg.Start:seg.Stop])
-			}
-			tagText := sb.String()
+			tagText := node.Value.Str(doc.Source)
 			if !md045ImgTagRE.MatchString(tagText) {
 				return ast.WalkContinue, nil
 			}
 			if !md045AltAttrRE.MatchString(tagText) && !md045AriaHiddenTrueRE.MatchString(tagText) {
-				seg := node.Segments.At(0)
-				lineNum := doc.LineAt(seg.Start)
+				lineNum := doc.LineAt(node.Value.Index().Start)
 				violations = append(violations, lint.Violation{
 					Rule:    r.ID(),
 					Line:    lineNum,
@@ -76,11 +70,11 @@ func (r MD045) Check(doc *lint.Document) []lint.Violation {
 		case *ast.HTMLBlock:
 			// Check block-level HTML containing <img> tags without alt text.
 			// Join all lines so that multi-line <img> tags are handled correctly.
-			if node.Lines() == nil || node.Lines().Len() == 0 {
+			if len(blockLines(node)) == 0 {
 				return ast.WalkContinue, nil
 			}
-			firstSeg := node.Lines().At(0)
-			lastSeg := node.Lines().At(node.Lines().Len() - 1)
+			firstSeg := blockLines(node)[0]
+			lastSeg := blockLines(node)[len(blockLines(node))-1]
 			blockText := string(doc.Source[firstSeg.Start:lastSeg.Stop])
 			// Find each <img> tag in the block and check for alt/aria-hidden.
 			for _, match := range md045BlockImgTagRE.FindAllStringIndex(blockText, -1) {
@@ -102,4 +96,15 @@ func (r MD045) Check(doc *lint.Document) []lint.Violation {
 	})
 
 	return violations
+}
+
+// hasNonEmptyChild reports whether n has a child other than an empty Text node.
+func hasNonEmptyChild(n ast.Node) bool {
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		if t, ok := c.(*ast.Text); ok && t.Value.IsEmpty() {
+			continue
+		}
+		return true
+	}
+	return false
 }

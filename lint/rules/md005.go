@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/v2/ast"
+	"github.com/yuin/goldmark/v2/text"
 )
 
 // MD005 checks that list items at the same nesting level use consistent indentation.
@@ -166,16 +166,14 @@ func (r MD005) Check(doc *lint.Document) []lint.Violation {
 }
 
 // listItemFirstSegment returns the first text segment of a list item, since
-// ListItem.Lines() is empty in goldmark. A tight item holds a TextBlock and a
-// loose one — any list with blank lines between its items — holds a Paragraph,
-// so both have to be accepted; matching only TextBlock silently skipped every
-// loose list.
+// ListItem.Source() is empty in goldmark. Both tight and loose items hold
+// their text in a Paragraph.
 func listItemFirstSegment(item *ast.ListItem) (text.Segment, bool) {
 	for c := item.FirstChild(); c != nil; c = c.NextSibling() {
 		switch c.(type) {
-		case *ast.TextBlock, *ast.Paragraph:
-			if c.Lines() != nil && c.Lines().Len() > 0 {
-				return c.Lines().At(0), true
+		case *ast.Paragraph:
+			if len(blockLines(c)) > 0 {
+				return blockLines(c)[0], true
 			}
 		}
 	}

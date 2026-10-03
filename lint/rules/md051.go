@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD051 checks that link fragments point to existing headings.
@@ -82,11 +82,8 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 		if !ok {
 			return ast.WalkContinue, nil
 		}
-		if cb.Lines() == nil {
-			return ast.WalkContinue, nil
-		}
-		for i := 0; i < cb.Lines().Len(); i++ {
-			seg := cb.Lines().At(i)
+		for i := 0; i < len(blockLines(cb)); i++ {
+			seg := blockLines(cb)[i]
 			lineNum := doc.LineAt(seg.Start) - 1
 			if lineNum >= 0 && lineNum < len(extMask) {
 				extMask[lineNum] = true
@@ -144,7 +141,7 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 		if !ok {
 			return ast.WalkContinue, nil
 		}
-		dest := string(link.Destination)
+		dest := link.Destination.Str(doc.Source)
 		if !strings.HasPrefix(dest, "#") {
 			return ast.WalkContinue, nil
 		}
@@ -153,9 +150,9 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 		var startLine int
 		var endLine int
 		if t := firstTextLeaf(link); t != nil {
-			startLine = doc.LineAt(t.Segment.Start)
+			startLine = doc.LineAt(textSeg(t).Start)
 			if tl := lastTextLeaf(link); tl != nil {
-				endLine = doc.LineAt(tl.Segment.Stop)
+				endLine = doc.LineAt(textSeg(tl).Stop)
 			} else {
 				endLine = startLine
 			}
@@ -170,10 +167,9 @@ func (r MD051) Check(doc *lint.Document) []lint.Violation {
 		// source) to avoid processing reference links whose URLs are elsewhere.
 		// For inline links "[text...\n...text2](#frag)", the closing ](dest) must
 		// appear on a source line after the text.
-		destBytes := link.Destination
 		isInline := false
 		for ln := endLine; ln <= endLine+1 && ln <= len(doc.Lines); ln++ {
-			if strings.Contains(doc.Lines[ln-1], "]("+string(destBytes)) {
+			if strings.Contains(doc.Lines[ln-1], "]("+dest) {
 				isInline = true
 				break
 			}

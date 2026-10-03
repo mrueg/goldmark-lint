@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD029 checks that ordered list items use a consistent numbering style.
@@ -143,16 +143,16 @@ func (r MD029) Fix(source []byte) []byte {
 // get the segment of the item's own content (not nested list content).
 // Returns (segStart, ok).
 func listItemFirstSeg(li ast.Node) (int, bool) {
-	if li.Lines() != nil && li.Lines().Len() > 0 {
-		return li.Lines().At(0).Start, true
+	if len(blockLines(li)) > 0 {
+		return blockLines(li)[0].Start, true
 	}
 	for c := li.FirstChild(); c != nil; c = c.NextSibling() {
 		// Skip sub-lists to avoid mixing up their item numbers with ours.
 		if _, isList := c.(*ast.List); isList {
 			continue
 		}
-		if c.Lines() != nil && c.Lines().Len() > 0 {
-			return c.Lines().At(0).Start, true
+		if len(blockLines(c)) > 0 {
+			return blockLines(c)[0].Start, true
 		}
 		// Recurse into non-list block children (e.g., blockquotes containing the item).
 		if s, ok := listItemFirstSeg(c); ok {

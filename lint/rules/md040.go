@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD040 checks that fenced code blocks have a language specifier.
@@ -84,13 +84,13 @@ func (r MD040) Check(doc *lint.Document) []lint.Violation {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
-		fcb, ok := n.(*ast.FencedCodeBlock)
-		if !ok {
+		fcb, ok := n.(*ast.CodeBlock)
+		if !ok || fcb.CodeBlockKind != ast.CodeBlockKindFenced {
 			return ast.WalkContinue, nil
 		}
 
 		line := fencedCodeBlockLine(fcb, doc)
-		lang := fcb.Language(doc.Source)
+		lang, _ := fcb.Language(doc.Source)
 
 		if len(lang) == 0 {
 			violations = append(violations, lint.Violation{
@@ -106,7 +106,7 @@ func (r MD040) Check(doc *lint.Document) []lint.Violation {
 		if len(r.AllowedLanguages) > 0 {
 			allowed := false
 			for _, al := range r.AllowedLanguages {
-				if string(lang) == al {
+				if lang == al {
 					allowed = true
 					break
 				}
@@ -122,9 +122,9 @@ func (r MD040) Check(doc *lint.Document) []lint.Violation {
 		}
 
 		// Check language_only: info string must not contain whitespace after the language.
-		if r.LanguageOnly && fcb.Info != nil {
-			info := strings.TrimRight(string(fcb.Info.Segment.Value(doc.Source)), " \t\r\n")
-			if info != string(lang) {
+		if r.LanguageOnly && !fcb.Info.IsEmpty() {
+			info := strings.TrimRight(fcb.Info.Value(doc.Source), " \t\r\n")
+			if info != lang {
 				violations = append(violations, lint.Violation{
 					Rule:    r.ID(),
 					Line:    line,

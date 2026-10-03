@@ -5,11 +5,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/parser"
-	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD007 checks that unordered list items are indented correctly.
@@ -33,10 +29,7 @@ const unorderedListMarkers = "*-+"
 
 func (r MD007) Fix(source []byte) []byte {
 	// Re-parse source to get an AST for accurate nesting detection.
-	pctx := parser.NewContext()
-	reader := text.NewReader(source)
-	md := goldmark.New(goldmark.WithExtensions(extension.Table, extension.Strikethrough, extension.TaskList, extension.CJK))
-	node := md.Parser().Parse(reader, parser.WithContext(pctx))
+	node := lint.Parse(source)
 
 	lines := strings.Split(string(source), "\n")
 	doc := &lint.Document{
@@ -158,8 +151,8 @@ func (r MD007) run(doc *lint.Document, onViolation func(lineNum, expectedIndent,
 		// Get the source line for this list item.
 		lineNum := 0
 		if fc := li.FirstChild(); fc != nil {
-			if fc.Lines() != nil && fc.Lines().Len() > 0 {
-				seg := fc.Lines().At(0)
+			if len(blockLines(fc)) > 0 {
+				seg := blockLines(fc)[0]
 				lineNum = doc.LineAt(seg.Start)
 			}
 		}

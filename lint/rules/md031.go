@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD031 checks that fenced code blocks are surrounded by blank lines.
@@ -102,8 +102,8 @@ func (r MD031) Check(doc *lint.Document) []lint.Violation {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
-		cb, ok := node.(*ast.FencedCodeBlock)
-		if !ok {
+		cb, ok := node.(*ast.CodeBlock)
+		if !ok || cb.CodeBlockKind != ast.CodeBlockKindFenced {
 			return ast.WalkContinue, nil
 		}
 
@@ -126,8 +126,8 @@ func (r MD031) Check(doc *lint.Document) []lint.Violation {
 		// Determine the closing fence line number.
 		// The closing fence is on the line after the last content line.
 		var closeIdx int
-		if cb.Lines() != nil && cb.Lines().Len() > 0 {
-			lastSeg := cb.Lines().At(cb.Lines().Len() - 1)
+		if len(blockLines(cb)) > 0 {
+			lastSeg := blockLines(cb)[len(blockLines(cb))-1]
 			// LineAt resolves the line containing pos; for the end of the last
 			// content line (which includes the trailing newline), this gives
 			// the line number of the closing fence.

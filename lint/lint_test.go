@@ -1002,6 +1002,26 @@ func TestMD038_Invalid(t *testing.T) {
 	}
 }
 
+func TestMD038_EscapedPipeInTableCell(t *testing.T) {
+	// goldmark rewrites a code span containing an escaped pipe in a table cell
+	// into a value with no source position. Regression test for the panic
+	// that caused.
+	src := "| a | b |\n|---|---|\n| ` x\\|y` | z |\n"
+	v := lintString(t, rules.MD038{}, src)
+	if len(v) != 1 || v[0].Line != 3 {
+		t.Errorf("expected 1 violation on line 3, got %d: %v", len(v), v)
+	}
+}
+
+func TestMD038_SpanEndingInLineBreak(t *testing.T) {
+	// The line ending before the closing backtick is not a trailing space.
+	src := "- Use `code\n  ` here.\n"
+	v := lintString(t, rules.MD038{}, src)
+	if len(v) != 0 {
+		t.Errorf("expected 0 violations, got %d: %v", len(v), v)
+	}
+}
+
 func TestMD038_Fix(t *testing.T) {
 	src := "Use `code ` here.\n"
 	got := fixString(t, rules.MD038{}, src)
@@ -2310,6 +2330,15 @@ func TestMD029_FixOne(t *testing.T) {
 	want := "1. item1\n1. item2\n1. item3\n"
 	if got != want {
 		t.Errorf("MD029 Fix(one) = %q, want %q", got, want)
+	}
+}
+
+func TestMD040_EmptyFencedBlockLine(t *testing.T) {
+	// An empty fenced code block is reported on its opening fence line.
+	src := "# Title\n\nText.\n\n```\n```\n"
+	v := lintString(t, rules.MD040{}, src)
+	if len(v) != 1 || v[0].Line != 5 {
+		t.Errorf("expected 1 violation on line 5, got %d: %v", len(v), v)
 	}
 }
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD033 checks for inline HTML in Markdown documents.
@@ -130,18 +130,18 @@ func (r MD033) Check(doc *lint.Document) []lint.Violation {
 		case *ast.HTMLBlock:
 			// Skip HTML comment blocks (type 2: <!-- ... -->).
 			// markdownlint does not flag HTML comments as inline HTML.
-			if node.HTMLBlockType == ast.HTMLBlockType2 {
+			if node.HTMLBlockKind == ast.HTMLBlockKind2 {
 				return ast.WalkContinue, nil
 			}
 			// Scan each line of the HTML block for opening tags.
 			// Markdownlint reports each opening tag individually on its source line
 			// and skips closing tags. This matches the behaviour of reporting
 			// each <dt>, <dd>, etc. separately while not flagging </details>.
-			if node.Lines() != nil {
-				for i := 0; i < node.Lines().Len(); i++ {
-					seg := node.Lines().At(i)
+			{
+				for i := 0; i < len(blockLines(node)); i++ {
+					seg := blockLines(node)[i]
 					lineNum := doc.LineAt(seg.Start)
-					lineContent := strings.TrimRight(string(seg.Value(doc.Source)), "\r\n")
+					lineContent := strings.TrimRight(string(seg.Bytes(doc.Source)), "\r\n")
 					// Skip HTML comment lines.
 					if strings.HasPrefix(strings.TrimSpace(lineContent), "<!--") {
 						continue
@@ -193,9 +193,8 @@ func (r MD033) Check(doc *lint.Document) []lint.Violation {
 
 		case *ast.RawHTML:
 			lineNum := 1
-			if node.Segments != nil && node.Segments.Len() > 0 {
-				seg := node.Segments.At(0)
-				lineNum = doc.LineAt(seg.Start)
+			if !node.Value.IsEmpty() {
+				lineNum = doc.LineAt(node.Value.Index().Start)
 			}
 			// Skip closing tags (e.g. </b>) — only opening tags are reported,
 			// matching markdownlint-cli2 behaviour.
@@ -232,13 +231,22 @@ func (r MD033) Check(doc *lint.Document) []lint.Violation {
 	return violations
 }
 
+// rawHTMLFirstLine returns the source bytes of the first line of a RawHTML
+// node, or nil if the node has no source position.
+func rawHTMLFirstLine(n *ast.RawHTML, source []byte) []byte {
+	if n.Value.IsEmpty() {
+		return nil
+	}
+	idx := n.Value.Index()
+	return source[idx.Start:idx.Stop]
+}
+
 // rawHTMLTagName extracts the tag name from a RawHTML node (e.g. "br" from "<br/>").
 func rawHTMLTagName(n *ast.RawHTML, source []byte) string {
-	if n.Segments == nil || n.Segments.Len() == 0 {
+	if n.Value.IsEmpty() {
 		return "unknown"
 	}
-	seg := n.Segments.At(0)
-	raw := string(seg.Value(source))
+	raw := string(rawHTMLFirstLine(n, source))
 	// Strip leading '<' and optional '/'.
 	i := 0
 	if i < len(raw) && raw[i] == '<' {
@@ -260,20 +268,12 @@ func rawHTMLTagName(n *ast.RawHTML, source []byte) string {
 
 // isHTMLComment reports whether a RawHTML node is an HTML comment (<!-- ... -->).
 func isHTMLComment(n *ast.RawHTML, source []byte) bool {
-	if n.Segments == nil || n.Segments.Len() == 0 {
-		return false
-	}
-	seg := n.Segments.At(0)
-	raw := seg.Value(source)
+	raw := rawHTMLFirstLine(n, source)
 	return len(raw) >= 4 && raw[0] == '<' && raw[1] == '!' && raw[2] == '-' && raw[3] == '-'
 }
 
 // (i.e., starts with "</"), such as </b> or </div>.
 func isClosingRawHTML(n *ast.RawHTML, source []byte) bool {
-	if n.Segments == nil || n.Segments.Len() == 0 {
-		return false
-	}
-	seg := n.Segments.At(0)
-	raw := seg.Value(source)
+	raw := rawHTMLFirstLine(n, source)
 	return len(raw) >= 2 && raw[0] == '<' && raw[1] == '/'
 }

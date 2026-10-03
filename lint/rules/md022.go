@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/mrueg/goldmark-lint/lint"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // MD022 checks that headings are surrounded by blank lines.
@@ -156,11 +156,11 @@ func (r MD022) Check(doc *lint.Document) []lint.Violation {
 			return ast.WalkContinue, nil
 		}
 
-		if h.Lines() == nil || h.Lines().Len() == 0 {
+		if len(blockLines(h)) == 0 {
 			return ast.WalkContinue, nil
 		}
 
-		seg := h.Lines().At(0)
+		seg := blockLines(h)[0]
 		lineNum := doc.LineAt(seg.Start)
 		lineIdx := lineNum - 1 // 0-based
 		linesAbove := linesAboveFor(h.Level)

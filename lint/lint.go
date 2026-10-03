@@ -7,11 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/parser"
-	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/v2/ast"
+	"github.com/yuin/goldmark/v2/extension"
+	"github.com/yuin/goldmark/v2/parser"
 )
 
 // Rule defines the interface for a lint rule.
@@ -152,6 +150,17 @@ func (l *Linter) Fix(source []byte) []byte {
 	return append(source[:fmEnd:fmEnd], rest...)
 }
 
+// mdParser is the shared goldmark parser. It is safe for concurrent use.
+var mdParser = parser.New(
+	parser.WithExtensions(extension.TableParser, extension.StrikethroughParser, extension.TaskListItemParser),
+	parser.WithEscapedSpace(),
+)
+
+// Parse parses source into a goldmark AST using the same extensions as Lint.
+func Parse(source []byte) ast.Node {
+	return mdParser.Parse(source)
+}
+
 // Lint parses source and runs all rules on it, returning violations sorted by line.
 func (l *Linter) Lint(source []byte) []Violation {
 	end := l.fmEnd(source)
@@ -166,13 +175,11 @@ func (l *Linter) Lint(source []byte) []Violation {
 	source = stripFrontMatterAt(source, end)
 
 	pctx := parser.NewContext()
-	reader := text.NewReader(source)
-	md := goldmark.New(goldmark.WithExtensions(extension.Table, extension.Strikethrough, extension.TaskList, extension.CJK))
-	node := md.Parser().Parse(reader, parser.WithContext(pctx))
+	node := mdParser.Parse(source, parser.WithContext(pctx))
 
 	// Build a normalised label → destination map from goldmark's parsed references.
 	linkRefs := make(map[string][]byte)
-	for _, ref := range pctx.References() {
+	for _, ref := range pctx.LinkDefinitions() {
 		key := strings.ToLower(string(ref.Label()))
 		linkRefs[key] = ref.Destination()
 	}
