@@ -128,6 +128,19 @@ if [[ ! -f "${COMMONMARK_DIR}/${COMMONMARK_FILE}" ]]; then
   exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# Remove the corpora's own markdownlint configuration
+#
+# markdownlint-cli2 applies a .markdownlint.* file found in a linted file's
+# directory on top of --config; goldmark-lint with --config does not. tldr
+# ships a .markdownlint.json (MD013 at 250 columns; MD026, MD029, MD033, MD034
+# and the whitespace rules disabled), so the two tools were linting tldr with
+# different rules, which showed up as ~20,000 phantom goldmark-lint-only
+# violations.
+# ---------------------------------------------------------------------------
+find "${RFCS_DIR}" "${TLDR_DIR}" "${COMMONMARK_DIR}" -name .git -prune -o \
+  -type f -name '.markdownlint*' -exec rm -f {} +
+
 RFCS_MD_COUNT=$(find "${RFCS_DIR}" -name '*.md' | wc -l | tr -d ' ')
 TLDR_MD_COUNT=$(find "${TLDR_DIR}" -name '*.md' | wc -l | tr -d ' ')
 COMMONMARK_MD_COUNT=1

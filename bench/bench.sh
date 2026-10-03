@@ -162,6 +162,19 @@ SPEC_LINES=$(wc -l <"${COMMONMARK_DIR}/${COMMONMARK_FILE}" | tr -d ' ')
 info "Corpus: ${COMMONMARK_FILE} (${SPEC_LINES} lines) in ${COMMONMARK_DIR}"
 
 # ---------------------------------------------------------------------------
+# Remove the corpora's own markdownlint configuration
+#
+# markdownlint-cli2 applies a .markdownlint.* file found in a linted file's
+# directory on top of --config; goldmark-lint with --config does not. tldr
+# ships a .markdownlint.json (MD013 at 250 columns; MD026, MD029, MD033, MD034
+# and the whitespace rules disabled), so the two tools were linting tldr with
+# different rules, which showed up as ~20,000 phantom goldmark-lint-only
+# violations.
+# ---------------------------------------------------------------------------
+find "${RFCS_DIR}" "${TLDR_DIR}" "${COMMONMARK_DIR}" -name .git -prune -o \
+  -type f -name '.markdownlint*' -exec rm -f {} +
+
+# ---------------------------------------------------------------------------
 # Build goldmark-lint
 # ---------------------------------------------------------------------------
 info "Building goldmark-lint…"
