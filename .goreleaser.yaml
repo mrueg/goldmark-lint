@@ -70,9 +70,9 @@ homebrew_casks:
     directory: Casks
     hooks:
       post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/goldmark-lint"]
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/goldmark-lint"]
           end
 
 changelog:
