@@ -3,11 +3,11 @@ module github.com/mrueg/goldmark-lint
 go 1.27.0
 
 require (
-	github.com/bmatcuk/doublestar/v4 v4.10.2
+	github.com/bmatcuk/doublestar/v4 v4.10.3
 	github.com/mattn/go-runewidth v0.0.31
 	github.com/urfave/cli/v3 v3.14.0
 	github.com/yuin/goldmark/v2 v2.1.6
 	go.yaml.in/yaml/v3 v3.0.5
 )
 
-require github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
+require github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
